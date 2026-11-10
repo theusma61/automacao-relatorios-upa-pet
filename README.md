@@ -26,7 +26,7 @@ Para rodar este serviço em outro computador (Windows 10 ou 11), certifique-se d
 ### 1. Clonar o Repositório
 Abra o **PowerShell** ou **Prompt de Comando** e clone o repositório na pasta desejada:
 ```bash
-git clone <URL_DO_REPOSITORIO> vet-ultrasound-automation
+git clone https://github.com/theusma61/automacao-relatorios-upa-pet.git
 cd vet-ultrasound-automation
 ```
 
