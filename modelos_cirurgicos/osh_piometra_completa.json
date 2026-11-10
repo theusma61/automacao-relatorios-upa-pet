@@ -1,0 +1,16 @@
+{
+  "id": "osh_piometra_completa",
+  "nome": "Ovariossalpingohisterectomia terapêutica para piometra (Protocolo Completo)",
+  "sinonimos": [
+    "ovariossalpingohisterectomia",
+    "osh piometra",
+    "piometra",
+    "histerectomia terapeutica",
+    "piometra fechada",
+    "infeccao uterina"
+  ],
+  "procedimento": "Ovariossalpingohisterectomia terapêutica para tratamento de piometra.",
+  "diagnosticoPreCirurgico": "Piometra confirmada por exame de imagem, ultrassonografia abdominal evidenciando distensão luminal uterina com conteúdo anecoico.",
+  "descricaoProcedimento": "A paciente foi submetida à anestesia geral inalatória com monitoração multiparamétrica transoperatória rigorosa, sendo posicionada em decúbito dorsal horizontal. Realizou-se tricotomia ampla da região abdominal ventral, antissepsia rigorosa com clorexidina degermante e alcoólica, e isolamento com campos estéreis.\n\nA celiotomia exploratória foi realizada por meio de incisão mediana ventral, permitindo ampla visualização da cavidade peritoneal e do trato reprodutivo. Procedeu-se à identificação e exteriorização cuidadosa do útero alterado e repleto de secreção purulenta. Foi realizado o isolamento da cavidade com compressas estéreis umedecidas para prevenir a contaminação séptica peritoneal. Realizou-se a identificação, suspensão e ligadura dupla dos ligamentos suspensórios e próprios do ovário, bem como dos vasos ovarianos, com fio cirúrgico absorvível Poliglecaprone 2-0 com nós de segurança e transfixação. Em seguida, procedeu-se à exposição dos cornos uterinos, corpo do útero e região cervical, realizando-se a dupla ligadura transfixante e circundante do corpo uterino caudalmente ao colo, assegurando a completa remoção de todo o órgão infectado sem extravasamento de conteúdo purulento para o abdome. A cavidade abdominal foi submetida a lavagem copiosa e abundante com solução de Ringer Lactato estéril e aquecida para remoção de eventuais sujidades ou mediadores inflamatórios, seguida de checagem rigorosa de compressas e instrumentais.\n\nA síntese da parede abdominal foi realizada por planos, iniciando-se pelo fechamento do peritônio e da linha alba com sutura contínua utilizando fio inabsorvível nylon 2-0. Em seguida, procedeu-se à aposição do tecido subcutâneo por meio de sutura intradérmica com fio absorvível proliglecaprone 3-0, reduzindo o espaço morto local. Por fim, o fechamento da pele foi executado com pontos isolados sultan com fio monofilamentar inabsorvível de nylon 3-0, concluindo o procedimento com aposição cutânea estética e adequada.",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias, mantendo-se a estabilidade hemodinâmica. No pós-operatório imediato, a paciente foi encaminhada para a internação sob rigoroso protocolo de suporte intensivo, englobando antibioticoterapia sistêmica, analgesia multimodal contínua, manutenção de fluidoterapia hidroeletrolítica direcionada, monitoramento dos parâmetros vitais."
+}

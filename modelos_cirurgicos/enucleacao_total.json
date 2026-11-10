@@ -1,0 +1,18 @@
+{
+  "id": "enucleacao_total",
+  "nome": "Enucleação total",
+  "sinonimos": [
+    "enucleação",
+    "enucleacao total",
+    "remoção do globo ocular",
+    "retirada do olho",
+    "glaucoma absoluto",
+    "panoftalmite",
+    "trauma ocular",
+    "neoplasia intraocular"
+  ],
+  "procedimento": "Enucleação total",
+  "diagnosticoPreCirurgico": "Afecções oftálmicas graves e irreversíveis (glaucoma absoluto refratário, neoplasias intraoculares ou orbitárias, panoftalmite severa, trauma ocular extensivo com perda anatômica da visão e risco de infecção ou dor crônica intratável), com indicação de remoção cirúrgica do globo ocular.",
+  "descricaoProcedimento": "O paciente foi submetido a protocolo anestésico transoperatório com monitorização multiparamétrica contínua. O animal foi posicionado em decúbito dorsal na mesa cirúrgica com suporte térmico. Realizou-se tricotomia ampla da região periocular e palpebral, com antissepsia cuidadosa. A antissepsia do campo operatório foi iniciada com três ciclos alternados de solução degermante à base de clorexidina a 2% e álcool a 70%, finalizando com a aplicação de solução alcoólica de clorexidina a 0,5% com tempo de ação. Procedeu-se à colocação de campos cirúrgicos estéreis delimitando a área a ser operada, fixados com pinças de campo, e isolamento do campo com campo impermeável para prevenção de contaminação bacteriana.\n\nA cirurgia iniciou-se com a sutura temporária das margens palpebrais (blefarorrafia provisória) utilizando fio inabsorvível para evitar a contaminação da superfície ocular durante a incisão e dissecção. Realizou-se uma incisão cutânea elíptica ao redor da margem palpebral, englobando as pálpebras superior e inferior. A dissecção foi conduzida por planos através de diérese romba e cortante do tecido subcutâneo e músculos adjacentes até expor a órbita óssea. Procedeu-se à tração cuidadosa do globo ocular para externalização dos tecidos retrobulbares, identificação e isolamento dos músculos extraoculares e do nervo óptico. Realizou-se a dupla laqueadura e secção controlada do nervo óptico e dos vasos oftálmicos associados, utilizando fio cirúrgico absorvível Poliglecaprona 2-0, com nós de segurança e transfixação para assegurar hemostasia absoluta.\n\nApós a remoção completa do globo ocular e das glândulas associadas, a cavidade orbitária foi submetida a lavagem copiosa com solução de Ringer Lactato estéril e aquecida. Procedeu-se à síntese por planos: aproximação da fáscia orbitária e do tecido subcutâneo em padrão contínuo simples com fio absorvível Poliglecaprona 2-0, obliterando totalmente o espaço morto, seguida do fechamento da pele com pontos sultan, obtendo-se excelente aposição anatômica e estética.",
+  "evolucaoConsideracoes": "O procedimento ocorreu sem intercorrências transoperatórias, mantendo-se a estabilidade hemodinâmica durante todo o ato cirúrgico. No pós-operatório imediato, instituiu-se protocolo analgésico multimodal intensivo, incluindo opioides e AINEs sob prescrição específica para controle da dor, antibioticoterapia sistêmica de largo espectro, uso obrigatório de colar elizabetano para impedir o autotrauma na ferida cirúrgica, repouso restrito, além de orientações ao responsável quanto à inspeção diária do local e retorno para avaliação da cicatrização."
+}

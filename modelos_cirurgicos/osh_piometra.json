@@ -1,0 +1,9 @@
+{
+  "id": "osh_piometra",
+  "nome": "Ovariohisterectomia terapêutica (Piometra)",
+  "sinonimos": ["osh", "piometra", "castração terapêutica", "histerectomia"],
+  "procedimento": "Ovariohisterectomia terapêutica.",
+  "diagnosticoPreCirurgico": "Piometra com base em histórico clínico, exame físico e exames complementares, evidenciando aumento uterino compatível com processo infeccioso.",
+  "descricaoProcedimento": "O paciente foi submetido à anestesia geral, posicionado em decúbito dorsal, com monitorização anestésica contínua. Foi realizado uma ampla tricotomia da região abdominal. A antissepsia foi realizada utilizando solução degermante à base de clorexidina, seguida de solução alcoólica, repetida por no mínimo três ciclos.\n\nFoi realizada incisão na linha média ventral, com abertura por planos: pele, tecido subcutâneo e linha alba. Os ovários foram identificados e exteriorizados individualmente. Realizou-se ligadura dos pedículos ovarianos utilizando fio absorvível (proliglecaprone 0), por meio de ligadura transfixante seguida de secção segura dos pedículos. O corpo uterino foi cuidadosamente exteriorizado, procedendo-se à ligadura do colo uterino com fio absorvível (proliglecaprone 0), utilizando técnica de ligadura transfixante seguida de secção segura do coto uterino. Foi realizada inspeção minuciosa da cavidade abdominal para verificação de hemostasia.\n\nA síntese foi realizada por planos: peritônio e musculatura com fio não absorvível (nylon 0) em padrão reverdin, tecido subcutâneo com fio absorvível (poliglactina 2-0) em padrão de sutura intradérmica e pele com fio não absorvível (nylon 3-0) com padrão de sutura sultan.",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias. O paciente apresentou recuperação anestésica satisfatória, mantendo parâmetros vitais estáveis no pós-operatório imediato."
+}

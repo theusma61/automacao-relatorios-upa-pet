@@ -1,0 +1,19 @@
+{
+  "id": "cistotomia_cistolitotomia",
+  "nome": "Cistotomia exploratória com cistolitotomia",
+  "sinonimos": [
+    "cistotomia",
+    "cistolitotomia",
+    "cálculo vesical",
+    "cálculos vesicais",
+    "urolitíase",
+    "urólitos",
+    "cálculo na bexiga",
+    "litíase vesical",
+    "uretro-hidropropulsão"
+  ],
+  "procedimento": "Cistotomia exploratória com cistolitotomia",
+  "diagnosticoPreCirurgico": "Urolitíase vesical diagnosticada por ultrassom abdominal, associada a quadro clínico de irritação do trato urinário inferior (disúria, hematúria e estrangúria) e risco iminente ou instalado de obstrução uretral.",
+  "descricaoProcedimento": "O paciente foi submetido à anestesia geral inalatória balanceada com monitoração multiparamétrica transoperatória e posicionado em decúbito dorsal horizontal. Realizou-se tricotomia ampla da região abdominal ventral e antissepsia rigorosa com clorexidina degermante e alcoólica, seguida de colocação de campos estéreis.\n\nA celiotomia foi efetuada por meio de incisão de pele, subcutâneo e diérese da linha alba na região retro-umbilical até a cavidade peritoneal, com posterior identificação da vesícula urinária. A região vesical foi criteriosamente isolada com compressas estéreis umedecidas em solução fisiológica para prevenir contaminação séptica peritoneal, procedendo-se à exteriorização controlada da bexiga. Uma incisão longitudinal foi realizada na parede ventral da bexiga, estendendo-se ao longo da linha média avascular, evitando-se deliberadamente a proximidade com o trígono vesical e os óstios ureterais. Após a aspiração imediata do conteúdo urinário do lúmen, procedeu-se à remoção integral de todos os urolitos presentes. Em seguida, realizou-se a uretro-hidropropulsão retrógrada com solução estéril através da uretra para garantir a desobstrução e a ausência de fragmentos urolíticos residuais, aspirando-se o líquido de lavagem em seguida. A síntese da parede vesical foi executada em duplo plano com fio cirúrgico absorvível proliglecaprone 4-0, o primeiro plano consistiu em sutura total da parede (englobando mucosa, submucosa e camada muscular) de padrão simples contínuo, para garantir a cicatrização anatômica, e o segundo plano consistiu em sutura invaginante, de padrão Cushing para assegurar a estanqueidade absoluta. Foi realizado teste de infusão de solução estéril via sondagem uretral para insuflação moderada e confirmação visual de ausência de extravasamento na linha de sutura.\n\nA cavidade abdominal foi submetida a lavagem copiosa com solução de Ringer Lactato estéril e aquecida, seguida de checagem rigorosa de compressas e instrumentais com zero divergências. A síntese da parede abdominal foi realizada por planos, iniciando-se pelo fechamento do peritônio e da linha alba com sutura contínua utilizando fio inabsorvível nylon 2-0. Em seguida, procedeu-se à aposição do tecido subcutâneo por meio de sutura intradérmica com fio absorvível proliglecaprone 3-0, reduzindo o espaço morto local. Por fim, o fechamento da pele foi executado com pontos isolados sultan com fio monofilamentar inabsorvível de nylon 3-0, concluindo o procedimento com aposição cutânea estética e adequada.",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias, mantendo-se os parâmetros hemodinâmicos estáveis durante todo o ato cirúrgico. No pós-operatório imediato, instituiu-se protocolo analgésico multimodal associando opioides, AINEs sob prescrição específica e analgésicos adjuvantes, antibioticoterapia terapêutica. Os urolitos coletados foram encaminhados para análise mineral quantitativa/qualitativa."
+}

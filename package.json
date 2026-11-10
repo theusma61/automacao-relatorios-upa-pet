@@ -1,0 +1,28 @@
+{
+  "name": "vet-ultrasound-automation",
+  "version": "1.0.0",
+  "description": "Central Inteligente de Laudos de Ultrassom e Relatórios Cirúrgicos da UPA PET (Dra. Camila Bastos - CRMV/MG: 22904).",
+  "main": "monitor_exames.js",
+  "scripts": {
+    "start": "node monitor_exames.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "veterinary",
+    "ultrasound",
+    "surgery",
+    "reports",
+    "automation",
+    "gemini-ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "chokidar": "^6.0.0",
+    "docx": "^9.14.0",
+    "dotenv": "^18.0.9",
+    "jszip": "^3.10.2"
+  }
+}

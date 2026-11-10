@@ -1,0 +1,18 @@
+{
+  "id": "orquiectomia_eletiva_caes_gatos",
+  "nome": "Orquiectomia bilateral eletiva (Caninos e Felinos)",
+  "sinonimos": [
+    "orquiectomia bilateral",
+    "orquiectomia eletiva",
+    "castração de cão",
+    "castração de gato",
+    "castração felina escrotal",
+    "castração canina pré-escrotal",
+    "orquiectomia canina",
+    "orquiectomia felina"
+  ],
+  "procedimento": "Orquiectomia bilateral eletiva por via escrotal (em felinos) ou pré-escrotal (em caninos).",
+  "diagnosticoPreCirurgico": "Indicado para controle reprodutivo eletivo, prevenção de enfermidades dependentes de hormônios testiculares ou alterações comportamentais relacionadas à testosterona.",
+  "descricaoProcedimento": "O paciente foi submetido à anestesia geral inalatória balanceada com monitoração multiparamétrica transoperatória e posicionado em decúbito dorsal horizontal. Realizou-se tricotomia ampla da região pré-escrotal e escrotal (conforme a espécie), seguida de antissepsia rigorosa com clorexidina degermante e alcoólica, e colocação de campos estéreis.\n\nAcesso cirúrgico obtido por incisão de pele e tela subcutânea na região pré-escrotal (em cães) ou na bolsa escrotal (em gatos), exteriorizando-se cada testículo com sua respectiva túnica vaginal. Realizou-se a divulsão delicada da fáscia espermática e o isolamento do cordão espermático. Procedeu-se à dupla ligadura do cordão espermático e vasos testiculares utilizando fio cirúrgico absorvível proliglecaprone 2-0. Após certificação visual de ausência de hemorragia e secção controlada do cordão a jusante das ligaduras, os testículos foram removidos. O procedimento foi repetido no testículo oposto.\n\nProcedeu-se à lavagem da ferida cirúrgica com solução estéril e a síntese por planos: o tecido subcutâneo foi aproximado com sutura contínua simples para obliteração de espaço morto, e a pele foi fechada com padrão de sutura sultan.",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias, mantendo-se a estabilidade hemodinâmica durante todo o ato cirúrgico. No pós-operatório imediato, instituiu-se protocolo analgésico multimodal, antibioticoterapia profilática, recomendação de repouso restrito, uso de colar elizabetano para prevenção de automutilação e inspeção diária da ferida cirúrgica."
+}

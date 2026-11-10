@@ -1,0 +1,23 @@
+# Configurações com credenciais sensíveis (NUNCA comitar)
+config.json
+.env
+*.env
+
+# Dependências do Node.js
+node_modules/
+
+# Arquivos temporários e do sistema
+~$*
+*.tmp
+*.temp
+relatorio_*_temp_*.html
+laudo_temp_*.html
+*.log
+.DS_Store
+Thumbs.db
+
+# Arquivos de teste e rascunhos locais
+teste_*/
+temp*
+processar_paciente_teste_*.js
+exemplo_cirurgia_*.docx

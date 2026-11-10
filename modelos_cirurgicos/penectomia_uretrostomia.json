@@ -1,0 +1,17 @@
+{
+  "id": "penectomia_uretrostomia",
+  "nome": "Penectomia com uretrostomia",
+  "sinonimos": [
+    "penectomia",
+    "uretrostomia",
+    "uretrostomia perineal",
+    "amputação peniana",
+    "desvio urinário",
+    "obstrução uretral",
+    "estenose uretral"
+  ],
+  "procedimento": "Penectomia com uretrostomia.",
+  "diagnosticoPreCirurgico": "Afecções penianas e prepuciais com indicação de amputação e desvio urinário.",
+  "descricaoProcedimento": "O paciente foi submetido a protocolo anestésico transoperatório com monitorização multiparamétrica contínua. O animal foi posicionado em decúbito ventral na mesa cirúrgica com suporte térmico. Realizou-se ampla tricotomia da região prepucial. A antissepsia do campo operatório foi iniciada com três ciclos alternados de solução degermante à base de clorexidina a 2% e álcool a 70%, finalizando com a aplicação de solução alcoólica de clorexidina a 0,5% com tempo de ação. Procedeu-se à colocação de campos cirúrgicos estéreis delimitando a área a ser operada, fixados com pinças de campo, e isolamento do campo com campo impermeável para prevenção de contaminação bacteriana.\n\nRealizou-se a incisão elíptica perineal e a dissecção cuidadosa dos tecidos subcutâneos para isolamento dos músculos isquiocavernosos e dos corpos cavernosos do pênis, que foram ressecados junto à sua inserção nos arcos isquiáticos. A uretra peniana foi isolada e dissecada cranialmente até o ponto em que seu diâmetro se torna amplo o suficiente. A uretra foi incisada longitudinalmente na linha dorsal com extensão de aproximadamente 1,5cm para criar uma abertura adequada e evitar futuras estenoses. A mucosa uretral aberta foi suturada diretamente à pele do períneo utilizando pontos separados simples com fio cirúrgico proliglecaprone 4-0. O excesso distal do pênis foi amputado e removido. Realizou-se a síntese do tecido subcutâneo remanescente com fio absorvível e o fechamento da pele perineal ao redor do novo óstio uretral. Por fim, procedeu-se ao teste de permeabilidade com infusão suave de solução estéril para certificar o perfeito escoamento e a ausência de vazamentos ou tensão excessiva na nova uretrostomia perineal.",
+  "evolucaoConsideracoes": "O procedimento ocorreu sem intercorrências transoperatórias, mantendo-se a estabilidade hemodinâmica durante todo o ato cirúrgico. No pós-operatório imediato, o paciente foi encaminhado para internação ou repouso restrito sob rigoroso protocolo analgésico multimodal, antibioticoterapia sistêmica de largo espectro, uso obrigatório de colar elizabetano para impedir o autotrauma na região perineal."
+}

@@ -1,0 +1,9 @@
+{
+  "id": "orquiectomia_aberta",
+  "nome": "Orquiectomia aberta (Castração Macho)",
+  "sinonimos": ["orquiectomia", "castração macho", "castração canina", "castração eletiva"],
+  "procedimento": "Orquiectomia aberta.",
+  "diagnosticoPreCirurgico": "Castração eletiva.",
+  "descricaoProcedimento": "Paciente submetido à anestesia geral, posicionado em decúbito dorsal, com monitorização contínua dos parâmetros vitais durante todo o procedimento. Realizada tricotomia ampla da região escrotal e pré-escrotal, seguida de antissepsia com solução de clorexidina em três ciclos.\n\nFoi realizada a incisão cutânea pré-escrotal sobre a linha média. Foi feita a divulsão com uma tesoura romba, os testículos foram exteriorizados individualmente. Realizada abertura da túnica vaginal, com adequada exposição do funículo espermático. Efetuada ligadura transfixante do cordão espermático, envolvendo vasos testiculares e ducto deferente, utilizando fio não absorvível (Nylon 2-0), seguida de secção. O mesmo procedimento foi repetido de forma idêntica no testículo contralateral.\n\nApós remoção dos testículos, foi realizada inspeção minuciosa para confirmação de hemostasia eficaz. A síntese foi realizada por planos, com sutura da túnica vaginal, e síntese cutânea em padrão sultan com fio não absorvível (nylon 3-0).",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias. O paciente apresentou recuperação anestésica satisfatória, mantendo parâmetros vitais estáveis no pós-operatório imediato."
+}

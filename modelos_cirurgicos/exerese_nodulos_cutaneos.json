@@ -1,0 +1,18 @@
+{
+  "id": "exerese_nodulos_cutaneos",
+  "nome": "Exérese cirúrgica de nódulos cutâneos e/ou subcutâneos",
+  "sinonimos": [
+    "exérese de nódulo",
+    "exerese de nodulos",
+    "retirada de nódulo",
+    "nódulos cutâneos",
+    "nódulo subcutâneo",
+    "biópsia excisional",
+    "massa cutânea",
+    "tumor de pele"
+  ],
+  "procedimento": "Exérese cirúrgica de nódulos cutâneos e/ou subcutâneos em múltiplas regiões corporais.",
+  "diagnosticoPreCirurgico": "Presença de nódulos cutâneos/subcutâneos em diferentes regiões do corpo, com indicação cirúrgica para exérese e avaliação histopatológica, conforme exame clínico e exames complementares, quando realizados.",
+  "descricaoProcedimento": "O paciente foi submetido à anestesia geral, posicionado em decúbito dorsal, com monitorização anestésica contínua. Foi realizado uma ampla tricotomia das regiões correspondentes aos locais cirúrgicos. A antissepsia foi realizada utilizando solução degermante à base de clorexidina, seguida de solução alcoólica, repetida por no mínimo três ciclos.\n\nCada nódulo foi abordado individualmente. Procedeu-se à incisão em elipse da pele próximo às formações nodulares, seguida de divulsão com a tesoura romba dos tecidos adjacentes, permitindo a completa exérese das massas, respeitando margens de segurança quando indicado. Quando necessário, realizou-se ligadura de vasos com fio absorvível (poliglactina 2-0) para controle hemostático.\n\nApós a remoção, os leitos cirúrgicos foram inspecionados quanto à hemostasia, sendo realizada lavagem com solução fisiológica estéril. A síntese foi realizada por planos: musculatura com fio não absorvível (nylon 0) em padrão reverdin, tecido subcutâneo com fio absorvível (poliglactina 2-0) em padrão de sutura intradérmica e pele com fio não absorvível (nylon 3-0) com padrão de sutura sultan. Os nódulos removidos foram acondicionados adequadamente e encaminhados para exame histopatológico.",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias. O paciente apresentou recuperação anestésica satisfatória, mantendo parâmetros vitais estáveis no pós-operatório imediato. Foram instituídos analgesia e demais cuidados pós-operatórios adequados. O tutor recebeu orientações quanto ao manejo domiciliar, administração das medicações prescritas, cuidados com as feridas cirúrgicas, uso de colar elizabetano e retorno para reavaliação e retirada de pontos, conforme necessário."
+}

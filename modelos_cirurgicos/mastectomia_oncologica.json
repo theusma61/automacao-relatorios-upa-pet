@@ -1,0 +1,23 @@
+{
+  "id": "mastectomia_oncologica",
+  "nome": "Mastectomia para ressecção de neoplasia mamária",
+  "sinonimos": [
+    "mastectomia",
+    "mastectomia unilateral",
+    "mastectomia bilateral",
+    "mastectomia radical",
+    "mastectomia parcial",
+    "tumor de mama",
+    "neoplasia mamaria",
+    "neoplasia de mama",
+    "ressecção de cadeia mamária",
+    "retirada de mama",
+    "nódulo mamário",
+    "cadeia mamaria",
+    "mastectomia total"
+  ],
+  "procedimento": "Mastectomia (unilateral / bilateral / parcial ou radical) para ressecção de neoplasia mamária.",
+  "diagnosticoPreCirurgico": "Neoplasia mamária diagnosticada por exame e exames complementares",
+  "descricaoProcedimento": "A paciente foi submetida à anestesia geral inalatória com monitoração multiparamétrica transoperatória rigorosa, sendo posicionada em decúbito dorsal horizontal. Realizou-se tricotomia ampla da região tóraco-abdominal ventral, antissepsia rigorosa com clorexidina degermante e alcoólica, e isolamento com campos estéreis.\n\nA cirurgia foi conduzida por meio de incisão elíptica de pele englobando toda a extensão da glândula ou da cadeia mamária acometida, respeitando margens cirúrgicas oncológicas livres de tecido neoplásico. A dissecção foi realizada por planos através de diérese romba e cortante do tecido subcutâneo, identificando-se e preservando-se grandes vasos e nervos adjacentes quando aplicável, com rigorosa hemostasia por ligadura com fio absorvível (proliglecaprone 3-0) para controle de pequenos vasos sanguíneos. A peça cirúrgica foi removida íntegra, identificada e encaminhada para exame histopatológico em solução de formalina a 10%. A cavidade cirúrgica foi submetida a lavagem copiosa com solução de Ringer Lactato estéril e aquecida. Devido ao amplo descolamento cutâneo, procedeu-se à obliteração de espaços mortos por meio de sutura do tecido subcutâneo em padrão intradérmico com fio absorvível proliglecaprone 3-0, com aposição anatômica delicada. O fechamento da pele foi realizado com padrão de pontos sultan com nylon 3-0. Avaliou-se a viabilidade das bordas cutâneas e a ausência de tensão excessiva na ferida, podendo ser ponderada a instalação de drenos fechados de sucção em casos de descolamentos extensos.",
+  "evolucaoConsideracoes": "O procedimento transcorreu sem intercorrências transoperatórias, mantendo-se a estabilidade hemodinâmica durante todo o procedimento cirúrgico. No pós-operatório imediato, instituiu-se protocolo analgésico multimodal intensivo, antibioticoterapia profilática, restrição rigorosa de movimentos, uso de colar elizabetano ou roupa cirúrgica de proteção, além de orientações ao responsável para inspeção diária da ferida."
+}
