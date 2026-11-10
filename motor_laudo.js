@@ -9,7 +9,7 @@ const logoPath = fs.existsSync(path.join(assetsDir, 'logo_upa_pet_oficial.png'))
   ? path.join(assetsDir, 'logo_upa_pet_oficial.png')
   : path.join(assetsDir, 'logo_upa_pet.jpg');
 
-function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida) {
+async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida) {
   const nomeSanitizado = (dadosPaciente.nome || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
   const logoMime = path.extname(logoPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
@@ -172,8 +172,8 @@ function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaid
 
   fs.writeFileSync(caminhoHtmlTemp, html, 'utf8');
 
-  // Compila o PDF oficial com o Edge
-  compilarPDF(caminhoHtmlTemp, caminhoPdf);
+  // Compila o PDF oficial
+  await compilarPDF(caminhoHtmlTemp, caminhoPdf);
 
   // Remove o arquivo temporário HTML
   try {

@@ -653,21 +653,8 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   fs.writeFileSync(htmlTempPath, html, 'utf8');
 
   try {
-    const edgePaths = [
-      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-      process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\Application\\msedge.exe'
-    ];
-    const msedge = edgePaths.find(p => p && fs.existsSync(p));
-
-    if (!msedge) {
-      throw new Error("Microsoft Edge não encontrado para compilação do PDF.");
-    }
-
-    const fileUrl = 'file:///' + htmlTempPath.replace(/\\/g, '/');
-    const cmd = `"${msedge}" --headless --disable-gpu --run-all-compositor-stages-before-draw --no-pdf-header-footer --print-to-pdf="${caminhoSaidaPdf}" "${fileUrl}"`;
-    execSync(cmd, { stdio: 'pipe' });
-
+    const { compilarPDF } = require('./compilador_pdf');
+    await compilarPDF(htmlTempPath, caminhoSaidaPdf);
     return caminhoSaidaPdf;
   } finally {
     if (fs.existsSync(htmlTempPath)) {
