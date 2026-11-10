@@ -4,6 +4,7 @@
   "description": "Central Inteligente de Laudos de Ultrassom e Relatórios Cirúrgicos da UPA PET (Dra. Camila Bastos - CRMV/MG: 22904).",
   "main": "monitor_exames.js",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
     "start": "node servidor_web.js",
     "start:monitor": "node monitor_exames.js",
     "start:web": "node servidor_web.js",
