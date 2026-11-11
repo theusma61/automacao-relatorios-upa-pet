@@ -2,7 +2,10 @@
 
 Sistema autônomo de monitoramento e geração automática de **Laudos de Ultrassonografia Abdominal** e **Relatórios Cirúrgicos** para a **UPA PET**, seguindo rigorosamente a identidade visual institucional e os padrões médicos da **Dra. Camila Bastos (CRMV/MG: 22904)**.
 
-O sistema monitora pastas do Google Drive em tempo real, analisa os arquivos com inteligência artificial (**Google Gemini**) e compila documentos prontos nos formatos **PDF** e **Word (`.docx`)**.
+O sistema monitora pastas do Google Drive em tempo real ou processa requisições através do portal web na nuvem, analisa os arquivos com inteligência artificial (**Google Gemini**) e compila documentos prontos nos formatos **PDF** e **Word (`.docx`)**.
+
+> 📚 **Documentação Técnica Completa para Desenvolvedores e Agentes de IA:**  
+> Acesse a pasta [**`docs/`**](./docs/README.md) para conferir a documentação exaustiva de [Arquitetura do Sistema](./docs/ARCHITECTURE.md), [Regras de Negócio e Padrão Clínico](./docs/BUSINESS_RULES.md), [Módulos e Funcionalidades](./docs/MODULES_AND_FEATURES.md), [Modelos de Dados e Esquemas JSON](./docs/DATA_MODELS_AND_SCHEMAS.md), [Deploy no Render e DevOps](./docs/DEPLOYMENT_AND_OPERATIONS.md) e o [Guia para Agentes de IA e Engenheiros](./docs/AI_AGENT_GUIDELINES.md).
 
 ---
 
