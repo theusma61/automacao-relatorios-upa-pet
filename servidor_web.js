@@ -13,6 +13,12 @@ const { gerarDocumentosExame } = require('./motor_laudo');
 const { analisarCirurgiaComIA } = require('./analisador_cirurgia');
 const { gerarDocumentosCirurgicos } = require('./motor_cirurgia');
 const {
+  carregarModelosCirurgicos,
+  obterModeloPorId,
+  salvarOuCriarModelo,
+  excluirModelo
+} = require('./gerenciador_modelos');
+const {
   ROLES,
   obterPerfilUsuario,
   temPermissao,
@@ -222,6 +228,60 @@ app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
     res.download(filePath);
   } else {
     res.status(404).send('Arquivo não encontrado ou já expirou.');
+  }
+});
+
+// ==========================================
+// ENDPOINTS DE MODELOS CIRÚRGICOS
+// ==========================================
+
+// Listar todos os modelos cirúrgicos
+app.get('/api/modelos-cirurgicos', (req, res) => {
+  try {
+    const modelos = carregarModelosCirurgicos();
+    res.json({ sucesso: true, modelos });
+  } catch (err) {
+    console.error('Erro ao listar modelos cirúrgicos:', err);
+    res.status(500).json({ error: 'Erro ao carregar modelos: ' + err.message });
+  }
+});
+
+// Obter detalhes de um modelo cirúrgico por ID
+app.get('/api/modelos-cirurgicos/:id', (req, res) => {
+  try {
+    const modelo = obterModeloPorId(req.params.id);
+    if (!modelo) {
+      return res.status(404).json({ error: 'Modelo cirúrgico não encontrado.' });
+    }
+    res.json({ sucesso: true, modelo });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao obter modelo: ' + err.message });
+  }
+});
+
+// Criar ou atualizar modelo cirúrgico (autorizado para médicos veterinários e admins)
+app.post('/api/modelos-cirurgicos', exigirPermissao('gerar_cirurgia'), (req, res) => {
+  try {
+    const modeloSalvo = salvarOuCriarModelo(req.body);
+    console.log(`📝 [MODELO CIRÚRGICO] Modelo "${modeloSalvo.nome}" salvo com sucesso por ${req.usuario.email}`);
+    res.json({ sucesso: true, modelo: modeloSalvo });
+  } catch (err) {
+    console.error('Erro ao salvar modelo cirúrgico:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Excluir modelo cirúrgico (apenas administradores)
+app.delete('/api/modelos-cirurgicos/:id', exigirPermissao('gerenciar_usuarios'), (req, res) => {
+  try {
+    const excluido = excluirModelo(req.params.id);
+    if (!excluido) {
+      return res.status(404).json({ error: 'Modelo cirúrgico não encontrado para exclusão.' });
+    }
+    console.log(`🗑️ [MODELO CIRÚRGICO] Modelo ID "${req.params.id}" excluído por ${req.usuario.email}`);
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -539,9 +599,162 @@ app.get('/', (req, res) => {
               </a>
             </div>
           </div>
+
+          <!-- SEÇÃO: BIBLIOTECA DE MODELOS CIRÚRGICOS INSTITUCIONAIS -->
+          <div class="mt-8 pt-6 border-t border-slate-200">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-book-medical text-sky-600"></i>
+                    <span>Modelos Cirúrgicos Padronizados</span>
+                  </h3>
+                  <span id="badge-total-modelos" class="bg-sky-100 text-sky-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">Carregando...</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Modelos pré-cadastrados (Dra. Camila Bastos - UPA PET) utilizados pela IA para estruturação dos relatórios. Você pode consultar, editar ou cadastrar novos modelos.</p>
+              </div>
+              <button id="btn-novo-modelo" onclick="abrirModalFormModelo(null)" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 self-start sm:self-auto">
+                <i class="fa-solid fa-plus"></i>
+                <span>Novo Modelo Cirúrgico</span>
+              </button>
+            </div>
+
+            <!-- Busca Rápida de Modelos -->
+            <div class="relative mb-4">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input type="text" id="input-busca-modelo" oninput="filtrarModelosCirurgicos(this.value)" placeholder="Buscar por procedimento, sinônimo ou palavra-chave (ex: celiotomia, piometra, nódulo)..." class="w-full pl-8 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:bg-white transition">
+            </div>
+
+            <!-- Grid de Cards de Modelos -->
+            <div id="grid-modelos-cirurgicos" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[540px] overflow-y-auto pr-1">
+              <!-- Renderizado via JavaScript -->
+              <div class="col-span-full py-8 text-center text-xs text-slate-400">
+                <i class="fa-solid fa-spinner animate-spin mr-1"></i> Carregando biblioteca de modelos cirúrgicos...
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- MODAL VISUALIZAR MODELO CIRÚRGICO -->
+  <div id="modal-modelo-visualizar" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col p-6">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+          <h3 id="vis-modelo-nome" class="text-base font-bold text-slate-800">Nome do Modelo</h3>
+          <p id="vis-modelo-procedimento" class="text-xs text-sky-600 font-medium mt-0.5">Procedimento</p>
+        </div>
+        <button onclick="fecharModalVisualizarModelo()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 text-xs text-slate-700 leading-relaxed pr-1">
+        <div>
+          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Sinônimos / Palavras-chave:</span>
+          <div id="vis-modelo-sinonimos" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <div>
+          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Diagnóstico Pré-Cirúrgico:</span>
+          <p id="vis-modelo-diag" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-800"></p>
+        </div>
+
+        <div>
+          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada):</span>
+          <div id="vis-modelo-desc" class="bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-line text-slate-800 font-sans leading-relaxed"></div>
+        </div>
+
+        <div>
+          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Evolução e Considerações:</span>
+          <p id="vis-modelo-evol" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-800"></p>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
+        <span id="vis-modelo-id" class="text-[11px] font-mono text-slate-400"></span>
+        <div class="flex items-center space-x-2">
+          <button id="btn-vis-editar" onclick="" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-pen-to-square"></i>
+            <span>Editar este Modelo</span>
+          </button>
+          <button onclick="fecharModalVisualizarModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FORMULÁRIO (CRIAR / EDITAR) MODELO CIRÚRGICO -->
+  <div id="modal-modelo-form" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] flex flex-col p-6">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+        <h3 id="form-modelo-titulo" class="text-base font-bold text-slate-800 flex items-center space-x-2">
+          <i class="fa-solid fa-pen-to-square text-sky-600"></i>
+          <span>Editar Modelo Cirúrgico</span>
+        </h3>
+        <button onclick="fecharModalFormModelo()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <form id="form-modelo-cirurgico" onsubmit="salvarModeloCirurgico(event)" class="overflow-y-auto pr-1 space-y-3.5 text-xs">
+        <input type="hidden" id="form-mod-id" value="">
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Nome do Modelo <span class="text-red-500">*</span></label>
+          <input type="text" id="form-mod-nome" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Procedimento Oficial <span class="text-red-500">*</span></label>
+            <input type="text" id="form-mod-procedimento" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Diagnóstico Pré-Cirúrgico Padrão</label>
+            <input type="text" id="form-mod-diag" placeholder="Ex: Suspeita de corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Sinônimos / Palavras-chave (separados por vírgula)</label>
+          <input type="text" id="form-mod-sinonimos" placeholder="Ex: celiotomia, laparotomia, corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+          <p class="text-[11px] text-slate-400 mt-0.5">Palavras que ajudam a IA a associar o áudio/documento a este modelo.</p>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada) <span class="text-red-500">*</span></label>
+          <textarea id="form-mod-desc" required rows="7" placeholder="Descreva a técnica cirúrgica oficial: preparo, antissepsia, incisão por planos, tempos cirúrgicos, hemostasia, síntese (fios e padrões de sutura)..." class="w-full px-3 py-2 border border-slate-200 rounded-lg font-sans focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Evolução e Considerações Pós-Operatórias</label>
+          <textarea id="form-mod-evol" rows="3" placeholder="Considerações sobre o pós-cirúrgico, achados adicionais e orientações..." class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
+        </div>
+
+        <div id="form-mod-erro" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200"></div>
+
+        <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
+          <button type="button" id="btn-form-excluir" onclick="excluirModeloAtual()" class="hidden text-red-600 hover:text-red-800 text-xs font-semibold px-2 py-1 flex items-center space-x-1">
+            <i class="fa-solid fa-trash-can"></i>
+            <span>Excluir Modelo</span>
+          </button>
+          <div class="flex items-center space-x-2 ml-auto">
+            <button type="button" onclick="fecharModalFormModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-medium transition">
+              Cancelar
+            </button>
+            <button type="submit" id="btn-form-salvar" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Salvar Modelo</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- MODAL DE ADMINISTRAÇÃO DE USUÁRIOS -->
@@ -588,11 +801,13 @@ app.get('/', (req, res) => {
   <script>
     let usuarioAtual = null;
     let ssoConfig = null;
+    let todosModelosCirurgicos = [];
 
     // Inicialização da Página
     window.addEventListener('DOMContentLoaded', async () => {
       await carregarConfiguracaoSSO();
       await verificarSessaoUsuario();
+      await carregarModelosCirurgicosFront();
     });
 
     async function carregarConfiguracaoSSO() {
@@ -697,6 +912,16 @@ app.get('/', (req, res) => {
         btnSubmitCirurg.className = 'w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2';
         btnSubmitCirurg.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i><span>Gerar Relatório Cirúrgico Oficial</span>';
       }
+
+      const btnNovoModelo = document.getElementById('btn-novo-modelo');
+      if (btnNovoModelo) {
+        if (usuarioAtual && (usuarioAtual.podeGerarCirurgia || usuarioAtual.role === 'admin' || usuarioAtual.role === 'veterinario')) {
+          btnNovoModelo.classList.remove('hidden');
+        } else {
+          btnNovoModelo.classList.add('hidden');
+        }
+      }
+      renderizarCardsModelos(todosModelosCirurgicos);
     }
 
     function renderizarBotaoGoogle() {
@@ -822,6 +1047,9 @@ app.get('/', (req, res) => {
         btnUltra.className = 'py-3 px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
         divCirurg.classList.remove('hidden');
         divUltra.classList.add('hidden');
+        if (todosModelosCirurgicos.length === 0) {
+          carregarModelosCirurgicosFront();
+        }
       }
     }
 
@@ -929,7 +1157,276 @@ app.get('/', (req, res) => {
         alert('Erro: ' + err.message);
       } finally {
         document.getElementById('loading-cirurg').classList.add('hidden');
-        document.getElementById('btn-cirurg-submit').disabled = false;
+        btnSubmitCirurg.disabled = false;
+      }
+    }
+
+    // ==========================================
+    // FUNÇÕES DA BIBLIOTECA DE MODELOS CIRÚRGICOS
+    // ==========================================
+
+    async function carregarModelosCirurgicosFront() {
+      try {
+        const res = await fetch('/api/modelos-cirurgicos');
+        const data = await res.json();
+        if (data && data.modelos) {
+          todosModelosCirurgicos = data.modelos;
+          const badge = document.getElementById('badge-total-modelos');
+          if (badge) badge.innerText = \`\${todosModelosCirurgicos.length} modelo(s)\`;
+          renderizarCardsModelos(todosModelosCirurgicos);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar modelos cirúrgicos:', err);
+      }
+    }
+
+    function renderizarCardsModelos(modelos) {
+      const grid = document.getElementById('grid-modelos-cirurgicos');
+      if (!grid) return;
+
+      if (!modelos || modelos.length === 0) {
+        grid.innerHTML = \`
+          <div class="col-span-full py-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-500">
+            <i class="fa-solid fa-magnifying-glass mb-2 text-base text-slate-400 block"></i>
+            Nenhum modelo cirúrgico encontrado para a busca.
+          </div>
+        \`;
+        return;
+      }
+
+      const podeEditar = !!(usuarioAtual && (usuarioAtual.podeGerarCirurgia || usuarioAtual.role === 'admin' || usuarioAtual.role === 'veterinario'));
+
+      grid.innerHTML = modelos.map(m => {
+        const sinonimosArray = Array.isArray(m.sinonimos) ? m.sinonimos : [];
+        const sinonimosExibicao = sinonimosArray.slice(0, 3);
+        const restanteSinonimos = sinonimosArray.length - 3;
+        const descricaoCurta = (m.descricaoProcedimento || '').substring(0, 130);
+
+        return \`
+          <div class="bg-white border border-slate-200 hover:border-sky-300 hover:shadow-sm rounded-xl p-3.5 transition flex flex-col justify-between group">
+            <div>
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="text-xs font-bold text-slate-800 leading-snug line-clamp-1 group-hover:text-sky-600 transition" title="\${m.nome}">
+                  \${m.nome}
+                </h4>
+                <span class="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono shrink-0">\${m.id}</span>
+              </div>
+              <p class="text-[11px] text-sky-700 font-medium mb-2 line-clamp-1">
+                <i class="fa-solid fa-stethoscope mr-1 opacity-70"></i>\${m.procedimento || m.nome}
+              </p>
+
+              <!-- Tags / Sinônimos -->
+              <div class="flex flex-wrap gap-1 mb-2">
+                \${sinonimosExibicao.map(s => \`<span class="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-medium">\${s}</span>\`).join('')}
+                \${restanteSinonimos > 0 ? \`<span class="bg-slate-100 text-slate-400 text-[9px] px-1 py-0.5 rounded">+\${restanteSinonimos}</span>\` : ''}
+              </div>
+
+              <!-- Prévia da Técnica -->
+              <p class="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mb-3">
+                \${descricaoCurta}...
+              </p>
+            </div>
+
+            <!-- Rodapé com Ações -->
+            <div class="flex items-center justify-end space-x-1.5 pt-2 border-t border-slate-100">
+              <button type="button" onclick="visualizarModeloCirurgico('\${m.id}')" class="text-xs text-sky-600 hover:text-sky-800 hover:bg-sky-50 px-2.5 py-1 rounded font-medium transition flex items-center space-x-1">
+                <i class="fa-solid fa-eye text-xs"></i>
+                <span>Ver Detalhes</span>
+              </button>
+              \${podeEditar ? \`
+                <button type="button" onclick="abrirModalFormModelo('\${m.id}')" class="text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-50 px-2.5 py-1 rounded font-medium transition flex items-center space-x-1">
+                  <i class="fa-solid fa-pen-to-square text-xs"></i>
+                  <span>Editar</span>
+                </button>
+              \` : ''}
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function filtrarModelosCirurgicos(termo) {
+      const q = (termo || '').toLowerCase().trim();
+      if (!q) {
+        renderizarCardsModelos(todosModelosCirurgicos);
+        return;
+      }
+
+      const filtrados = todosModelosCirurgicos.filter(m => {
+        const nome = (m.nome || '').toLowerCase();
+        const proc = (m.procedimento || '').toLowerCase();
+        const diag = (m.diagnosticoPreCirurgico || '').toLowerCase();
+        const desc = (m.descricaoProcedimento || '').toLowerCase();
+        const sin = (m.sinonimos || []).join(' ').toLowerCase();
+
+        return nome.includes(q) || proc.includes(q) || diag.includes(q) || desc.includes(q) || sin.includes(q);
+      });
+
+      renderizarCardsModelos(filtrados);
+    }
+
+    function visualizarModeloCirurgico(id) {
+      const m = todosModelosCirurgicos.find(item => item.id === id);
+      if (!m) return;
+
+      document.getElementById('vis-modelo-nome').innerText = m.nome;
+      document.getElementById('vis-modelo-procedimento').innerText = m.procedimento || m.nome;
+      document.getElementById('vis-modelo-diag').innerText = m.diagnosticoPreCirurgico || 'Não informado / A critério clínico';
+      document.getElementById('vis-modelo-desc').innerText = m.descricaoProcedimento || 'Nenhuma técnica cadastrada.';
+      document.getElementById('vis-modelo-evol').innerText = m.evolucaoConsideracoes || 'Sem considerações adicionais cadastradas.';
+      document.getElementById('vis-modelo-id').innerText = \`ID: \${m.id}.json\`;
+
+      const sinContainer = document.getElementById('vis-modelo-sinonimos');
+      if (m.sinonimos && m.sinonimos.length > 0) {
+        sinContainer.innerHTML = m.sinonimos.map(s => \`
+          <span class="bg-sky-50 text-sky-700 border border-sky-200 text-[11px] px-2 py-0.5 rounded-full font-medium">\${s}</span>
+        \`).join('');
+      } else {
+        sinContainer.innerHTML = '<span class="text-slate-400 italic">Nenhum sinônimo cadastrado</span>';
+      }
+
+      const btnEdit = document.getElementById('btn-vis-editar');
+      const podeEditar = !!(usuarioAtual && (usuarioAtual.podeGerarCirurgia || usuarioAtual.role === 'admin' || usuarioAtual.role === 'veterinario'));
+      if (podeEditar) {
+        btnEdit.classList.remove('hidden');
+        btnEdit.onclick = () => {
+          fecharModalVisualizarModelo();
+          abrirModalFormModelo(m.id);
+        };
+      } else {
+        btnEdit.classList.add('hidden');
+      }
+
+      document.getElementById('modal-modelo-visualizar').classList.remove('hidden');
+    }
+
+    function fecharModalVisualizarModelo() {
+      document.getElementById('modal-modelo-visualizar').classList.add('hidden');
+    }
+
+    function abrirModalFormModelo(id) {
+      const podeEditar = !!(usuarioAtual && (usuarioAtual.podeGerarCirurgia || usuarioAtual.role === 'admin' || usuarioAtual.role === 'veterinario'));
+      if (!podeEditar) {
+        return alert('Você não tem autorização para cadastrar ou editar modelos cirúrgicos.');
+      }
+
+      const modal = document.getElementById('modal-modelo-form');
+      const titulo = document.getElementById('form-modelo-titulo');
+      const erroDiv = document.getElementById('form-mod-erro');
+      const btnExcluir = document.getElementById('btn-form-excluir');
+
+      erroDiv.classList.add('hidden');
+      erroDiv.innerText = '';
+
+      if (id) {
+        // Edição
+        const m = todosModelosCirurgicos.find(item => item.id === id);
+        if (!m) return alert('Modelo cirúrgico não encontrado.');
+
+        titulo.innerHTML = '<i class="fa-solid fa-pen-to-square text-sky-600"></i><span>Editar Modelo Cirúrgico</span>';
+        document.getElementById('form-mod-id').value = m.id;
+        document.getElementById('form-mod-nome').value = m.nome || '';
+        document.getElementById('form-mod-procedimento').value = m.procedimento || '';
+        document.getElementById('form-mod-diag').value = m.diagnosticoPreCirurgico || '';
+        document.getElementById('form-mod-sinonimos').value = (m.sinonimos || []).join(', ');
+        document.getElementById('form-mod-desc').value = m.descricaoProcedimento || '';
+        document.getElementById('form-mod-evol').value = m.evolucaoConsideracoes || '';
+
+        if (usuarioAtual && usuarioAtual.role === 'admin') {
+          btnExcluir.classList.remove('hidden');
+        } else {
+          btnExcluir.classList.add('hidden');
+        }
+      } else {
+        // Criação de novo modelo
+        titulo.innerHTML = '<i class="fa-solid fa-plus text-emerald-600"></i><span>Novo Modelo Cirúrgico</span>';
+        document.getElementById('form-mod-id').value = '';
+        document.getElementById('form-mod-nome').value = '';
+        document.getElementById('form-mod-procedimento').value = '';
+        document.getElementById('form-mod-diag').value = '';
+        document.getElementById('form-mod-sinonimos').value = '';
+        document.getElementById('form-mod-desc').value = '';
+        document.getElementById('form-mod-evol').value = '';
+        btnExcluir.classList.add('hidden');
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function fecharModalFormModelo() {
+      document.getElementById('modal-modelo-form').classList.add('hidden');
+    }
+
+    async function salvarModeloCirurgico(e) {
+      e.preventDefault();
+      const btnSalvar = document.getElementById('btn-form-salvar');
+      const erroDiv = document.getElementById('form-mod-erro');
+
+      const id = document.getElementById('form-mod-id').value;
+      const nome = document.getElementById('form-mod-nome').value.trim();
+      const procedimento = document.getElementById('form-mod-procedimento').value.trim();
+      const diagnosticoPreCirurgico = document.getElementById('form-mod-diag').value.trim();
+      const sinonimosStr = document.getElementById('form-mod-sinonimos').value;
+      const descricaoProcedimento = document.getElementById('form-mod-desc').value.trim();
+      const evolucaoConsideracoes = document.getElementById('form-mod-evol').value.trim();
+
+      const sinonimos = sinonimosStr.split(',').map(s => s.trim()).filter(Boolean);
+
+      btnSalvar.disabled = true;
+      btnSalvar.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i><span>Salvando...</span>';
+      erroDiv.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/modelos-cirurgicos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: id || undefined,
+            nome,
+            procedimento,
+            diagnosticoPreCirurgico,
+            sinonimos,
+            descricaoProcedimento,
+            evolucaoConsideracoes
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar modelo.');
+
+        fecharModalFormModelo();
+        await carregarModelosCirurgicosFront();
+        alert(\`Modelo cirúrgico "\${data.modelo.nome}" salvo com sucesso e pronto para uso da IA!\`);
+      } catch (err) {
+        erroDiv.innerText = err.message;
+        erroDiv.classList.remove('hidden');
+      } finally {
+        btnSalvar.disabled = false;
+        btnSalvar.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>Salvar Modelo</span>';
+      }
+    }
+
+    async function excluirModeloAtual() {
+      const id = document.getElementById('form-mod-id').value;
+      const nome = document.getElementById('form-mod-nome').value;
+      if (!id) return;
+
+      if (!confirm(\`Tem certeza que deseja excluir o modelo "\${nome}"?\\nEsta ação removerá o arquivo institucional e não pode ser desfeita.\`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(\`/api/modelos-cirurgicos/\${encodeURIComponent(id)}\`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao excluir modelo.');
+
+        fecharModalFormModelo();
+        await carregarModelosCirurgicosFront();
+        alert('Modelo cirúrgico excluído com sucesso.');
+      } catch (err) {
+        alert('Erro ao excluir: ' + err.message);
       }
     }
   </script>
