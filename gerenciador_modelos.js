@@ -1,46 +1,56 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * Gerenciador de modelos cirúrgicos — camada de acesso ao banco SQLite
+ * (migrado de modelos_cirurgicos/*.json; assinaturas mantidas por compatibilidade
+ *  com servidor_web.js — ver docs/AI_AGENT_GUIDELINES.md §2.3)
+ */
 
-const PASTA_MODELOS = path.join(__dirname, 'modelos_cirurgicos');
-if (!fs.existsSync(PASTA_MODELOS)) {
-  fs.mkdirSync(PASTA_MODELOS, { recursive: true });
-}
+const { getDatabase } = require('./db');
 
-function carregarModelosCirurgicos() {
-  if (!fs.existsSync(PASTA_MODELOS)) return [];
-  const arquivos = fs.readdirSync(PASTA_MODELOS).filter(f => f.endsWith('.json'));
-  const modelos = [];
-
-  for (const arq of arquivos) {
+function linhaParaModelo(linha) {
+  if (!linha) return null;
+  let sinonimos = [];
+  if (linha.sinonimos) {
     try {
-      const conteudo = JSON.parse(fs.readFileSync(path.join(PASTA_MODELOS, arq), 'utf8'));
-      if (!conteudo.id) {
-        conteudo.id = arq.replace('.json', '');
-      }
-      modelos.push(conteudo);
+      sinonimos = JSON.parse(linha.sinonimos);
+      if (!Array.isArray(sinonimos)) sinonimos = [];
     } catch (e) {
-      console.error(`Erro ao carregar modelo ${arq}:`, e.message);
+      sinonimos = String(linha.sinonimos).split(',').map((s) => s.trim()).filter(Boolean);
     }
   }
+  return {
+    id: linha.id,
+    nome: linha.nome,
+    sinonimos,
+    procedimento: linha.procedimento,
+    diagnosticoPreCirurgico: linha.diagnosticoPreCirurgico || '',
+    descricaoProcedimento: linha.descricaoProcedimento,
+    evolucaoConsideracoes: linha.evolucaoConsideracoes || ''
+  };
+}
 
-  // Ordena por nome alfabeticamente
-  return modelos.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+/**
+ * Lista todos os modelos cirúrgicos (ordem alfanumérica por nome, como sempre)
+ */
+function carregarModelosCirurgicos() {
+  const db = getDatabase();
+  return db
+    .prepare(`
+      SELECT id, nome, sinonimos, procedimento, diagnostico_pre_cirurgico,
+             descricao_procedimento, evolucao_consideracoes
+      FROM modelos_cirurgicos
+      ORDER BY nome COLLATE NOCASE
+    `)
+    .all()
+    .map(linhaParaModelo)
+    .filter(Boolean);
 }
 
 function obterModeloPorId(id) {
   if (!id) return null;
-  const sanitizado = sanitizarId(id);
-  const caminho = path.join(PASTA_MODELOS, `${sanitizado}.json`);
-  if (!fs.existsSync(caminho)) return null;
-
-  try {
-    const conteudo = JSON.parse(fs.readFileSync(caminho, 'utf8'));
-    conteudo.id = sanitizado;
-    return conteudo;
-  } catch (e) {
-    console.error(`Erro ao ler modelo ${id}:`, e.message);
-    return null;
-  }
+  const db = getDatabase();
+  const linha = db.prepare('SELECT * FROM modelos_cirurgicos WHERE id = ?').get(String(id));
+  if (!linha) return null;
+  return linhaParaModelo(linha);
 }
 
 function sanitizarId(texto) {
@@ -79,9 +89,9 @@ function salvarOuCriarModelo(dados) {
   // Normaliza sinonimos
   let sinonimos = [];
   if (Array.isArray(dados.sinonimos)) {
-    sinonimos = dados.sinonimos.map(s => String(s).trim()).filter(Boolean);
+    sinonimos = dados.sinonimos.map((s) => String(s).trim()).filter(Boolean);
   } else if (typeof dados.sinonimos === 'string') {
-    sinonimos = dados.sinonimos.split(',').map(s => s.trim()).filter(Boolean);
+    sinonimos = dados.sinonimos.split(',').map((s) => s.trim()).filter(Boolean);
   }
 
   const modeloFinal = {
@@ -94,21 +104,40 @@ function salvarOuCriarModelo(dados) {
     evolucaoConsideracoes
   };
 
-  const caminho = path.join(PASTA_MODELOS, `${id}.json`);
-  fs.writeFileSync(caminho, JSON.stringify(modeloFinal, null, 2), 'utf8');
+  const db = getDatabase();
+  db.prepare(`
+    INSERT INTO modelos_cirurgicos (
+      id, nome, sinonimos, procedimento,
+      diagnostico_pre_cirurgico, descricao_procedimento, evolucao_consideracoes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET
+      nome = excluded.nome,
+      sinonimos = excluded.sinonimos,
+      procedimento = excluded.procedimento,
+      diagnostico_pre_cirurgico = excluded.diagnostico_pre_cirurgico,
+      descricao_procedimento = excluded.descricao_procedimento,
+      evolucao_consideracoes = excluded.evolucao_consideracoes,
+      atualizado_em = datetime('now')
+  `).run(
+    modeloFinal.id,
+    modeloFinal.nome,
+    JSON.stringify(modeloFinal.sinonimos),
+    modeloFinal.procedimento,
+    modeloFinal.diagnosticoPreCirurgico,
+    modeloFinal.descricaoProcedimento,
+    modeloFinal.evolucaoConsideracoes
+  );
 
   return modeloFinal;
 }
 
 function excluirModelo(id) {
   if (!id) throw new Error('ID do modelo não fornecido.');
-  const sanitizado = sanitizarId(id);
-  const caminho = path.join(PASTA_MODELOS, `${sanitizado}.json`);
-  if (fs.existsSync(caminho)) {
-    fs.unlinkSync(caminho);
-    return true;
-  }
-  return false;
+  const db = getDatabase();
+  const info = db
+    .prepare('DELETE FROM modelos_cirurgicos WHERE id = ?')
+    .run(String(id));
+  return info.changes > 0;
 }
 
 function obterTextoModelosParaPrompt() {

@@ -1,9 +1,12 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * Gerenciador de usuários — camada de acesso ao banco SQLite
+ * (migrado de usuarios.json; assinaturas mantidas por compatibilidade
+ *  com servidor_web.js — ver docs/AI_AGENT_GUIDELINES.md §2.3)
+ */
 
-const USUARIOS_FILE = path.join(__dirname, 'usuarios.json');
+const { getDatabase } = require('./db');
 
-// Papéis e suas permissões associadas
+// Papéis e suas permissões associadas (mesmo mapa de sempre)
 const ROLES = {
   admin: {
     nome: 'Administrador(a)',
@@ -23,106 +26,20 @@ const ROLES = {
   }
 };
 
-function carregarDadosUsuarios() {
-  const padrao = {
-    regrasPadrao: {
-      rolePadraoNovoUsuario: 'pendente'
-    },
-    usuarios: [
-      {
-        email: 'camilabastos@upapet.com.br',
-        nome: 'Dra. Camila Bastos',
-        role: 'admin',
-        crmv: 'CRMV/MG: 22904'
-      },
-      {
-        email: 'matheusteteu00123@gmail.com',
-        nome: 'Matheus Augusto',
-        role: 'admin'
-      }
-    ]
-  };
-
-  if (fs.existsSync(USUARIOS_FILE)) {
-    try {
-      const raw = fs.readFileSync(USUARIOS_FILE, 'utf8');
-      return JSON.parse(raw);
-    } catch (e) {
-      console.error('Erro ao ler usuarios.json, usando padrão:', e.message);
-    }
-  }
-
-  // Cria o arquivo inicial caso não exista
-  try {
-    fs.writeFileSync(USUARIOS_FILE, JSON.stringify(padrao, null, 2), 'utf8');
-  } catch (_) {}
-
-  return padrao;
-}
-
-function salvarDadosUsuarios(dados) {
-  try {
-    fs.writeFileSync(USUARIOS_FILE, JSON.stringify(dados, null, 2), 'utf8');
-  } catch (e) {
-    console.error('Erro ao salvar usuarios.json:', e.message);
-  }
-}
-
-/**
- * Obtém ou registra o usuário no primeiro login via Google SSO
- */
-function obterPerfilUsuario(email, nome, foto = null) {
-  const emailNorm = (email || '').toLowerCase().trim();
-  const dados = carregarDadosUsuarios();
-
-  // Verifica se o email está nas variáveis de ambiente ADMIN_EMAILS
-  const adminEmailsEnv = (process.env.ADMIN_EMAILS || '')
+function emailsDeEnv(prefixo) {
+  return (process.env[`${prefixo}_EMAILS`] || '')
     .toLowerCase()
     .split(',')
-    .map(e => e.trim())
+    .map((e) => e.trim())
     .filter(Boolean);
+}
 
-  const vetEmailsEnv = (process.env.VET_EMAILS || '')
-    .toLowerCase()
-    .split(',')
-    .map(e => e.trim())
-    .filter(Boolean);
-
-  let usuario = dados.usuarios.find(u => u.email.toLowerCase() === emailNorm);
-
-  if (!usuario) {
-    let roleInicial = dados.regrasPadrao.rolePadraoNovoUsuario || 'pendente';
-    if (adminEmailsEnv.includes(emailNorm)) roleInicial = 'admin';
-    else if (vetEmailsEnv.includes(emailNorm)) roleInicial = 'veterinario';
-
-    usuario = {
-      email: emailNorm,
-      nome: nome || emailNorm.split('@')[0],
-      foto: foto,
-      role: roleInicial,
-      criadoEm: new Date().toISOString()
-    };
-
-    dados.usuarios.push(usuario);
-    salvarDadosUsuarios(dados);
-  } else {
-    // Atualiza nome ou foto se tiver mudado
-    let alterou = false;
-    if (nome && usuario.nome !== nome) { usuario.nome = nome; alterou = true; }
-    if (foto && usuario.foto !== foto) { usuario.foto = foto; alterou = true; }
-    if (adminEmailsEnv.includes(emailNorm) && usuario.role !== 'admin') {
-      usuario.role = 'admin';
-      alterou = true;
-    }
-    if (alterou) salvarDadosUsuarios(dados);
-  }
-
+function perfilParaResposta(usuario) {
   const roleDef = ROLES[usuario.role] || ROLES.pendente;
-
   return {
     email: usuario.email,
     nome: usuario.nome,
-    foto: usuario.foto || foto,
+    foto: usuario.foto || null,
     role: usuario.role,
     roleDescricao: roleDef.nome,
     permissoes: roleDef.permissoes,
@@ -130,6 +47,64 @@ function obterPerfilUsuario(email, nome, foto = null) {
     podeGerarCirurgia: roleDef.permissoes.includes('gerar_cirurgia'),
     crmv: usuario.crmv || null
   };
+}
+
+/**
+ * Obtém ou registra o usuário no primeiro login via Google SSO
+ * @param {string} email — e-mail do token do Google
+ * @param {string} nome  — nome completo (pode ser null/undefined)
+ * @param {string} [foto] — URL da foto de perfil
+ * @returns {{email, nome, foto, role, roleDescricao, permissoes, podeGerarLaudos, podeGerarCirurgia, crmv}}
+ */
+function obterPerfilUsuario(email, nome, foto = null) {
+  const db = getDatabase();
+  const emailNorm = (email || '').toLowerCase().trim();
+  if (!emailNorm) {
+    throw new Error('E-mail do usuário não informado.');
+  }
+  nome = (nome || '').trim() || emailNorm.split('@')[0];
+  foto = foto || null;
+  const now = new Date().toISOString();
+
+  const select = db.prepare('SELECT * FROM usuarios WHERE email = ? COLLATE NOCASE');
+  let usuario = select.get(emailNorm);
+
+  const adminEmails = emailsDeEnv('ADMIN');
+  const vetEmails = emailsDeEnv('VET');
+
+  if (!usuario) {
+    let roleInicial = 'pendente';
+    if (adminEmails.includes(emailNorm)) roleInicial = 'admin';
+    else if (vetEmails.includes(emailNorm)) roleInicial = 'veterinario';
+
+    db.prepare(`
+      INSERT INTO usuarios (email, nome, role, foto, criado_em, atualizado_em)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(emailNorm, nome, roleInicial, foto, now, now);
+    usuario = select.get(emailNorm);
+  } else {
+    // Atualiza nome ou foto se tiver mudado
+    let alterou = false;
+    if (nome && usuario.nome !== nome) alterou = true;
+    if (foto && usuario.foto !== foto) alterou = true;
+    if (adminEmails.includes(emailNorm) && usuario.role !== 'admin') alterou = true;
+
+    if (alterou) {
+      const setParts = ['atualizado_em = ?'];
+      const params = [now];
+      if (nome && usuario.nome !== nome) { setParts.push('nome = ?'); params.push(nome); }
+      if (foto && usuario.foto !== foto) { setParts.push('foto = ?'); params.push(foto); }
+      if (adminEmails.includes(emailNorm) && usuario.role !== 'admin') {
+        setParts.push('role = ?');
+        params.push('admin');
+      }
+      db.prepare(`UPDATE usuarios SET ${setParts.join(', ')} WHERE email = ? COLLATE NOCASE`)
+        .run(...params, emailNorm);
+      usuario = select.get(emailNorm);
+    }
+  }
+
+  return perfilParaResposta(usuario);
 }
 
 /**
@@ -143,21 +118,26 @@ function temPermissao(usuario, permissao) {
 }
 
 /**
- * Lista todos os usuários cadastrados
+ * Lista todos os usuários cadastrados (ordem estável por e-mail)
  */
 function listarUsuarios() {
-  const dados = carregarDadosUsuarios();
-  return dados.usuarios.map(u => {
-    const roleDef = ROLES[u.role] || ROLES.pendente;
-    return {
-      email: u.email,
-      nome: u.nome,
-      role: u.role,
-      roleDescricao: roleDef.nome,
-      permissoes: roleDef.permissoes,
-      crmv: u.crmv || null
-    };
-  });
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT email, nome, role, crmv FROM usuarios
+    ORDER BY email COLLATE NOCASE
+  `)
+    .all()
+    .map((u) => {
+      const roleDef = ROLES[u.role] || ROLES.pendente;
+      return {
+        email: u.email,
+        nome: u.nome,
+        role: u.role,
+        roleDescricao: roleDef.nome,
+        permissoes: roleDef.permissoes,
+        crmv: u.crmv || null
+      };
+    });
 }
 
 /**
@@ -165,12 +145,22 @@ function listarUsuarios() {
  */
 function atualizarCargoUsuario(email, novoRole) {
   if (!ROLES[novoRole]) throw new Error(`Cargo inválido: ${novoRole}`);
-  const dados = carregarDadosUsuarios();
-  const usuario = dados.usuarios.find(u => u.email.toLowerCase() === (email || '').toLowerCase().trim());
-  if (!usuario) throw new Error(`Usuário não encontrado: ${email}`);
-  usuario.role = novoRole;
-  salvarDadosUsuarios(dados);
-  return obterPerfilUsuario(usuario.email, usuario.nome);
+  const db = getDatabase();
+  const emailNorm = (email || '').toLowerCase().trim();
+  if (!db.prepare('SELECT 1 FROM usuarios WHERE email = ? COLLATE NOCASE').get(emailNorm)) {
+    throw new Error(`Usuário não encontrado: ${email}`);
+  }
+
+  db.prepare(`
+    UPDATE usuarios
+    SET role = ?, atualizado_em = ?
+    WHERE email = ? COLLATE NOCASE
+  `).run(novoRole, new Date().toISOString(), emailNorm);
+
+  const nome = db
+    .prepare('SELECT nome FROM usuarios WHERE email = ? COLLATE NOCASE')
+    .get(emailNorm).nome;
+  return obterPerfilUsuario(emailNorm, nome);
 }
 
 module.exports = {

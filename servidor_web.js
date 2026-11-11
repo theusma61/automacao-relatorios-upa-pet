@@ -26,6 +26,17 @@ const {
   atualizarCargoUsuario
 } = require('./gerenciador_usuarios');
 
+// Logging estruturado (pino) + validação de entradas (zod)
+const { logger, requestLogger } = require('./logger');
+const {
+  validate,
+  validateQuery,
+  validateParams,
+  authSchemas,
+  adminSchemas,
+  modelosSchemas
+} = require('./validation');
+
 // Carrega configurações
 const configPath = path.join(__dirname, 'config.json');
 let config = { geminiApiKey: "", googleClientId: "" };
@@ -47,6 +58,8 @@ app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Middleware global de log de requisições (requestId + latência + status)
+app.use(requestLogger());
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // Diretório de uploads temporários
@@ -132,7 +145,7 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // Endpoint que recebe o token do Google SSO (Google Identity Services)
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', validate(authSchemas.googleLogin, 'body'), async (req, res) => {
   const { credential } = req.body;
   if (!credential) {
     return res.status(400).json({ error: 'Token de credencial do Google não fornecido.' });
@@ -195,14 +208,14 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Gestão de Usuários (Apenas Administrador)
-app.get('/api/admin/usuarios', exigirAutenticacao, (req, res) => {
+app.get('/api/admin/usuarios', exigirAutenticacao, validateQuery(adminSchemas.listUsersQuery), (req, res) => {
   if (req.usuario.role !== 'admin') {
     return res.status(403).json({ error: 'Apenas administradores podem gerenciar acessos.' });
   }
   res.json({ usuarios: listarUsuarios() });
 });
 
-app.post('/api/admin/usuarios/role', exigirAutenticacao, (req, res) => {
+app.post('/api/admin/usuarios/role', exigirAutenticacao, validate(adminSchemas.updateRole, 'body'), (req, res) => {
   if (req.usuario.role !== 'admin') {
     return res.status(403).json({ error: 'Apenas administradores podem alterar permissões.' });
   }
@@ -247,7 +260,7 @@ app.get('/api/modelos-cirurgicos', (req, res) => {
 });
 
 // Obter detalhes de um modelo cirúrgico por ID
-app.get('/api/modelos-cirurgicos/:id', (req, res) => {
+app.get('/api/modelos-cirurgicos/:id', validateParams(modelosSchemas.getModeloParams, 'params'), (req, res) => {
   try {
     const modelo = obterModeloPorId(req.params.id);
     if (!modelo) {
@@ -260,25 +273,25 @@ app.get('/api/modelos-cirurgicos/:id', (req, res) => {
 });
 
 // Criar ou atualizar modelo cirúrgico (autorizado para médicos veterinários e admins)
-app.post('/api/modelos-cirurgicos', exigirPermissao('gerar_cirurgia'), (req, res) => {
+app.post('/api/modelos-cirurgicos', exigirPermissao('gerar_cirurgia'), validate(modelosSchemas.createModelo, 'body'), (req, res) => {
   try {
     const modeloSalvo = salvarOuCriarModelo(req.body);
-    console.log(`📝 [MODELO CIRÚRGICO] Modelo "${modeloSalvo.nome}" salvo com sucesso por ${req.usuario.email}`);
+    logger.info('Modelo cirúrgico salvo', { modelo: modeloSalvo.nome, por: req.usuario.email });
     res.json({ sucesso: true, modelo: modeloSalvo });
   } catch (err) {
-    console.error('Erro ao salvar modelo cirúrgico:', err);
+    logger.error('Erro ao salvar modelo cirúrgico', { stack: err.stack, message: err.message });
     res.status(400).json({ error: err.message });
   }
 });
 
 // Excluir modelo cirúrgico (apenas administradores)
-app.delete('/api/modelos-cirurgicos/:id', exigirPermissao('gerenciar_usuarios'), (req, res) => {
+app.delete('/api/modelos-cirurgicos/:id', exigirPermissao('gerenciar_usuarios'), validateParams(modelosSchemas.deleteModeloParams, 'params'), (req, res) => {
   try {
     const excluido = excluirModelo(req.params.id);
     if (!excluido) {
       return res.status(404).json({ error: 'Modelo cirúrgico não encontrado para exclusão.' });
     }
-    console.log(`🗑️ [MODELO CIRÚRGICO] Modelo ID "${req.params.id}" excluído por ${req.usuario.email}`);
+    logger.info('Modelo cirúrgico excluído', { modeloId: req.params.id, por: req.usuario.email });
     res.json({ sucesso: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1434,7 +1447,25 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
+// ============ Tratamento de falhas críticas (não-crashing, com log estruturado) ============
+process.on('uncaughtException', (err) => {
+  logger.error('uncaughtException', { stack: err.stack, message: err.message });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const stack = reason && reason.stack;
+  const message = reason && reason.message ? reason.message : String(reason);
+  logger.error('unhandledRejection', { stack, message });
+});
+
 app.listen(PORT, () => {
+  logger.info('Servidor inicializado', {
+    porta: PORT,
+    url: `http://localhost:${PORT}`,
+    service: 'UPA PET - Automacao',
+    dbPath: require('./db').getDbPath()
+  });
   console.log(`==================================================================`);
   console.log(`🚀 UPA PET - SERVIDOR WEB COM GOOGLE SSO ATIVO NA PORTA ${PORT}`);
   console.log(`🔗 Acesso local: http://localhost:${PORT}`);

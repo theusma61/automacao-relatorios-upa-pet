@@ -21,3 +21,10 @@ teste_*/
 temp*
 processar_paciente_teste_*.js
 exemplo_cirurgia_*.docx
+
+# Banco de dados SQLite (arquivo binário derivado — gerado a partir dos arquivos JSON
+# com `npm run db:seed` + `npm run db:migrate`; NUNCA commitado)
+upa_pet.db
+*.db
+*.db-wal
+*.db-shm
