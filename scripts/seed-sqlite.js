@@ -102,11 +102,29 @@ function seedModelos(db) {
   return importados;
 }
 
+function seedLayout(db) {
+  const stmt = db.prepare(`
+    INSERT INTO configuracoes_layout (
+      id, font_family, font_size_body, font_size_titulo,
+      margin_top, margin_bottom, margin_left, margin_right,
+      line_height, paragraph_spacing, cor_primaria, cor_secundaria
+    ) VALUES (
+      'padrao', 'Calibri, sans-serif', '11pt', '14pt',
+      '20mm', '20mm', '15mm', '15mm',
+      '1.4', '8pt', '#1B365D', '#4A777A'
+    )
+    ON CONFLICT (id) DO NOTHING
+  `);
+  const info = stmt.run();
+  console.log(`[seed] layout padrão: ${info.changes > 0 ? 'inserido' : 'já existente'}`);
+}
+
 function main() {
   const db = getDatabase();
   const inicio = Date.now();
   seedUsuarios(db);
   seedModelos(db);
+  seedLayout(db);
   console.log(
     `[seed] completo em ${Date.now() - inicio} ms — banco em ${getDbPath()}`
   );

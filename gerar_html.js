@@ -5,8 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const { obterLayout } = require('./gerenciador_layout');
 
-function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminhoSaida = 'laudo_final.html') {
+function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminhoSaida = 'laudo_final.html', customLayout = null) {
+  const layout = customLayout || obterLayout();
   const paginasImagens = [];
   const fotosPorPagina = 8; // 2 colunas x 4 linhas
 
@@ -53,16 +55,16 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
   <style>
     @page {
       size: A4;
-      margin: 15mm 15mm 12mm 15mm;
+      margin: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left};
     }
     * {
       box-sizing: border-box;
       -webkit-print-color-adjust: exact;
     }
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 10.5pt;
-      line-height: 1.35;
+      font-family: ${layout.font_family};
+      font-size: ${layout.font_size_body};
+      line-height: ${layout.line_height};
       color: #111;
       margin: 0;
       padding: 0;
@@ -88,7 +90,7 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
       font-weight: 900;
       font-size: 22pt;
       letter-spacing: -1px;
-      color: #222;
+      color: ${layout.cor_primaria};
     }
     .patient-info {
       flex: 1;
@@ -105,25 +107,26 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
       margin: 10px 0 14px 0;
     }
     .title-box h1 {
-      font-size: 11.5pt;
+      font-size: ${layout.font_size_titulo};
       font-weight: bold;
       margin: 0;
       letter-spacing: 0.5px;
+      color: ${layout.cor_primaria};
     }
     .title-box p {
       font-size: 8pt;
       font-style: italic;
       margin: 2px 0 0 0;
-      color: #333;
+      color: ${layout.cor_secundaria};
     }
     .content {
       flex: 1;
       text-align: justify;
-      font-size: 9.5pt;
-      line-height: 1.4;
+      font-size: ${layout.font_size_body};
+      line-height: ${layout.line_height};
     }
     .content p {
-      margin: 5px 0;
+      margin: 0 0 ${layout.paragraph_spacing} 0;
     }
     .signature {
       text-align: right;

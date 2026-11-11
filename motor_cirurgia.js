@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, ImageRun, BorderStyle, PageBreak } = require('docx');
 const { execSync } = require('child_process');
+const { obterLayout, converterParaDocx } = require('./gerenciador_layout');
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const LOGO_PATH = fs.existsSync(path.join(ASSETS_DIR, 'logo_upa_pet_oficial.png'))

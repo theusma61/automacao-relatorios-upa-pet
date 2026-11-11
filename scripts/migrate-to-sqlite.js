@@ -176,6 +176,7 @@ function main() {
 
   const usuarios = db.prepare('SELECT COUNT(*) AS n FROM usuarios').get().n;
   const modelos = db.prepare('SELECT COUNT(*) AS n FROM modelos_cirurgicos').get().n;
+  const layout = db.prepare('SELECT id FROM configuracoes_layout WHERE id = ?').get('padrao');
 
   console.log('');
   console.log('========================================================');
@@ -183,6 +184,7 @@ function main() {
   console.log(`  Banco:   ${getDbPath()}`);
   console.log(`  Usuários:  ${usuarios}`);
   console.log(`  Modelos:  ${modelos}`);
+  console.log(`  Layout:   ${layout ? 'ok (padrão inicializado)' : 'ausente'}`);
   console.log(`  Duração:  ${Date.now() - inicio} ms`);
   console.log('========================================================');
   console.log('  Os arquivos JSON (usuarios.json e modelos_cirurgicos/);')

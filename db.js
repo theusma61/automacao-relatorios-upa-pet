@@ -55,6 +55,24 @@ CREATE TABLE IF NOT EXISTS modelos_cirurgicos (
 
 CREATE INDEX IF NOT EXISTS idx_modelos_cirurgicos_nome
   ON modelos_cirurgicos (nome);
+
+CREATE TABLE IF NOT EXISTS configuracoes_layout (
+  id TEXT PRIMARY KEY DEFAULT 'padrao',
+  font_family TEXT DEFAULT 'Calibri, sans-serif',
+  font_size_body TEXT DEFAULT '11pt',
+  font_size_titulo TEXT DEFAULT '14pt',
+  margin_top TEXT DEFAULT '20mm',
+  margin_bottom TEXT DEFAULT '20mm',
+  margin_left TEXT DEFAULT '15mm',
+  margin_right TEXT DEFAULT '15mm',
+  line_height TEXT DEFAULT '1.4',
+  paragraph_spacing TEXT DEFAULT '8pt',
+  cor_primaria TEXT DEFAULT '#1B365D',
+  cor_secundaria TEXT DEFAULT '#4A777A',
+  atualizado_em TEXT DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO configuracoes_layout (id) VALUES ('padrao');
 `;
 
 /**

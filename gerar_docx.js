@@ -15,8 +15,10 @@ const {
   PageBreak,
   Footer
 } = require('docx');
+const { obterLayout, converterParaDocx } = require('./gerenciador_layout');
 
-function criarCabecalhoDocx(dados, logoPath) {
+function criarCabecalhoDocx(dados, logoPath, cfgDocx) {
+  const fonte = (cfgDocx && cfgDocx.fontFamily) || "Arial";
   let logoRun;
   if (logoPath && fs.existsSync(logoPath)) {
     const logoBuffer = fs.readFileSync(logoPath);
@@ -28,7 +30,7 @@ function criarCabecalhoDocx(dados, logoPath) {
       }
     });
   } else {
-    logoRun = new TextRun({ text: "UPA PET", bold: true, size: 32, font: "Arial" });
+    logoRun = new TextRun({ text: "UPA PET", bold: true, size: 32, font: fonte, color: (cfgDocx && cfgDocx.corPrimariaHex) || undefined });
   }
 
   const szCabecalho = 20; // 10pt (aumentado para maior legibilidade)
@@ -57,17 +59,17 @@ function criarCabecalhoDocx(dados, logoPath) {
           new TableCell({
             width: { size: 38, type: WidthType.PERCENTAGE },
             children: [
-              new Paragraph({ children: [new TextRun({ text: "Nome: ", bold: true, size: szCabecalho, font: "Arial" }), new TextRun({ text: dados.nome || "", size: szCabecalho, font: "Arial" })] }),
-              new Paragraph({ children: [new TextRun({ text: "Espécie: ", bold: true, size: szCabecalho, font: "Arial" }), new TextRun({ text: dados.especie || "", size: szCabecalho, font: "Arial" })] }),
-              new Paragraph({ children: [new TextRun({ text: "Idade: ", bold: true, size: szCabecalho, font: "Arial" }), new TextRun({ text: dados.idade || "Não informada", size: szCabecalho, font: "Arial" })] }),
+              new Paragraph({ children: [new TextRun({ text: "Nome: ", bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.nome || "", size: szCabecalho, font: fonte })] }),
+              new Paragraph({ children: [new TextRun({ text: "Espécie: ", bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.especie || "", size: szCabecalho, font: fonte })] }),
+              new Paragraph({ children: [new TextRun({ text: "Idade: ", bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.idade || "Não informada", size: szCabecalho, font: fonte })] }),
             ]
           }),
           new TableCell({
             width: { size: 34, type: WidthType.PERCENTAGE },
             children: [
-              new Paragraph({ children: [new TextRun({ text: "Tutor: ", bold: true, size: szCabecalho, font: "Arial" }), new TextRun({ text: dados.tutor || "", size: szCabecalho, font: "Arial" })] }),
-              new Paragraph({ children: [new TextRun({ text: "Sexo: ", bold: true, size: szCabecalho, font: "Arial" }), new TextRun({ text: dados.sexo || "", size: szCabecalho, font: "Arial" })] }),
-              new Paragraph({ children: [new TextRun({ text: "Data: ", bold: true, size: szCabecalho, font: "Arial" }), new TextRun({ text: dados.data || "", size: szCabecalho, font: "Arial" })] }),
+              new Paragraph({ children: [new TextRun({ text: "Tutor: ", bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.tutor || "", size: szCabecalho, font: fonte })] }),
+              new Paragraph({ children: [new TextRun({ text: "Sexo: ", bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.sexo || "", size: szCabecalho, font: fonte })] }),
+              new Paragraph({ children: [new TextRun({ text: "Data: ", bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.data || "", size: szCabecalho, font: fonte })] }),
             ]
           })
         ]
@@ -76,14 +78,17 @@ function criarCabecalhoDocx(dados, logoPath) {
   });
 }
 
-async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths = []) {
+async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths = [], customLayout = null) {
+  const layout = customLayout || obterLayout();
+  const cfgDocx = converterParaDocx(layout);
+  const fonte = cfgDocx.fontFamily || "Calibri";
   const children = [];
-  const szCorpo = 20; // 10pt (aumentado para maior nitidez e conforto visual)
+  const szCorpo = cfgDocx.szCorpo || 20;
 
   // ==========================================
   // PÁGINA 1: CABEÇALHO + LAUDO + ASSINATURA
   // ==========================================
-  children.push(criarCabecalhoDocx(dados, logoPath));
+  children.push(criarCabecalhoDocx(dados, logoPath, cfgDocx));
 
   // Espaçamento antes de RELATÓRIO
   children.push(new Paragraph({ text: "", spacing: { after: 100 } }));
@@ -93,7 +98,13 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
     new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [
-        new TextRun({ text: "RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL", bold: true, size: 22, font: "Arial" })
+        new TextRun({
+          text: "RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL",
+          bold: true,
+          size: cfgDocx.szTitulo || 24,
+          font: fonte,
+          color: cfgDocx.corPrimariaHex || "1B365D"
+        })
       ]
     })
   );
@@ -106,7 +117,8 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
           text: "Exame ultrassonográfico realizado em modo B, realizado em decúbito lateral (esquerdo e direito) e dorsal, utilizando transdutores linear e microconvexo",
           italics: true,
           size: 15.5,
-          font: "Arial"
+          font: fonte,
+          color: cfgDocx.corSecundariaHex || "4A777A"
         })
       ]
     })
@@ -122,27 +134,27 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
     const linhas = textoLimpo.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
 
     const runs = [
-      new TextRun({ text: item.orgao + ": ", bold: true, size: szCorpo, font: "Arial" })
+      new TextRun({ text: item.orgao + ": ", bold: true, size: szCorpo, font: fonte })
     ];
 
     linhas.forEach((linha, idx) => {
       if (idx === 0) {
-        runs.push(new TextRun({ text: linha, size: szCorpo, font: "Arial" }));
+        runs.push(new TextRun({ text: linha, size: szCorpo, font: fonte }));
       } else {
         // Quebra de linha no mesmo bloco, alinhada à esquerda
-        runs.push(new TextRun({ text: linha, break: 1, size: szCorpo, font: "Arial" }));
+        runs.push(new TextRun({ text: linha, break: 1, size: szCorpo, font: fonte }));
       }
     });
 
     if (item.diagDif && item.diagDif.trim() !== "") {
-      runs.push(new TextRun({ text: " DIAG DIF.: ", bold: true, italics: true, size: szCorpo, font: "Arial" }));
-      runs.push(new TextRun({ text: item.diagDif, italics: true, size: szCorpo, font: "Arial" }));
+      runs.push(new TextRun({ text: " DIAG DIF.: ", bold: true, italics: true, size: szCorpo, font: fonte }));
+      runs.push(new TextRun({ text: item.diagDif, italics: true, size: szCorpo, font: fonte }));
     }
 
     children.push(
       new Paragraph({
         alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 150 },
+        spacing: { after: cfgDocx.spacingAfter, line: cfgDocx.lineSpacing },
         children: runs
       })
     );
@@ -155,7 +167,7 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
       alignment: AlignmentType.RIGHT,
       spacing: { after: 15 },
       children: [
-        new TextRun({ text: "Camila Bastos", bold: true, size: 19, font: "Arial" })
+        new TextRun({ text: "Camila Bastos", bold: true, size: 19, font: fonte })
       ]
     })
   );
@@ -164,7 +176,7 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
       alignment: AlignmentType.RIGHT,
       spacing: { after: 40 },
       children: [
-        new TextRun({ text: "CRMV/MG: 22904", size: 17, font: "Arial" })
+        new TextRun({ text: "CRMV/MG: 22904", size: 17, font: fonte })
       ]
     })
   );
@@ -294,7 +306,12 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
     sections: [{
       properties: {
         page: {
-          margin: { top: 520, bottom: 580, left: 880, right: 880 }
+          margin: {
+            top: cfgDocx.marginTop,
+            bottom: cfgDocx.marginBottom,
+            left: cfgDocx.marginLeft,
+            right: cfgDocx.marginRight
+          }
         }
       },
       footers: {

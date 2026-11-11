@@ -19,6 +19,11 @@ const {
   excluirModelo
 } = require('./gerenciador_modelos');
 const {
+  obterLayout,
+  salvarLayout,
+  restaurarLayoutPadrao
+} = require('./gerenciador_layout');
+const {
   ROLES,
   obterPerfilUsuario,
   temPermissao,
@@ -34,7 +39,8 @@ const {
   validateParams,
   authSchemas,
   adminSchemas,
-  modelosSchemas
+  modelosSchemas,
+  layoutSchemas
 } = require('./validation');
 
 // Carrega configurações
@@ -299,6 +305,61 @@ app.delete('/api/modelos-cirurgicos/:id', exigirPermissao('gerenciar_usuarios'),
 });
 
 // ==========================================
+// ROTAS DE CONFIGURAÇÃO DE MODELOS E LAYOUT
+// ==========================================
+
+// Obter layout institucional atual
+app.get('/api/layout-config', exigirAutenticacao, (req, res) => {
+  if (req.usuario.role !== 'admin' && req.usuario.role !== 'veterinario') {
+    return res.status(403).json({ error: 'Acesso restrito a administradores e veterinários.' });
+  }
+  try {
+    const layout = obterLayout();
+    res.json({ sucesso: true, layout });
+  } catch (err) {
+    logger.error('Erro ao obter layout', { error: err.message });
+    res.status(500).json({ error: 'Erro ao obter configurações de layout: ' + err.message });
+  }
+});
+
+// Atualizar layout institucional
+app.put('/api/layout-config', exigirAutenticacao, validate(layoutSchemas.updateLayout, 'body'), (req, res) => {
+  if (req.usuario.role !== 'admin' && req.usuario.role !== 'veterinario') {
+    return res.status(403).json({ error: 'Acesso restrito a administradores e veterinários.' });
+  }
+  try {
+    const layoutAtualizado = salvarLayout(req.body);
+    logger.info({
+      usuario: req.usuario.email,
+      alteracoes: req.body,
+      dataHora: new Date().toISOString()
+    }, 'Configurações de layout atualizadas');
+    res.json({ sucesso: true, layout: layoutAtualizado });
+  } catch (err) {
+    logger.error('Erro ao salvar layout', { error: err.message, stack: err.stack });
+    res.status(400).json({ error: 'Erro ao salvar layout: ' + err.message });
+  }
+});
+
+// Restaurar padrão institucional
+app.post('/api/layout-config/reset', exigirAutenticacao, (req, res) => {
+  if (req.usuario.role !== 'admin' && req.usuario.role !== 'veterinario') {
+    return res.status(403).json({ error: 'Acesso restrito a administradores e veterinários.' });
+  }
+  try {
+    const layoutRestaurado = restaurarLayoutPadrao();
+    logger.info({
+      usuario: req.usuario.email,
+      dataHora: new Date().toISOString()
+    }, 'Configurações de layout restauradas para o padrão institucional UPA PET');
+    res.json({ sucesso: true, layout: layoutRestaurado });
+  } catch (err) {
+    logger.error('Erro ao restaurar layout', { error: err.message });
+    res.status(500).json({ error: 'Erro ao restaurar layout: ' + err.message });
+  }
+});
+
+// ==========================================
 // ENDPOINTS DE GERAÇÃO (PROTEGIDOS POR RBAC)
 // ==========================================
 
@@ -496,10 +557,16 @@ app.get('/', (req, res) => {
             <i class="fa-solid fa-syringe text-base"></i>
             <span>Relatório Cirúrgico</span>
           </button>
-          <button id="tab-btn-admin" onclick="abrirModalAdmin()" class="hidden py-3 px-6 text-sm text-purple-600 hover:text-purple-800 flex items-center space-x-2 transition ml-auto font-medium">
-            <i class="fa-solid fa-users-gear text-base"></i>
-            <span>Gerenciar Acessos</span>
-          </button>
+          <div class="ml-auto flex items-center space-x-1">
+            <button id="tab-btn-layout" onclick="abrirModalLayout()" class="hidden py-3 px-4 text-sm text-sky-700 hover:text-sky-900 flex items-center space-x-1.5 transition font-medium">
+              <i class="fa-solid fa-palette text-base"></i>
+              <span>Editor de Layout</span>
+            </button>
+            <button id="tab-btn-admin" onclick="abrirModalAdmin()" class="hidden py-3 px-4 text-sm text-purple-600 hover:text-purple-800 flex items-center space-x-1.5 transition font-medium">
+              <i class="fa-solid fa-users-gear text-base"></i>
+              <span>Gerenciar Acessos</span>
+            </button>
+          </div>
         </div>
 
         <!-- ABA 1: ULTRASSOM -->
@@ -807,6 +874,218 @@ app.get('/', (req, res) => {
     </div>
   </div>
 
+  <!-- MODAL DE CONFIGURAÇÕES DE MODELOS E LAYOUT -->
+  <div id="modal-layout" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full p-6 flex flex-col max-h-[92vh]">
+      <!-- Header do Modal -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+        <div>
+          <h3 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+            <i class="fa-solid fa-palette text-sky-600"></i>
+            <span>Editor de Modelos e Layout Institucional</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Personalize tipografia, espaçamentos, margens e cores aplicados na geração de relatórios em PDF e Word (.docx).
+          </p>
+        </div>
+        <button onclick="fecharModalLayout()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Corpo com Grid 2 Colunas: Formulário à Esquerda e Preview à Direita -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto flex-1 pr-1">
+        <!-- Coluna Esquerda: Formulário de Controles (lg:col-span-6) -->
+        <div class="lg:col-span-6 space-y-4 text-xs">
+          <!-- Bloco: Tipografia -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+              <i class="fa-solid fa-font text-sky-600"></i>
+              <span>Tipografia</span>
+            </h4>
+            <div class="space-y-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Família da Fonte</label>
+                <select id="layout-font-family" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                  <option value="Calibri, sans-serif">Calibri (Padrão Institucional UPA PET)</option>
+                  <option value="Arial, sans-serif">Arial</option>
+                  <option value="'Times New Roman', serif">Times New Roman</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block font-semibold text-slate-700 mb-1">Tamanho Corpo</label>
+                  <select id="layout-font-size-body" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                    <option value="9.5pt">9.5pt</option>
+                    <option value="10pt">10pt</option>
+                    <option value="10.5pt">10.5pt</option>
+                    <option value="11pt">11pt (Recomendado)</option>
+                    <option value="11.5pt">11.5pt</option>
+                    <option value="12pt">12pt</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-semibold text-slate-700 mb-1">Tamanho Título</label>
+                  <select id="layout-font-size-titulo" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                    <option value="12pt">12pt</option>
+                    <option value="13pt">13pt</option>
+                    <option value="14pt">14pt (Recomendado)</option>
+                    <option value="15pt">15pt</option>
+                    <option value="16pt">16pt</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloco: Margens da Página -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+              <i class="fa-solid fa-arrows-up-down-left-right text-sky-600"></i>
+              <span>Margens da Página (A4)</span>
+            </h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Superior</label>
+                <input type="text" id="layout-margin-top" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Inferior</label>
+                <input type="text" id="layout-margin-bottom" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Esquerda</label>
+                <input type="text" id="layout-margin-left" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Direita</label>
+                <input type="text" id="layout-margin-right" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloco: Espaçamentos -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+              <i class="fa-solid fa-arrows-split-up-and-left text-sky-600"></i>
+              <span>Espaçamentos</span>
+            </h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Entrelinhas (Multiplicador)</label>
+                <input type="number" step="0.05" min="1.1" max="1.8" id="layout-line-height" oninput="atualizarPreviewLayout()" placeholder="1.4" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Entre Parágrafos</label>
+                <input type="text" id="layout-paragraph-spacing" oninput="atualizarPreviewLayout()" placeholder="8pt" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloco: Cores Institucionais -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+              <i class="fa-solid fa-palette text-sky-600"></i>
+              <span>Paleta de Cores Institucionais</span>
+            </h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Cor Primária (Títulos/Logo)</label>
+                <div class="flex items-center space-x-2">
+                  <input type="color" id="layout-color-primary-picker" oninput="sincronizarCorPrimaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 rounded cursor-pointer">
+                  <input type="text" id="layout-cor-primaria" oninput="sincronizarCorPrimariaTexto(this.value)" placeholder="#1B365D" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs font-mono uppercase">
+                </div>
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Cor Secundária (Subtítulos)</label>
+                <div class="flex items-center space-x-2">
+                  <input type="color" id="layout-color-secondary-picker" oninput="sincronizarCorSecundaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 rounded cursor-pointer">
+                  <input type="text" id="layout-cor-secundaria" oninput="sincronizarCorSecundariaTexto(this.value)" placeholder="#4A777A" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs font-mono uppercase">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coluna Direita: Preview em Tempo Real (lg:col-span-6) -->
+        <div class="lg:col-span-6 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+              <i class="fa-solid fa-eye text-emerald-600"></i>
+              <span>Preview em Tempo Real</span>
+            </span>
+            <span class="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded font-mono">Simulação A4 (Pág. 1)</span>
+          </div>
+
+          <!-- Folha do Preview -->
+          <div class="flex-1 bg-slate-200/70 p-3 sm:p-4 rounded-xl flex items-center justify-center overflow-auto min-h-[420px]">
+            <div id="layout-preview-sheet" class="bg-white shadow-lg border border-slate-300 rounded w-full max-w-md p-4 transition-all duration-150 flex flex-col justify-between" style="min-height: 480px;">
+              <div>
+                <!-- Cabeçalho do Laudo -->
+                <div class="flex items-center justify-between border-b pb-2 mb-2" id="preview-header">
+                  <div class="text-left font-black tracking-tighter" id="preview-logo" style="color: #1B365D; font-size: 16pt;">
+                    UPA PET
+                  </div>
+                  <div class="text-[9px] text-slate-600 text-right leading-tight" id="preview-patient-info">
+                    <p><strong>Paciente:</strong> Thor &bull; <strong>Espécie:</strong> Canina</p>
+                    <p><strong>Tutor:</strong> Maria Santos &bull; <strong>Idade:</strong> 4 anos</p>
+                    <p><strong>Data:</strong> 11/11/2026</p>
+                  </div>
+                </div>
+
+                <!-- Título -->
+                <div class="text-center my-2">
+                  <h5 id="preview-titulo" class="font-bold tracking-wide" style="color: #1B365D; font-size: 11pt;">
+                    RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL
+                  </h5>
+                  <p id="preview-subtitulo" class="italic text-[8px] mt-0.5" style="color: #4A777A;">
+                    Exame ultrassonográfico abdominal completo em modo B
+                  </p>
+                </div>
+
+                <!-- Conteúdo dos Órgãos -->
+                <div id="preview-conteudo" class="text-justify text-slate-800 space-y-1.5" style="font-size: 9.5pt; line-height: 1.35;">
+                  <p id="p-bexiga"><strong class="font-bold">BEXIGA:</strong> Repleção líquida adequada, contornos regulares, paredes finas (0,12 cm), conteúdo anecogênico límpido sem urólitos.</p>
+                  <p id="p-rins"><strong class="font-bold">RINS:</strong> Dimensões preservadas (RE: 4,2 cm; RD: 4,0 cm), relação corticomedular mantida, ecotextura usual, sem evidência de nefrolitíase.</p>
+                  <p id="p-figado"><strong class="font-bold">FÍGADO:</strong> Dimensões normais, bordos afilados, parênquima homogêneo com ecogenicidade preservada. Vias biliares anatômicas.</p>
+                  <p id="p-consideracoes"><strong class="font-bold">CONSIDERAÇÕES:</strong> Exame ultrassonográfico abdominal dentro dos parâmetros da normalidade para a espécie e faixa etária.</p>
+                </div>
+              </div>
+
+              <!-- Assinatura e Rodapé -->
+              <div class="mt-4 pt-2 border-t border-slate-200">
+                <div class="text-right text-[9px] leading-tight mb-2">
+                  <p class="font-bold text-slate-800">Dra. Camila Bastos</p>
+                  <p class="text-slate-500">Médica Veterinária &bull; CRMV/MG: 22904</p>
+                </div>
+                <div class="text-center text-[7.5px] text-slate-400 italic">
+                  O ultrassom é um exame complementar e deve ser correlacionado aos achados clínicos.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer de Ações do Modal -->
+      <div class="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+        <button type="button" onclick="restaurarPadraoLayoutFront()" class="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-3 py-2 rounded-lg font-medium transition flex items-center space-x-1.5">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span>Restaurar Padrão Institucional UPA PET</span>
+        </button>
+        <div class="flex items-center space-x-2 ml-auto">
+          <button type="button" onclick="fecharModalLayout()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-xs font-medium transition">
+            Cancelar
+          </button>
+          <button type="button" onclick="salvarLayoutFront()" id="btn-salvar-layout" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>Salvar Alterações no Layout</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <footer class="text-center py-6 text-xs text-slate-400 border-t border-slate-200 bg-white">
     UPA PET &bull; Automação Inteligente de Laudos e Procedimentos Cirúrgicos &bull; Dra. Camila Bastos - CRMV/MG: 22904
   </footer>
@@ -850,11 +1129,13 @@ app.get('/', (req, res) => {
       const telaPrincipal = document.getElementById('conteudo-principal');
       const alertaSemPermissao = document.getElementById('alerta-sem-permissao');
       const btnAdmin = document.getElementById('tab-btn-admin');
+      const btnLayout = document.getElementById('tab-btn-layout');
       const btnSubmitUltra = document.getElementById('btn-ultra-submit');
       const btnSubmitCirurg = document.getElementById('btn-cirurg-submit');
 
       if (!usuarioAtual) {
         // Usuário DESCONECTADO
+        if (btnLayout) btnLayout.classList.add('hidden');
         headerDiv.innerHTML = \`
           <button onclick="mostrarLogin()" class="bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold py-2 px-3.5 rounded-lg shadow-sm transition flex items-center space-x-1.5">
             <i class="fa-brands fa-google"></i>
@@ -901,6 +1182,14 @@ app.get('/', (req, res) => {
         btnAdmin.classList.remove('hidden');
       } else {
         btnAdmin.classList.add('hidden');
+      }
+
+      if (btnLayout) {
+        if (usuarioAtual.role === 'admin' || usuarioAtual.role === 'veterinario') {
+          btnLayout.classList.remove('hidden');
+        } else {
+          btnLayout.classList.add('hidden');
+        }
       }
 
       const podeEmitir = usuarioAtual.podeGerarLaudos || usuarioAtual.podeGerarCirurgia;
@@ -1040,6 +1329,173 @@ app.get('/', (req, res) => {
         alert(\`Permissões de \${email} atualizadas com sucesso para: \${novoCargo}!\`);
       } catch (err) {
         alert('Erro: ' + err.message);
+      }
+    }
+
+    // ==========================================
+    // EDITOR DE MODELOS E LAYOUT (FRONTEND)
+    // ==========================================
+
+    let layoutAtual = null;
+
+    async function abrirModalLayout() {
+      try {
+        const res = await fetch('/api/layout-config');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao obter configurações de layout');
+        layoutAtual = data.layout;
+        preencherFormularioLayout(layoutAtual);
+        atualizarPreviewLayout();
+        document.getElementById('modal-layout').classList.remove('hidden');
+      } catch (err) {
+        alert('Erro ao carregar configurações de layout: ' + err.message);
+      }
+    }
+
+    function fecharModalLayout() {
+      document.getElementById('modal-layout').classList.add('hidden');
+    }
+
+    function preencherFormularioLayout(cfg) {
+      if (!cfg) return;
+      if (document.getElementById('layout-font-family')) document.getElementById('layout-font-family').value = cfg.font_family || 'Calibri, sans-serif';
+      if (document.getElementById('layout-font-size-body')) document.getElementById('layout-font-size-body').value = cfg.font_size_body || '11pt';
+      if (document.getElementById('layout-font-size-titulo')) document.getElementById('layout-font-size-titulo').value = cfg.font_size_titulo || '14pt';
+      if (document.getElementById('layout-margin-top')) document.getElementById('layout-margin-top').value = cfg.margin_top || '20mm';
+      if (document.getElementById('layout-margin-bottom')) document.getElementById('layout-margin-bottom').value = cfg.margin_bottom || '20mm';
+      if (document.getElementById('layout-margin-left')) document.getElementById('layout-margin-left').value = cfg.margin_left || '15mm';
+      if (document.getElementById('layout-margin-right')) document.getElementById('layout-margin-right').value = cfg.margin_right || '15mm';
+      if (document.getElementById('layout-line-height')) document.getElementById('layout-line-height').value = cfg.line_height || '1.4';
+      if (document.getElementById('layout-paragraph-spacing')) document.getElementById('layout-paragraph-spacing').value = cfg.paragraph_spacing || '8pt';
+
+      const corPri = cfg.cor_primaria || '#1B365D';
+      const corSec = cfg.cor_secundaria || '#4A777A';
+      if (document.getElementById('layout-cor-primaria')) document.getElementById('layout-cor-primaria').value = corPri;
+      if (document.getElementById('layout-color-primary-picker')) document.getElementById('layout-color-primary-picker').value = corPri;
+      if (document.getElementById('layout-cor-secundaria')) document.getElementById('layout-cor-secundaria').value = corSec;
+      if (document.getElementById('layout-color-secondary-picker')) document.getElementById('layout-color-secondary-picker').value = corSec;
+    }
+
+    function sincronizarCorPrimaria(val) {
+      document.getElementById('layout-cor-primaria').value = val.toUpperCase();
+      atualizarPreviewLayout();
+    }
+
+    function sincronizarCorPrimariaTexto(val) {
+      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+        document.getElementById('layout-color-primary-picker').value = val;
+      }
+      atualizarPreviewLayout();
+    }
+
+    function sincronizarCorSecundaria(val) {
+      document.getElementById('layout-cor-secundaria').value = val.toUpperCase();
+      atualizarPreviewLayout();
+    }
+
+    function sincronizarCorSecundariaTexto(val) {
+      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+        document.getElementById('layout-color-secondary-picker').value = val;
+      }
+      atualizarPreviewLayout();
+    }
+
+    function atualizarPreviewLayout() {
+      const fontFamily = document.getElementById('layout-font-family')?.value || 'Calibri, sans-serif';
+      const fontSizeBody = document.getElementById('layout-font-size-body')?.value || '11pt';
+      const fontSizeTitulo = document.getElementById('layout-font-size-titulo')?.value || '14pt';
+      const lineHeight = document.getElementById('layout-line-height')?.value || '1.4';
+      const pSpacing = document.getElementById('layout-paragraph-spacing')?.value || '8pt';
+      const corPrimaria = document.getElementById('layout-cor-primaria')?.value || '#1B365D';
+      const corSecundaria = document.getElementById('layout-cor-secundaria')?.value || '#4A777A';
+
+      const sheet = document.getElementById('layout-preview-sheet');
+      const logo = document.getElementById('preview-logo');
+      const titulo = document.getElementById('preview-titulo');
+      const subtitulo = document.getElementById('preview-subtitulo');
+      const conteudo = document.getElementById('preview-conteudo');
+
+      if (!sheet) return;
+
+      sheet.style.fontFamily = fontFamily;
+
+      if (logo) logo.style.color = corPrimaria;
+      if (titulo) {
+        titulo.style.fontSize = fontSizeTitulo;
+        titulo.style.color = corPrimaria;
+      }
+      if (subtitulo) {
+        subtitulo.style.color = corSecundaria;
+      }
+      if (conteudo) {
+        conteudo.style.fontSize = fontSizeBody;
+        conteudo.style.lineHeight = lineHeight;
+        const paragrafos = conteudo.querySelectorAll('p');
+        paragrafos.forEach(p => {
+          p.style.marginBottom = pSpacing;
+        });
+      }
+    }
+
+    async function salvarLayoutFront() {
+      const btn = document.getElementById('btn-salvar-layout');
+      const textoOriginal = btn.innerHTML;
+      try {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Salvando...</span>';
+
+        const payload = {
+          font_family: document.getElementById('layout-font-family').value,
+          font_size_body: document.getElementById('layout-font-size-body').value,
+          font_size_titulo: document.getElementById('layout-font-size-titulo').value,
+          margin_top: document.getElementById('layout-margin-top').value,
+          margin_bottom: document.getElementById('layout-margin-bottom').value,
+          margin_left: document.getElementById('layout-margin-left').value,
+          margin_right: document.getElementById('layout-margin-right').value,
+          line_height: document.getElementById('layout-line-height').value,
+          paragraph_spacing: document.getElementById('layout-paragraph-spacing').value,
+          cor_primaria: document.getElementById('layout-cor-primaria').value,
+          cor_secundaria: document.getElementById('layout-cor-secundaria').value
+        };
+
+        const res = await fetch('/api/layout-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao salvar layout.');
+
+        layoutAtual = data.layout;
+        preencherFormularioLayout(layoutAtual);
+        atualizarPreviewLayout();
+        alert('Configurações de layout atualizadas com sucesso! Os próximos laudos em PDF e Word aplicarão essas regras automaticamente.');
+        fecharModalLayout();
+      } catch (err) {
+        alert('Erro ao salvar layout: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = textoOriginal;
+      }
+    }
+
+    async function restaurarPadraoLayoutFront() {
+      if (!confirm('Deseja realmente restaurar as configurações de layout para o padrão oficial da UPA PET?')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/layout-config/reset', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao restaurar layout.');
+
+        layoutAtual = data.layout;
+        preencherFormularioLayout(layoutAtual);
+        atualizarPreviewLayout();
+        alert('Padrão institucional restaurado com sucesso!');
+      } catch (err) {
+        alert('Erro ao restaurar padrão: ' + err.message);
       }
     }
 

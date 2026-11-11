@@ -17,6 +17,7 @@ laudo_temp_*.html
 Thumbs.db
 
 # Arquivos de teste e rascunhos locais
+coverage/
 teste_*/
 temp*
 processar_paciente_teste_*.js

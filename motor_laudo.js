@@ -3,13 +3,15 @@ const path = require('path');
 const os = require('os');
 const { gerarDocxLaudo } = require('./gerar_docx');
 const { compilarPDF } = require('./compilador_pdf');
+const { obterLayout } = require('./gerenciador_layout');
 
 const assetsDir = path.join(__dirname, 'assets');
 const logoPath = fs.existsSync(path.join(assetsDir, 'logo_upa_pet_oficial.png'))
   ? path.join(assetsDir, 'logo_upa_pet_oficial.png')
   : path.join(assetsDir, 'logo_upa_pet.jpg');
 
-async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida) {
+async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida, customLayout = null) {
+  const layout = customLayout || obterLayout();
   const nomeSanitizado = (dadosPaciente.nome || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
   const logoMime = path.extname(logoPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
@@ -71,9 +73,9 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 9.8pt;
-      line-height: 1.25;
+      font-family: ${layout.font_family};
+      font-size: ${layout.font_size_body};
+      line-height: ${layout.line_height};
       color: #111;
       margin: 0;
       padding: 0;
@@ -84,7 +86,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       height: 297mm;
       margin: 20px auto;
       background: white;
-      padding: 10mm 15mm 8mm 15mm;
+      padding: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left};
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
@@ -98,7 +100,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
         height: 297mm !important;
         max-height: 297mm !important;
         margin: 0 !important;
-        padding: 10mm 15mm 8mm 15mm !important;
+        padding: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left} !important;
         box-shadow: none !important;
         page-break-after: always !important;
         break-after: page !important;
@@ -112,10 +114,10 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     .patient-info { flex: 1; display: flex; justify-content: space-around; margin-left: 15px; font-size: 10pt; }
     .patient-info .col p { margin: 1.5px 0; }
     .title-box { text-align: center; margin-top: 8px; margin-bottom: 8px; }
-    .title-box h1 { font-size: 11pt; font-weight: bold; margin: 0; letter-spacing: 0.3px; }
-    .title-box p { font-size: 8pt; font-style: italic; margin: 2px 0 0 0; color: #333; }
-    .content { flex: 1; text-align: justify; font-size: 9.8pt; line-height: 1.25; outline: none; }
-    .content p { margin: 0 0 9px 0; }
+    .title-box h1 { font-size: ${layout.font_size_titulo}; font-weight: bold; margin: 0; letter-spacing: 0.3px; color: ${layout.cor_primaria}; }
+    .title-box p { font-size: 8pt; font-style: italic; margin: 2px 0 0 0; color: ${layout.cor_secundaria}; }
+    .content { flex: 1; text-align: justify; font-size: ${layout.font_size_body}; line-height: ${layout.line_height}; outline: none; }
+    .content p { margin: 0 0 ${layout.paragraph_spacing} 0; }
     .content p:last-child { margin-bottom: 0; }
     .signature { text-align: right; margin-top: 4px; padding-right: 15px; }
     .signature p { margin: 1px 0; font-size: 9.5pt; }
@@ -190,7 +192,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   }
 
   // Compila o DOCX para Word/Pages com as imagens incluídas
-  return gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, logoPath, imagensPaths)
+  return gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, logoPath, imagensPaths, layout)
     .then(() => {
       return { caminhoPdf, caminhoDocx };
     });
