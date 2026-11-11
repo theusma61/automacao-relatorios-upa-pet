@@ -1,0 +1,25 @@
+{
+  "regrasPadrao": {
+    "rolePadraoNovoUsuario": "pendente"
+  },
+  "usuarios": [
+    {
+      "email": "camilabastos@upapet.com.br",
+      "nome": "Dra Camila",
+      "role": "admin",
+      "crmv": "CRMV/MG: 22904"
+    },
+    {
+      "email": "matheusteteu00123@gmail.com",
+      "nome": "Matheus Augusto",
+      "role": "admin"
+    },
+    {
+      "email": "estranho@gmail.com",
+      "nome": "Desconhecido",
+      "foto": null,
+      "role": "pendente",
+      "criadoEm": "2026-11-11T01:37:37.640Z"
+    }
+  ]
+}
