@@ -59,6 +59,14 @@ const PORT = process.env.PORT || 3000;
 
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
+// Seed do banco — garante dados padrão mesmo com o banco novo.
+// No deploy (Render) o disco do container é efêmero e upa_pet.db é gitignored,
+// então cada redeploy/restart recomeça sem banco; aqui os modelos institucionais
+// são repopulados a partir de ./modelos_cirurgicos quando a tabela estiver
+// vazia (dados existentes via app nunca são sobrescritos).
+const { executarSeed } = require('./seed');
+executarSeed();
+
 const app = express();
 app.use(cors());
 app.use(cookieParser());
