@@ -142,7 +142,7 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
     children.push(
       new Paragraph({
         alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 50 },
+        spacing: { after: 150 },
         children: runs
       })
     );

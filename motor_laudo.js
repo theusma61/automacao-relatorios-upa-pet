@@ -115,7 +115,8 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     .title-box h1 { font-size: 11pt; font-weight: bold; margin: 0; letter-spacing: 0.3px; }
     .title-box p { font-size: 8pt; font-style: italic; margin: 2px 0 0 0; color: #333; }
     .content { flex: 1; text-align: justify; font-size: 9.8pt; line-height: 1.25; outline: none; }
-    .content p { margin: 0 0 4px 0; }
+    .content p { margin: 0 0 9px 0; }
+    .content p:last-child { margin-bottom: 0; }
     .signature { text-align: right; margin-top: 4px; padding-right: 15px; }
     .signature p { margin: 1px 0; font-size: 9.5pt; }
     .footer { font-size: 7.2pt; font-style: italic; color: #555; text-align: center; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 4px; }
