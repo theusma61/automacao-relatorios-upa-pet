@@ -530,6 +530,14 @@ app.get('/', (req, res) => {
   <style>
     body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background-color: #f8fafc; }
     .tab-active { border-bottom: 3px solid #0284c7; color: #0284c7; font-weight: 600; }
+    /* Phase 3: responsividade das tabs */
+    @media (max-width: 640px) {
+      .tab-btn { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      #aba-tabs { gap: 0.5rem; }
+    }
+    @media (max-width: 480px) {
+      .tab-label { font-size: 0.75rem; }
+    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between">
@@ -594,33 +602,35 @@ app.get('/', (req, res) => {
 
       <!-- TELA 3: CONTEÚDO PRINCIPAL (TABS ULTRASSOM E CIRURGIA) -->
       <div id="conteudo-principal" class="hidden">
-        <!-- Tabs Selector -->
-        <div class="flex border-b border-slate-200 mb-6 bg-white rounded-t-xl shadow-sm px-4 pt-2">
-          <button id="tab-btn-ultra" onclick="mudarAba('ultra')" class="tab-active py-3 px-6 text-sm flex items-center space-x-2 transition">
+        <!-- Tabs Selector — Phase 3: responsivo -->
+        <div id="aba-tabs" class="flex flex-wrap border-b border-slate-200 mb-6 bg-white rounded-t-xl shadow-sm px-4 pt-2 gap-2">
+          <button id="tab-btn-ultra" onclick="mudarAba('ultra')" class="tab-btn tab-active py-2.5 px-4 sm:px-6 text-sm flex items-center space-x-2 transition" role="tab">
             <i class="fa-solid fa-satellite-dish text-base"></i>
-            <span>Ultrassonografia Abdominal</span>
+            <span class="tab-label">Ultrassonografia Abdominal</span>
           </button>
-          <button id="tab-btn-cirurg" onclick="mudarAba('cirurg')" class="py-3 px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition">
+          <button id="tab-btn-cirurg" onclick="mudarAba('cirurg')" class="tab-btn py-2.5 px-4 sm:px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition" role="tab">
             <i class="fa-solid fa-syringe text-base"></i>
-            <span>Relatório Cirúrgico</span>
+            <span class="tab-label">Relatório Cirúrgico</span>
           </button>
-          <div class="ml-auto flex items-center space-x-1">
-            <button id="tab-btn-layout" onclick="abrirModalLayout()" class="hidden py-3 px-4 text-sm text-sky-700 hover:text-sky-900 flex items-center space-x-1.5 transition font-medium">
-              <i class="fa-solid fa-palette text-base"></i>
-              <span>Editor de Layout</span>
-            </button>
-            <button id="tab-btn-admin" onclick="abrirModalAdmin()" class="hidden py-3 px-4 text-sm text-purple-600 hover:text-purple-800 flex items-center space-x-1.5 transition font-medium">
-              <i class="fa-solid fa-users-gear text-base"></i>
-              <span>Gerenciar Acessos</span>
-            </button>
-          </div>
         </div>
 
         <!-- ABA 1: ULTRASSOM -->
         <div id="aba-ultra" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div class="mb-4">
-            <h2 class="text-lg font-bold text-slate-800">Laudo de Ultrassonografia Abdominal</h2>
-            <p class="text-sm text-slate-500">Envie as capturas de tela do Mindray com calipers e identificações para análise automática.</p>
+          <div class="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
+            <div>
+              <h2 class="text-lg font-bold text-slate-800">Laudo de Ultrassonografia Abdominal</h2>
+              <p class="text-sm text-slate-500">Envie as capturas de tela do Mindray com calipers e identificações para análise automática.</p>
+            </div>
+            <!-- Phase 2: Editor de Layout contextual (apenas aba Ultrassom) -->
+            <button
+              id="btn-layout-ultra"
+              onclick="abrirModalLayout()"
+              class="hidden sm:flex items-center space-x-1.5 text-xs text-sky-700 hover:text-sky-900 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 transition font-medium"
+              title="Editor de Layout do Laudo de Ultrassom"
+            >
+              <i class="fa-solid fa-palette text-base"></i>
+              <span>Editor de Layout</span>
+            </button>
           </div>
 
           <form id="form-ultra" onsubmit="enviarUltrassom(event)">
@@ -1175,14 +1185,12 @@ app.get('/', (req, res) => {
       const telaLogin = document.getElementById('tela-login');
       const telaPrincipal = document.getElementById('conteudo-principal');
       const alertaSemPermissao = document.getElementById('alerta-sem-permissao');
-      const btnAdmin = document.getElementById('tab-btn-admin');
-      const btnLayout = document.getElementById('tab-btn-layout');
+      const btnLayoutUltra = document.getElementById('btn-layout-ultra');
       const btnSubmitUltra = document.getElementById('btn-ultra-submit');
       const btnSubmitCirurg = document.getElementById('btn-cirurg-submit');
 
       if (!usuarioAtual) {
         // Usuário DESCONECTADO
-        if (btnLayout) btnLayout.classList.add('hidden');
         headerDiv.innerHTML = \`
           <button onclick="mostrarLogin()" class="bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold py-2 px-3.5 rounded-lg shadow-sm transition flex items-center space-x-1.5">
             <i class="fa-brands fa-google"></i>
@@ -1209,6 +1217,11 @@ app.get('/', (req, res) => {
         ? \`<img src="\${usuarioAtual.foto}" class="w-8 h-8 rounded-full border border-slate-200" alt="Avatar">\`
         : \`<div class="w-8 h-8 bg-sky-600 text-white font-bold rounded-full flex items-center justify-center text-xs">\${usuarioAtual.nome.substring(0, 2).toUpperCase()}</div>\`;
 
+      // Phase 1: Dropdown com engrenagem (Gerenciar Acessos + Sair)
+      const adminItem = usuarioAtual.role === 'admin'
+        ? \`<button onclick="abrirModalAdmin(); fecharMenuUsuario()" class="w-full text-left px-3 py-2 text-xs text-purple-700 hover:bg-purple-50 transition flex items-center space-x-2" role="menuitem"><i class="fa-solid fa-users-gear"></i><span>Gerenciar Acessos</span></button>\`
+        : '';
+
       headerDiv.innerHTML = \`
         <div class="flex items-center space-x-3">
           \${avatarHtml}
@@ -1218,24 +1231,42 @@ app.get('/', (req, res) => {
               \${usuarioAtual.roleDescricao}
             </span>
           </div>
-          <button onclick="fazerLogout()" title="Sair da conta" class="text-slate-400 hover:text-red-600 p-1.5 rounded-lg border border-slate-200 transition">
-            <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
-          </button>
+          <div class="relative" id="menu-usuario-wrapper">
+            <button
+              id="btn-menu-usuario"
+              onclick="toggleMenuUsuario()"
+              aria-expanded="false"
+              aria-haspopup="true"
+              title="Menu do usuário"
+              class="text-slate-400 hover:text-sky-600 p-1.5 rounded-lg border border-slate-200 transition"
+            >
+              <i class="fa-solid fa-gear text-xs"></i>
+            </button>
+            <div
+              id="dropdown-usuario"
+              class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50"
+              role="menu"
+            >
+              <div class="px-3 py-2 border-b border-slate-100">
+                <p class="text-xs font-medium text-slate-700">\${usuarioAtual.nome}</p>
+                <p class="text-[11px] text-slate-500 truncate">\${usuarioAtual.email}</p>
+              </div>
+              \${adminItem}
+              <button onclick="fazerLogout(); fecharMenuUsuario()" class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition flex items-center space-x-2" role="menuitem">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                <span>Sair</span>
+              </button>
+            </div>
+          </div>
         </div>
       \`;
 
-      // Controle de Permissões
-      if (usuarioAtual.role === 'admin') {
-        btnAdmin.classList.remove('hidden');
-      } else {
-        btnAdmin.classList.add('hidden');
-      }
-
-      if (btnLayout) {
+      // Phase 2: Editor de Layout — visível apenas se usuário pode gerar laudos
+      if (btnLayoutUltra) {
         if (usuarioAtual.role === 'admin' || usuarioAtual.role === 'veterinario') {
-          btnLayout.classList.remove('hidden');
+          btnLayoutUltra.classList.remove('hidden');
         } else {
-          btnLayout.classList.add('hidden');
+          btnLayoutUltra.classList.add('hidden');
         }
       }
 
@@ -1258,7 +1289,7 @@ app.get('/', (req, res) => {
         btnSubmitUltra.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i><span>Gerar Laudo Oficial com IA</span>';
 
         btnSubmitCirurg.disabled = false;
-        btnSubmitCirurg.className = 'w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2';
+        btnSubmitCirurg.className = 'mt-6 w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2';
         btnSubmitCirurg.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i><span>Gerar Relatório Cirúrgico Oficial</span>';
       }
 
@@ -1271,7 +1302,38 @@ app.get('/', (req, res) => {
         }
       }
       renderizarCardsModelos(todosModelosCirurgicos);
+
+      // Phase 3: Controlar visibilidade do btn-layout-ultra conforme aba ativa
+      if (btnLayoutUltra && abaAtual === 'ultra') {
+        btnLayoutUltra.classList.remove('hidden');
+      }
     }
+
+    var abaAtual = 'ultra'; // Phase 3: aba ativa
+
+    // Phase 1: Menu do usuário (engrenagem no header)
+    function toggleMenuUsuario() {
+      const dropdown = document.getElementById('dropdown-usuario');
+      const btn = document.getElementById('btn-menu-usuario');
+      if (!dropdown) return;
+      dropdown.classList.toggle('hidden');
+      if (btn) btn.setAttribute('aria-expanded', dropdown.classList.contains('hidden') ? 'false' : 'true');
+    }
+
+    function fecharMenuUsuario() {
+      const dropdown = document.getElementById('dropdown-usuario');
+      if (dropdown) dropdown.classList.add('hidden');
+      const btn = document.getElementById('btn-menu-usuario');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // Phase 1: fechar dropdown ao clicar fora
+    document.addEventListener('click', function(e) {
+      const wrapper = document.getElementById('menu-usuario-wrapper');
+      if (wrapper && !wrapper.contains(e.target)) {
+        fecharMenuUsuario();
+      }
+    });
 
     function renderizarBotaoGoogle() {
       if (!ssoConfig || !ssoConfig.googleClientId) {
@@ -1548,21 +1610,27 @@ app.get('/', (req, res) => {
 
     // Controle de Abas
     function mudarAba(aba) {
+      abaAtual = aba; // Phase 3
       const btnUltra = document.getElementById('tab-btn-ultra');
       const btnCirurg = document.getElementById('tab-btn-cirurg');
       const divUltra = document.getElementById('aba-ultra');
       const divCirurg = document.getElementById('aba-cirurg');
+      const btnLayoutUltra = document.getElementById('btn-layout-ultra');
 
       if (aba === 'ultra') {
-        btnUltra.className = 'tab-active py-3 px-6 text-sm flex items-center space-x-2 transition';
-        btnCirurg.className = 'py-3 px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
+        btnUltra.className = 'tab-btn tab-active py-2.5 px-4 sm:px-6 text-sm flex items-center space-x-2 transition';
+        btnCirurg.className = 'tab-btn py-2.5 px-4 sm:px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
         divUltra.classList.remove('hidden');
         divCirurg.classList.add('hidden');
+        // Phase 2: Editor de Layout visível apenas na aba Ultrassom
+        if (btnLayoutUltra) btnLayoutUltra.classList.remove('hidden');
       } else {
-        btnCirurg.className = 'tab-active py-3 px-6 text-sm flex items-center space-x-2 transition';
-        btnUltra.className = 'py-3 px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
+        btnCirurg.className = 'tab-btn tab-active py-2.5 px-4 sm:px-6 text-sm flex items-center space-x-2 transition';
+        btnUltra.className = 'tab-btn py-2.5 px-4 sm:px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
         divCirurg.classList.remove('hidden');
         divUltra.classList.add('hidden');
+        // Phase 2: esconder Editor de Layout fora da aba Ultrassom
+        if (btnLayoutUltra) btnLayoutUltra.classList.add('hidden');
         if (todosModelosCirurgicos.length === 0) {
           carregarModelosCirurgicosFront();
         }
