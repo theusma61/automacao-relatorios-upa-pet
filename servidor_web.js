@@ -1964,6 +1964,26 @@ process.on('unhandledRejection', (reason) => {
 
 (async function bootServidor() {
   try {
+    // 0.5. Tokens no Key Value (Opção B — free tier, disco efêmero): se o
+    //     .tokens.json sumiu no disco e a instância Key Value foi configurada,
+    //     recupera os tokens do Google Drive antes de qualquer restore.
+    if (!fs.existsSync(backupDb.TOKENS_FILE)) {
+      const t = process.env.REDIS_URL
+        ? await backupDb.carregarTokensDoKeyValue().catch((err) => {
+            console.error('[restore] falha ao carregar tokens do Key Value:', err.message);
+            return null;
+          })
+        : null;
+      if (t) {
+        fs.mkdirSync(path.dirname(backupDb.TOKENS_FILE), { recursive: true });
+        fs.writeFileSync(backupDb.TOKENS_FILE, JSON.stringify(t, null, 2));
+        backupDb.carregarTokens();
+        console.log('[restore] tokens do Google Drive recuperados do Key Value.');
+      } else if (process.env.REDIS_URL) {
+        console.log('[restore] sem tokens no Key Value — backup desativado até /backup/setup.');
+      }
+    }
+
     // 1. Restore do Drive: se o arquivo do banco não existir no disco (Render
     //    em redeploy/restart novo) e houver backup autorizado, baixa o mais
     //    recente para o DB_PATH.

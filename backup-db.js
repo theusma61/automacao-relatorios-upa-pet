@@ -26,6 +26,12 @@
 //   GOOGLE_CLIENT_SECRET  — "Client secret" desse mesmo OAuth client (obrigatório)
 //   BACKUP_INTERVAL_MS    — intervalo entre backups, em ms (default 300000 = 5 min)
 //   BACKUP_KEEP           — quantos backups manter (default 14)
+//   REDIS_URL             — URL da instância Render Key Value (gratuita,
+//                           Redis-compatible / Valkey 8). Formato:
+//                           redis://red-xxxx:6379 (interna, mesma workspace +
+//                           região) ou rediss://... (externa, TLS + allowlist
+//                           de IPs). Mantém os tokens do Drive vivos após
+//                           redeploy/dormência (Opção B).
 //
 // ================================================================================
 
@@ -45,6 +51,13 @@ const KEEP = Math.max(1, Number(process.env.BACKUP_KEEP || 14));
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const PASTA_DRIVE = 'upa_pet_backups';
 const NOME_RE = /^upa_pet_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})\.db$/;
+
+// --- Key Value (Render) — cópia dos tokens fora do disco efêmero -------------
+// Redis-compatible (Valkey 8), sem API REST: acesso via URL `REDIS_URL`
+// com o cliente `redis` (docs: render.com/docs/key-value).
+const REDIS_URL = (process.env.REDIS_URL || '').trim();
+const KV_TOKENS_KEY = 'tokens_json';
+let kvClient = null;
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -118,7 +131,98 @@ function salvarTokenGoogle(data) {
     ...base
   };
   salvarTokens();
+  salvarTokensNoKeyValue();
   console.log('[backup] Google Drive autorizado — backup em nuvem ativo.');
+}
+
+
+// --- Key Value (Render) + renovação de tokens ----------------------------------
+// No free tier o disco é efêmero: .tokens.json some após redeploy/dormência.
+// Gravamos os tokens no Key Value (Redis, gratuita, sobrevive a redeploy), que
+// o boot usa para recuperar o acesso ao Drive. O Google renova o refresh_token a
+// cada ~1h: `atualizarTokens()` renova antes de cada upload/restore, e a cópia
+// do Key Value acompanha o valor mais recente.
+//
+// O Render Key Value não tem API REST: é um datastore Redis-compatible (Valkey
+// 8). A instância é exposta pela URL `REDIS_URL` (ex.: redis://red-xxxx:6379 —
+// interna, mesma workspace + região; rediss://... — externa, TLS + allowlist de
+// IPs), exibida no menu "Connect" e já carregando a autenticação.
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label}: timeout após ${ms}ms`)), ms)
+    )
+  ]);
+}
+
+function getKVClient() {
+  if (kvClient) return kvClient;
+  if (!REDIS_URL) return null;
+  const { createClient } = require('redis');
+  kvClient = createClient({
+    url: REDIS_URL,
+    socket: { connectTimeout: 5000, socketTimeout: 5000 },
+  });
+  return kvClient;
+}
+
+async function kvConnect() {
+  const c = getKVClient();
+  if (!c) return null;
+  await withTimeout(c.connect(), 6000, 'Key Value (conectar)');
+  return c;
+}
+
+async function salvarTokensNoKeyValue() {
+  if (!REDIS_URL || !tokens || !tokens.refresh_token) return;
+  try {
+    const c = await kvConnect();
+    await withTimeout(c.set(KV_TOKENS_KEY, JSON.stringify(tokens)), 5000, 'Key Value (SET)');
+    console.log('[backup] tokens do Google Drive salvos no Key Value.');
+  } catch (err) {
+    console.warn('[backup] Key Value indisponível, tokens permanecem no disco:', err.name || err.message);
+  }
+}
+
+async function carregarTokensDoKeyValue() {
+  if (!REDIS_URL) return null;
+  try {
+    const c = await kvConnect();
+    const val = await withTimeout(c.get(KV_TOKENS_KEY), 5000, 'Key Value (GET)');
+    if (!val) return null;
+    const t = JSON.parse(val);
+    return t && t.refresh_token ? t : null;
+  } catch (err) {
+    console.warn('[backup] Key Value indisponível, não consegui recuperar tokens:', err.name || err.message);
+    return null;
+  }
+}
+
+async function atualizarTokens() {
+  if (!tokens || !tokens.refresh_token) return null;
+  if (
+    tokens.access_token &&
+    tokens.token_expires_at &&
+    Date.now() < tokens.token_expires_at - 60000
+  ) {
+    return tokens; // token ainda válido (com 1 min de folga)
+  }
+  const oauth = new OAuth2Client(CLIENT_ID, CLIENT_SECRET);
+  oauth.setCredentials({ refresh_token: tokens.refresh_token });
+  const data = await oauth.refreshToken();
+  const base = { pastaId: tokens.pastaId, lastUpload: tokens.lastUpload };
+  tokens = {
+    refresh_token: data.refresh_token || tokens.refresh_token,
+    access_token: data.access_token || '',
+    token_expires_at: data.expires_in ? Date.now() + data.expires_in * 1000 : null,
+    ...base
+  };
+  salvarTokens();
+  salvarTokensNoKeyValue();
+  console.log('[backup] tokens renovados.');
+  return tokens;
 }
 
 function obterBaseUrl(req) {
@@ -189,14 +293,36 @@ function nomeBackup() {
 
 async function obterPastaId() {
   const drive = obterDrive();
-  if (tokens.pastaId) return tokens.pastaId;
-  const r = await drive.files.create({
+  if (tokens.pastaId) {
+    try {
+      // pastaId conhecida: valida se ainda existe
+      await drive.files.get({ id: tokens.pastaId, fields: 'id' });
+      return tokens.pastaId;
+    } catch (_) {}
+    // pasta não existe mais (ex: apagada pelo usuário) — cai para a busca por nome
+  }
+  // Procura a pasta pelo nome (evita criar duplicatas quando o .tokens.json
+  // some no disco e o boot recomeça)
+  const r = await drive.files.list({
+    q: `name = "${PASTA_DRIVE}" and mimeType = "application/vnd.google-apps.folder" and trashed = false`,
+    fields: 'items(id, name)',
+    pageSize: 5
+  });
+  const items = r.data && r.data.items || [];
+  if (items.length > 0) {
+    tokens.pastaId = items[0].id;
+    salvarTokens();
+    salvarTokensNoKeyValue();
+    return tokens.pastaId;
+  }
+  const nova = await drive.files.create({
     parents: ['root'],
     name: PASTA_DRIVE,
     fields: 'id'
   });
-  tokens.pastaId = r.data.id;
+  tokens.pastaId = nova.data.id;
   salvarTokens();
+  salvarTokensNoKeyValue();
   console.log(`[backup] pasta ${PASTA_DRIVE} criada no Drive.`);
   return tokens.pastaId;
 }
@@ -222,6 +348,7 @@ async function uploadBackup() {
   const tmp = path.join(os.tmpdir(), `upa_pet_snapshot_${process.pid}_${Date.now()}.db`);
 
   try {
+    await atualizarTokens();
     // 1. Snapshot do banco (assíncrona nesse melhor-sqlite3)
     const buffer = await criarSnapshot(tmp);
     if (!buffer || buffer.length === 0) {
@@ -277,6 +404,7 @@ async function tentarRestoreBackup() {
   }
 
   try {
+    await atualizarTokens();
     const pastaId = await obterPastaId();
     const drive = obterDrive();
     const r = await drive.files.list({
@@ -355,6 +483,8 @@ module.exports = {
   parar,
   marcarServidor,
   salvarTokenGoogle,
+  carregarTokensDoKeyValue,
+  atualizarTokens,
   obterUrlAutorizacao,
   obterStatus,
   carregarTokens,
