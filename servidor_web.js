@@ -16,7 +16,9 @@ const {
   carregarModelosCirurgicos,
   obterModeloPorId,
   salvarOuCriarModelo,
-  excluirModelo
+  excluirModelo,
+  syncModelosDoJson,
+  inferirModeloPorTexto
 } = require('./gerenciador_modelos');
 const {
   obterLayout,
@@ -486,6 +488,32 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
   try {
     console.log(`🔪 [WEB - CIRURGIA] [Usuário: ${req.usuario.email}] Analisando procedimento cirúrgico...`);
     const resultadoIA = await analisarCirurgiaComIA(todosArquivos, apiKey);
+
+    // FASE 5 — Inferência + fallback: preenche campos vazios com o texto do modelo
+    const cir = resultadoIA.cirurgia;
+    const textoProcedimento = (cir.procedimento || '').trim();
+    const modeloDetetado = inferirModeloPorTexto(textoProcedimento);
+    if (modeloDetetado) {
+      if (!cir.procedimento || cir.procedimento.length < 20) {
+        cir.procedimento = modeloDetetado.procedimento;
+      }
+      if (!cir.diagnosticoPreCirurgico) {
+        cir.diagnosticoPreCirurgico = modeloDetetado.diagnosticoPreCirurgico;
+      }
+      if (!cir.descricaoProcedimento) {
+        cir.descricaoProcedimento = modeloDetetado.descricaoProcedimento;
+      }
+      if (!cir.evolucaoConsideracoes) {
+        cir.evolucaoConsideracoes = modeloDetetado.evolucaoConsideracoes;
+      }
+      if (cir.modelo === null || cir.modelo === undefined) {
+        cir.modelo = modeloDetetado.nome;
+      }
+      cir.modeloUso = modeloDetetado.nome;
+      console.log(`[inferência] Modelo detectado: ${modeloDetetado.nome} — campos preenchidos com fallback`);
+    } else if (!cir.modelo) {
+      console.log('[inferência] Nenhum modelo detectado pelo texto; IA não escolheu modelo.');
+    }
 
     const docs = await gerarDocumentosCirurgicos(
       resultadoIA.paciente,
@@ -2065,6 +2093,15 @@ process.on('unhandledRejection', (reason) => {
 
     // 2. Seed dos dados padrão (idempotente: só repõe o que falta).
     executarSeed();
+
+    // 2.5. Sincroniza modelos dos JSONs para o SQLite (idempotente — pode rodar a cada boot)
+    try {
+      if (process.env.NODE_ENV !== 'test') {
+        syncModelosDoJson();
+      }
+    } catch (err) {
+      console.error('[sync] falha ao sincronizar modelos:', err.message);
+    }
 
     // 3. Intervalo de backup + último upload antes do encerramento.
     if (backupDb.obterStatus().configurado) {

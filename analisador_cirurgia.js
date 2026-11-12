@@ -55,8 +55,9 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
    - A monitorização é sempre contínua sob anestesia geral.
    - A síntese por planos deve especificar detalhadamente os fios e padrões (ex: peritônio e musculatura com nylon em padrão reverdin; subcutâneo com proliglecaprone ou poliglactina em padrão intradérmico; pele com nylon em padrão sultan ou simples).
 2. **Uso dos Modelos da Biblioteca**:
-   - Se o procedimento realizado corresponder a um dos modelos cadastrados (ex: Ovariohisterectomia/Piometra, Celiotomia exploratória, Orquiectomia, etc.), use a estrutura e o vocabulário padrão daquele modelo, adaptando e enriquecendo com os dados reais citados pelo veterinário (nomes, fios utilizados, achados intraoperatórios, complicações, lavagem, etc.).
+   - Se o procedimento realizado corresponder a um dos modelos cadastrados, **COPIE O TEXTO EXATO** dos campos diagnosticoPreCirurgico, descricaoProcedimento e evolucaoConsideracoes daquele modelo — o texto do modelo é a fonte primária. Adapte SOMENTE: (a) dados específicos do paciente (nome, tutor, idade, peso, data, espécie), e (b) achados citados pelo veterinário que se divergem do modelo (fios diferentes, complicações, lavagem, hemostasia). NÃO reescreva do zero: mantenha a estrutura, os parágrafos e o vocabulário cirúrgico do modelo.
    - Se for uma cirurgia diferente dos modelos cadastrados, formule o relatório mantendo o mesmo altíssimo rigor técnico, formalidade cirúrgica e clareza.
+   - Identifique o modelo correspondente e reporte o nome exato no campo "modelo".
 3. **Extração de Dados do Paciente**:
    - Identifique nome, espécie (Canina/Felina), sexo (Macho/Fêmea), idade, peso e tutor. Se o veterinário não citar algum campo (ex: peso ou tutor), coloque "Não informado".
    - Data do procedimento: se o cirurgião falar ou escrever a data, use-a; se não falar, use a data de hoje: "${dataHoje}".
