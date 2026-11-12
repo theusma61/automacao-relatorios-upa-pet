@@ -557,15 +557,9 @@ app.get('/', (req, res) => {
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background-color: #f8fafc; }
-    .tab-active { border-bottom: 3px solid #0284c7; color: #0284c7; font-weight: 600; }
-    /* Phase 3: responsividade das tabs */
-    @media (max-width: 640px) {
-      .tab-btn { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-      #aba-tabs { gap: 0.5rem; }
-    }
-    @media (max-width: 480px) {
-      .tab-label { font-size: 0.75rem; }
-    }
+    /* Phase 3: abas horizontais com rolagem (pillets) */
+    #aba-tabs { scrollbar-width: none; }
+    #aba-tabs::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between">
@@ -631,12 +625,12 @@ app.get('/', (req, res) => {
       <!-- TELA 3: CONTEÚDO PRINCIPAL (TABS ULTRASSOM E CIRURGIA) -->
       <div id="conteudo-principal" class="hidden">
         <!-- Tabs Selector — Phase 3: responsivo -->
-        <div id="aba-tabs" class="flex flex-wrap border-b border-slate-200 mb-6 bg-white rounded-t-xl shadow-sm px-4 pt-2 gap-2">
-          <button id="tab-btn-ultra" onclick="mudarAba('ultra')" class="tab-btn tab-active py-2.5 px-4 sm:px-6 text-sm flex items-center space-x-2 transition" role="tab">
+        <div id="aba-tabs" class="flex overflow-x-auto mb-6 px-4 py-2 gap-3 bg-white shadow-sm rounded-xl">
+          <button id="tab-btn-ultra" onclick="mudarAba('ultra')" class="tab-btn tab-active flex items-center space-x-2 transition rounded-full py-2.5 px-5 text-sm font-semibold text-white bg-sky-500 shadow-md whitespace-nowrap" role="tab">
             <i class="fa-solid fa-satellite-dish text-base"></i>
             <span class="tab-label">Ultrassonografia Abdominal</span>
           </button>
-          <button id="tab-btn-cirurg" onclick="mudarAba('cirurg')" class="tab-btn py-2.5 px-4 sm:px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition" role="tab">
+          <button id="tab-btn-cirurg" onclick="mudarAba('cirurg')" class="tab-btn py-2.5 px-5 text-sm text-slate-600 hover:text-slate-900 flex items-center space-x-2 transition rounded-full border border-slate-300 whitespace-nowrap hover:border-sky-400 hover:bg-sky-50" role="tab">
             <i class="fa-solid fa-syringe text-base"></i>
             <span class="tab-label">Relatório Cirúrgico</span>
           </button>
@@ -1646,15 +1640,15 @@ app.get('/', (req, res) => {
       const btnLayoutUltra = document.getElementById('btn-layout-ultra');
 
       if (aba === 'ultra') {
-        btnUltra.className = 'tab-btn tab-active py-2.5 px-4 sm:px-6 text-sm flex items-center space-x-2 transition';
-        btnCirurg.className = 'tab-btn py-2.5 px-4 sm:px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
+        btnUltra.className = 'tab-btn tab-active flex items-center space-x-2 transition rounded-full py-2.5 px-5 text-sm font-semibold text-white bg-sky-500 shadow-md whitespace-nowrap';
+        btnCirurg.className = 'tab-btn py-2.5 px-5 text-sm text-slate-600 hover:text-slate-900 flex items-center space-x-2 transition rounded-full border border-slate-300 whitespace-nowrap hover:border-sky-400 hover:bg-sky-50';
         divUltra.classList.remove('hidden');
         divCirurg.classList.add('hidden');
         // Phase 2: Editor de Layout visível apenas na aba Ultrassom
         if (btnLayoutUltra) btnLayoutUltra.classList.remove('hidden');
       } else {
-        btnCirurg.className = 'tab-btn tab-active py-2.5 px-4 sm:px-6 text-sm flex items-center space-x-2 transition';
-        btnUltra.className = 'tab-btn py-2.5 px-4 sm:px-6 text-sm text-slate-500 hover:text-slate-700 flex items-center space-x-2 transition';
+        btnCirurg.className = 'tab-btn tab-active flex items-center space-x-2 transition rounded-full py-2.5 px-5 text-sm font-semibold text-white bg-sky-500 shadow-md whitespace-nowrap';
+        btnUltra.className = 'tab-btn py-2.5 px-5 text-sm text-slate-600 hover:text-slate-900 flex items-center space-x-2 transition rounded-full border border-slate-300 whitespace-nowrap hover:border-sky-400 hover:bg-sky-50';
         divCirurg.classList.remove('hidden');
         divUltra.classList.add('hidden');
         // Phase 2: esconder Editor de Layout fora da aba Ultrassom
