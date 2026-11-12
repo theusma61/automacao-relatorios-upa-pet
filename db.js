@@ -80,7 +80,9 @@ INSERT OR IGNORE INTO configuracoes_layout (id) VALUES ('padrao');
  * Chama-se uma única vez por processo; o resultado é reutilizado globalmente.
  */
 function getDatabase() {
-  if (global.__upaPetDb) {
+  // Cache da conexão: reutiliza só se ainda estiver aberta.
+  // `db.open` reflete o estado real do SQLite (false após db.close()).
+  if (global.__upaPetDb && global.__upaPetDb.db && global.__upaPetDb.db.open) {
     return global.__upaPetDb.db;
   }
 
@@ -95,7 +97,7 @@ function getDatabase() {
 }
 
 module.exports = {
-  db: getDatabase(), // acesso direto (inicializa com lazy init)
+  get db() { return getDatabase(); }, // lazy: só abre a conexão no primeiro acesso
   getDatabase,
-  getDbPath: () => (global.__upaPetDb ? global.__upaPetDb.dbPath : DB_PATH)
+  getDbPath: () => DB_PATH
 };

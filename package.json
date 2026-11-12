@@ -37,6 +37,7 @@
     "express": "^5.3.0",
     "express-rate-limit": "^7.4.0",
     "google-auth-library": "^11.3.4",
+    "googleapis": "^189.0.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.2",
@@ -53,7 +54,9 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.js"],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
     "collectCoverageFrom": [
       "*.js",
       "!**/tests/**",

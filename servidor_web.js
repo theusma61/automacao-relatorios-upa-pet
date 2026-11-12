@@ -59,13 +59,14 @@ const PORT = process.env.PORT || 3000;
 
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
-// Seed do banco — garante dados padrão mesmo com o banco novo.
-// No deploy (Render) o disco do container é efêmero e upa_pet.db é gitignored,
-// então cada redeploy/restart recomeça sem banco; aqui os modelos institucionais
-// são repopulados a partir de ./modelos_cirurgicos quando a tabela estiver
-// vazia (dados existentes via app nunca são sobrescritos).
+// Backup em nuvem (Google Drive) — protege os modelos criados via site contra
+// perda em redeploy/restart no Render (disco efêmero). O restore do Drive
+// acontece no boot, ANTES do seed, para o banco restaurado receber os dados
+// padrão apenas se ainda estiver vazio.
+const backupDb = require('./backup-db');
+backupDb.carregarTokens();
+
 const { executarSeed } = require('./seed');
-executarSeed();
 
 const app = express();
 app.use(cors());
@@ -75,6 +76,44 @@ app.use(express.urlencoded({ extended: true }));
 // Middleware global de log de requisições (requestId + latência + status)
 app.use(requestLogger());
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
+
+// ==========================================
+// BACKUP EM NUVEM (GOOGLE DRIVE)
+// ==========================================
+
+app.get('/backup/setup', (req, res) => {
+  const status = backupDb.obterStatus();
+  if (status.autorizado) {
+    return res.json({
+      status: 'already_authorized',
+      pastaId: status.pastaId,
+      lastUpload: status.lastUpload
+    });
+  }
+  if (!status.configurado) {
+    return res.json({
+      status: 'not_configured',
+      message: 'Faltam GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET no serviço. Configure nas env vars do Render.'
+    });
+  }
+  res.json({ status: 'pending', url: backupDb.obterUrlAutorizacao(req) });
+});
+
+app.get('/api/backup/callback', async (req, res) => {
+  try {
+    const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+    const data = await client.getToken(req.query.code);
+    backupDb.salvarTokenGoogle(data);
+    res.redirect('/backup/status');
+  } catch (err) {
+    console.error('[backup] falha no callback de autorização:', err.message);
+    res.status(500).json({ error: 'Falha na autorização do Google Drive.' });
+  }
+});
+
+app.get('/backup/status', (req, res) => {
+  res.json(backupDb.obterStatus());
+});
 
 // Diretório de uploads temporários
 const uploadDir = path.join(os.tmpdir(), 'upa_pet_uploads');
@@ -1923,15 +1962,45 @@ process.on('unhandledRejection', (reason) => {
   logger.error('unhandledRejection', { stack, message });
 });
 
-app.listen(PORT, () => {
-  logger.info('Servidor inicializado', {
-    porta: PORT,
-    url: `http://localhost:${PORT}`,
-    service: 'UPA PET - Automacao',
-    dbPath: require('./db').getDbPath()
-  });
-  console.log(`==================================================================`);
-  console.log(`🚀 UPA PET - SERVIDOR WEB COM GOOGLE SSO ATIVO NA PORTA ${PORT}`);
-  console.log(`🔗 Acesso local: http://localhost:${PORT}`);
-  console.log(`==================================================================`);
-});
+(async function bootServidor() {
+  try {
+    // 1. Restore do Drive: se o arquivo do banco não existir no disco (Render
+    //    em redeploy/restart novo) e houver backup autorizado, baixa o mais
+    //    recente para o DB_PATH.
+    const r = await backupDb.tentarRestoreBackup().catch((err) => {
+      console.error('[restore] falha:', err.message);
+      return { restaurado: false, motivo: 'erro no restore (usando seed padrão)' };
+    });
+    if (r && r.restaurado) {
+      console.log(`[restore] banco restaurado de ${r.arquivo}.`);
+    }
+
+    // 2. Seed dos dados padrão (idempotente: só repõe o que falta).
+    executarSeed();
+
+    // 3. Intervalo de backup + último upload antes do encerramento.
+    if (backupDb.obterStatus().configurado) {
+      backupDb.start();
+      process.on('SIGTERM', () => backupDb.parar());
+      process.on('SIGINT', () => backupDb.parar());
+      console.log('[backup] intervalos de backup agendados.');
+    }
+
+    const server = app.listen(PORT, () => {
+      backupDb.marcarServidor(server);
+      logger.info('Servidor inicializado', {
+        porta: PORT,
+        url: `http://localhost:${PORT}`,
+        service: 'UPA PET - Automacao',
+        dbPath: require('./db').getDbPath()
+      });
+      console.log(`==================================================================`);
+      console.log(`🚀 UPA PET - SERVIDOR WEB COM GOOGLE SSO ATIVO NA PORTA ${PORT}`);
+      console.log(`🔗 Acesso local: http://localhost:${PORT}`);
+      console.log(`==================================================================`);
+    });
+  } catch (err) {
+    logger.error('[boot] falha na inicialização', { stack: err.stack, message: err.message });
+    process.exit(1);
+  }
+})();
