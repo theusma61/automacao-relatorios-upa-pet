@@ -292,7 +292,7 @@ app.post('/api/admin/usuarios/role', exigirAutenticacao, validate(adminSchemas.u
 app.get('/api/usuario/tema', exigirAutenticacao, (req, res) => {
   try {
     const { db } = require('./db');
-    const stmt = db.db.prepare(
+    const stmt = db.prepare(
       'SELECT tema_preferencia FROM usuarios WHERE email = ? COLLATE NOCASE'
     );
     const row = stmt.get(req.usuario.email);
@@ -310,7 +310,7 @@ app.post('/api/usuario/tema', exigirAutenticacao, validate(temaSchemas.updateTem
   try {
     const { db } = require('./db');
     const { tema } = req.body;
-    const stmt = db.db.prepare(
+    const stmt = db.prepare(
       `UPDATE usuarios SET tema_preferencia = ?, atualizado_em = datetime('now')
        WHERE email = ? COLLATE NOCASE`
     );
