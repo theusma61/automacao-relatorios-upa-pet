@@ -1330,7 +1330,7 @@ app.get('/', (req, res) => {
                 <p class="text-xs font-medium text-slate-700 dark:text-slate-300">\${usuarioAtual.nome}</p>
                 <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">\${usuarioAtual.email}</p>
               </div>
-              ${usuarioAtual.role === 'admin' ? '<button onclick="abrirModalAdmin(); fecharMenuUsuario()" class="w-full text-left px-3 py-2 text-xs text-purple-700 hover:bg-purple-50 transition flex items-center space-x-2" role="menuitem"><i class="fa-solid fa-users-gear"></i><span>Gerenciar Acessos</span></button>' : ''}
+              \${usuarioAtual.role === 'admin' ? '<button onclick="abrirModalAdmin(); fecharMenuUsuario()" class="w-full text-left px-3 py-2 text-xs text-purple-700 hover:bg-purple-50 transition flex items-center space-x-2" role="menuitem"><i class="fa-solid fa-users-gear"></i><span>Gerenciar Acessos</span></button>' : ''}
               <div class="px-3 py-2 border-t border-slate-100 border-b border-slate-100">
                 <label class="flex items-center justify-between w-full cursor-pointer gap-2">
                   <span class="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center space-x-2">
