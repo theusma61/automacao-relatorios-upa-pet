@@ -20,6 +20,7 @@ A documentação está modularizada em 6 guias temáticos:
 | [**4. Modelos de Dados e Esquemas (`DATA_MODELS_AND_SCHEMAS.md`)**](./DATA_MODELS_AND_SCHEMAS.md) | Contratos JSON completos: paciente, laudo estruturado, ordenação de imagens, modelos cirúrgicos e RBAC de usuários. |
 | [**5. Deploy e Operação (`DEPLOYMENT_AND_OPERATIONS.md`)**](./DEPLOYMENT_AND_OPERATIONS.md) | Guia de implantação no Render.com, Docker, execução local no Windows (daemon de monitoramento do Google Drive), Puppeteer e variáveis de ambiente. |
 | [**6. Guia para Agentes de IA (`AI_AGENT_GUIDELINES.md`)**](./AI_AGENT_GUIDELINES.md) | Manual de sobrevivência e expansão para futuras IAs: invariantes pétreos, como estender funcionalidades sem quebrar regras clínicas e checklist de verificação. |
+| [**7. Plano de Migração PostgreSQL & Multi-Tenant (`MIGRATION_PLAN_POSTGRES_MULTITENANT.md`)**](./MIGRATION_PLAN_POSTGRES_MULTITENANT.md) | Plano diretor passo a passo para transformar a plataforma em SaaS com banco relacional, Docker Compose, Prisma e suporte a múltiplos médicos. |
 
 ---
 
