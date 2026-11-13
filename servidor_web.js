@@ -41,6 +41,7 @@ const {
   validateParams,
   authSchemas,
   adminSchemas,
+  temaSchemas,
   modelosSchemas,
   layoutSchemas
 } = require('./validation');
@@ -280,6 +281,46 @@ app.post('/api/admin/usuarios/role', exigirAutenticacao, validate(adminSchemas.u
     res.json({ sucesso: true, usuario: usuarioAtualizado });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ENDPOINTS DE PREFERÊNCIA DE TEMA (DARK MODE)
+// ==========================================
+
+// GET /api/usuario/tema — retorna tema preferido do usuário autenticado
+app.get('/api/usuario/tema', exigirAutenticacao, (req, res) => {
+  try {
+    const { db } = require('./db');
+    const stmt = db.db.prepare(
+      'SELECT tema_preferencia FROM usuarios WHERE email = ? COLLATE NOCASE'
+    );
+    const row = stmt.get(req.usuario.email);
+    if (!row) {
+      return res.json({ sucesso: true, tema: 'system' });
+    }
+    res.json({ sucesso: true, tema: row.tema_preferencia });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/usuario/tema — salva preferência do usuário autenticado
+app.post('/api/usuario/tema', exigirAutenticacao, validate(temaSchemas.updateTema, 'body'), (req, res) => {
+  try {
+    const { db } = require('./db');
+    const { tema } = req.body;
+    const stmt = db.db.prepare(
+      `UPDATE usuarios SET tema_preferencia = ?, atualizado_em = datetime('now')
+       WHERE email = ? COLLATE NOCASE`
+    );
+    const result = stmt.run(tema, req.usuario.email);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+    res.json({ sucesso: true, tema });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -553,6 +594,9 @@ app.get('/', (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UPA PET - Central de Laudos e Cirurgias</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
@@ -560,26 +604,39 @@ app.get('/', (req, res) => {
     /* Phase 3: abas horizontais com rolagem (pillets) */
     #aba-tabs { scrollbar-width: none; }
     #aba-tabs::-webkit-scrollbar { display: none; }
+    /* Phase 5: Dark mode — cores de base (CSS custom) */
+    .dark body { background-color: #0f172a; }
+    .dark h1, .dark h2, .dark h3, .dark p { color: inherit; }
   </style>
+  <script>
+    (function initTema() {
+      try {
+        var saved = localStorage.getItem('tema_preferencia');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)') && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var isDark = (saved === 'dark') || (saved === 'system' && prefersDark);
+        if (isDark) document.documentElement.classList.add('dark');
+      } catch(e) {}
+    })();
+  </script>
 </head>
 <body class="min-h-screen flex flex-col justify-between">
   <div>
     <!-- Top Header com Perfil Google e Status -->
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm dark:bg-slate-900 dark:border-slate-800 dark:shadow-none">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <div class="flex items-center space-x-3">
           <div class="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md">
             🐾
           </div>
           <div>
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">UPA PET</h1>
-            <p class="text-xs text-slate-500">Central Inteligente de Laudos &bull; Dra. Camila Bastos (CRMV/MG: 22904)</p>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight dark:text-slate-100">UPA PET</h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Central Inteligente de Laudos &bull; Dra. Camila Bastos (CRMV/MG: 22904)</p>
           </div>
         </div>
 
         <!-- Seção de Usuário / Login Google -->
         <div id="usuario-header" class="flex items-center space-x-3">
-          <div class="animate-pulse text-xs text-slate-400">Verificando sessão...</div>
+          <div class="animate-pulse text-xs text-slate-400 dark:text-slate-300">Verificando sessão...</div>
         </div>
       </div>
     </header>
@@ -588,12 +645,12 @@ app.get('/', (req, res) => {
     <main class="max-w-4xl mx-auto px-4 py-8">
 
       <!-- TELA 1: BLOQUEIO DE USUÁRIO DESCONECTADO -->
-      <div id="tela-login" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 sm:p-12 text-center max-w-lg mx-auto my-8">
+      <div id="tela-login" class="hidden bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 sm:p-12 text-center max-w-lg mx-auto my-8">
         <div class="w-16 h-16 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
           <i class="fa-solid fa-lock"></i>
         </div>
-        <h2 class="text-xl font-bold text-slate-800 mb-2">Acesso Restrito ao Sistema</h2>
-        <p class="text-sm text-slate-500 mb-6 leading-relaxed">
+        <h2 class="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">Acesso Restrito ao Sistema</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
           Para garantir a segurança dos dados clínicos e emissão oficial de relatórios da <strong>UPA PET</strong>, é necessário entrar com sua conta Google autorizada.
         </p>
 
@@ -625,23 +682,23 @@ app.get('/', (req, res) => {
       <!-- TELA 3: CONTEÚDO PRINCIPAL (TABS ULTRASSOM E CIRURGIA) -->
       <div id="conteudo-principal" class="hidden">
         <!-- Tabs Selector — Phase 3: responsivo -->
-        <div id="aba-tabs" class="flex overflow-x-auto mb-6 px-4 py-2 gap-3 bg-white shadow-sm rounded-xl">
+        <div id="aba-tabs" class="flex overflow-x-auto mb-6 px-4 py-2 gap-3 bg-white dark:bg-slate-800 shadow-sm rounded-xl">
           <button id="tab-btn-ultra" onclick="mudarAba('ultra')" class="tab-btn tab-active flex items-center space-x-2 transition rounded-full py-2.5 px-5 text-sm font-semibold text-white bg-sky-500 shadow-md whitespace-nowrap" role="tab">
             <i class="fa-solid fa-satellite-dish text-base"></i>
             <span class="tab-label">Ultrassonografia Abdominal</span>
           </button>
-          <button id="tab-btn-cirurg" onclick="mudarAba('cirurg')" class="tab-btn py-2.5 px-5 text-sm text-slate-600 hover:text-slate-900 flex items-center space-x-2 transition rounded-full border border-slate-300 whitespace-nowrap hover:border-sky-400 hover:bg-sky-50" role="tab">
+          <button id="tab-btn-cirurg" onclick="mudarAba('cirurg')" class="tab-btn py-2.5 px-5 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 flex items-center space-x-2 transition rounded-full border border-slate-300 dark:border-slate-600 whitespace-nowrap hover:border-sky-400 hover:bg-sky-50" role="tab">
             <i class="fa-solid fa-syringe text-base"></i>
             <span class="tab-label">Relatório Cirúrgico</span>
           </button>
         </div>
 
         <!-- ABA 1: ULTRASSOM -->
-        <div id="aba-ultra" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div id="aba-ultra" class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div class="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
             <div>
-              <h2 class="text-lg font-bold text-slate-800">Laudo de Ultrassonografia Abdominal</h2>
-              <p class="text-sm text-slate-500">Envie as capturas de tela do Mindray com calipers e identificações para análise automática.</p>
+              <h2 class="text-lg font-bold text-slate-800 dark:text-slate-200">Laudo de Ultrassonografia Abdominal</h2>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Envie as capturas de tela do Mindray com calipers e identificações para análise automática.</p>
             </div>
             <!-- Phase 2: Editor de Layout contextual (apenas aba Ultrassom) -->
             <button
@@ -658,12 +715,12 @@ app.get('/', (req, res) => {
           <form id="form-ultra" onsubmit="enviarUltrassom(event)">
             <div class="border-2 border-dashed border-sky-300 rounded-xl p-8 text-center bg-sky-50/50 hover:bg-sky-50 transition cursor-pointer" onclick="document.getElementById('input-ultra-fotos').click()">
               <i class="fa-solid fa-cloud-arrow-up text-4xl text-sky-500 mb-3"></i>
-              <p class="text-sm font-semibold text-slate-700">Clique para selecionar as fotos ou arraste até aqui</p>
-              <p class="text-xs text-slate-400 mt-1">Formatos aceitos: JPG, PNG, WEBP (várias fotos de uma vez)</p>
+              <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Clique para selecionar as fotos ou arraste até aqui</p>
+              <p class="text-xs text-slate-400 dark:text-slate-300 mt-1">Formatos aceitos: JPG, PNG, WEBP (várias fotos de uma vez)</p>
               <input type="file" id="input-ultra-fotos" multiple accept="image/*" class="hidden" onchange="atualizarListaFotosUltra(this)">
             </div>
 
-            <div id="lista-fotos-ultra" class="mt-4 text-xs text-slate-600 space-y-1"></div>
+            <div id="lista-fotos-ultra" class="mt-4 text-xs text-slate-600 dark:text-slate-300 space-y-1"></div>
 
             <button type="submit" id="btn-ultra-submit" class="mt-6 w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2">
               <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -674,8 +731,8 @@ app.get('/', (req, res) => {
           <!-- Loading e Resultado -->
           <div id="loading-ultra" class="hidden mt-6 p-6 text-center border border-slate-100 rounded-xl bg-slate-50">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-sky-500 border-t-transparent mb-3"></div>
-            <p class="text-sm font-medium text-slate-700">Analisando capturas do Mindray com IA e gerando laudo...</p>
-            <p class="text-xs text-slate-400 mt-1">Isso costuma levar cerca de 15 a 30 segundos.</p>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Analisando capturas do Mindray com IA e gerando laudo...</p>
+            <p class="text-xs text-slate-400 dark:text-slate-300 mt-1">Isso costuma levar cerca de 15 a 30 segundos.</p>
           </div>
 
           <div id="resultado-ultra" class="hidden mt-6 p-6 border border-emerald-200 bg-emerald-50 rounded-xl">
@@ -683,7 +740,7 @@ app.get('/', (req, res) => {
               <i class="fa-solid fa-circle-check text-xl text-emerald-600"></i>
               <span>Laudo Gerado com Sucesso!</span>
             </div>
-            <div id="info-paciente-ultra" class="text-sm text-emerald-950 mb-4 bg-white p-3 rounded-lg border border-emerald-100"></div>
+            <div id="info-paciente-ultra" class="text-sm text-emerald-950 mb-4 bg-white dark:bg-slate-800 p-3 rounded-lg border border-emerald-100"></div>
             <div class="flex flex-col sm:flex-row gap-3">
               <a id="btn-download-ultra-pdf" href="#" class="flex-1 bg-red-600 hover:bg-red-700 text-white text-center py-2.5 px-4 rounded-lg font-medium text-sm flex items-center justify-center space-x-2 shadow-sm transition">
                 <i class="fa-solid fa-file-pdf"></i>
@@ -698,34 +755,34 @@ app.get('/', (req, res) => {
         </div>
 
         <!-- ABA 2: CIRURGIA -->
-        <div id="aba-cirurg" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div id="aba-cirurg" class="hidden bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div class="mb-4">
-            <h2 class="text-lg font-bold text-slate-800">Relatório Cirúrgico Oficial</h2>
-            <p class="text-sm text-slate-500">Envie o documento da cirurgia (.docx, .pages, .txt ou áudio gravado) e fotos anexas opcionais.</p>
+            <h2 class="text-lg font-bold text-slate-800 dark:text-slate-200">Relatório Cirúrgico Oficial</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Envie o documento da cirurgia (.docx, .pages, .txt ou áudio gravado) e fotos anexas opcionais.</p>
           </div>
 
           <form id="form-cirurg" onsubmit="enviarCirurgia(event)">
             <!-- Documento Principal -->
             <div class="mb-4">
-              <label class="block text-xs font-semibold text-slate-700 uppercase mb-2">1. Ficha Cirúrgica ou Áudio</label>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-2">1. Ficha Cirúrgica ou Áudio</label>
               <div class="border-2 border-dashed border-sky-300 rounded-xl p-6 text-center bg-sky-50/50 hover:bg-sky-50 transition cursor-pointer" onclick="document.getElementById('input-cirurg-doc').click()">
                 <i class="fa-solid fa-file-waveform text-3xl text-sky-500 mb-2"></i>
-                <p class="text-sm font-semibold text-slate-700">Selecione o arquivo da cirurgia</p>
-                <p class="text-xs text-slate-400 mt-0.5">Word (.docx), Pages (.pages), Texto (.txt) ou Áudios (.m4a, .mp3, .wav, .ogg)</p>
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Selecione o arquivo da cirurgia</p>
+                <p class="text-xs text-slate-400 dark:text-slate-300 mt-0.5">Word (.docx), Pages (.pages), Texto (.txt) ou Áudios (.m4a, .mp3, .wav, .ogg)</p>
                 <input type="file" id="input-cirurg-doc" accept=".docx,.pages,.txt,.m4a,.mp3,.wav,.ogg,.opus" class="hidden" onchange="atualizarDocCirurg(this)">
               </div>
-              <div id="nome-doc-cirurg" class="mt-2 text-xs font-medium text-slate-600"></div>
+              <div id="nome-doc-cirurg" class="mt-2 text-xs font-medium text-slate-600 dark:text-slate-300"></div>
             </div>
 
             <!-- Fotos Opcionais -->
             <div class="mb-6">
-              <label class="block text-xs font-semibold text-slate-700 uppercase mb-2">2. Fotos Intraoperatórias / Peça Cirúrgica (Opcional - Página 2)</label>
-              <div class="border border-slate-200 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/70 transition cursor-pointer" onclick="document.getElementById('input-cirurg-fotos').click()">
-                <i class="fa-solid fa-camera text-2xl text-slate-400 mb-1"></i>
-                <p class="text-xs font-medium text-slate-600">Clique para adicionar fotos da peça cirúrgica ou procedimento</p>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-2">2. Fotos Intraoperatórias / Peça Cirúrgica (Opcional - Página 2)</label>
+              <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/70 transition cursor-pointer" onclick="document.getElementById('input-cirurg-fotos').click()">
+                <i class="fa-solid fa-camera text-2xl text-slate-400 dark:text-slate-300 mb-1"></i>
+                <p class="text-xs font-medium text-slate-600 dark:text-slate-300">Clique para adicionar fotos da peça cirúrgica ou procedimento</p>
                 <input type="file" id="input-cirurg-fotos" multiple accept="image/*" class="hidden" onchange="atualizarFotosCirurg(this)">
               </div>
-              <div id="lista-fotos-cirurg" class="mt-2 text-xs text-slate-600"></div>
+              <div id="lista-fotos-cirurg" class="mt-2 text-xs text-slate-600 dark:text-slate-300"></div>
             </div>
 
             <button type="submit" id="btn-cirurg-submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-xl shadow transition flex items-center justify-center space-x-2">
@@ -737,8 +794,8 @@ app.get('/', (req, res) => {
           <!-- Loading e Resultado Cirurgia -->
           <div id="loading-cirurg" class="hidden mt-6 p-6 text-center border border-slate-100 rounded-xl bg-slate-50">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-sky-500 border-t-transparent mb-3"></div>
-            <p class="text-sm font-medium text-slate-700">Identificando procedimento e aplicando padrão Dra. Camila Bastos...</p>
-            <p class="text-xs text-slate-400 mt-1">Compilando 1 página com assinatura + página 2 com registro fotográfico.</p>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Identificando procedimento e aplicando padrão Dra. Camila Bastos...</p>
+            <p class="text-xs text-slate-400 dark:text-slate-300 mt-1">Compilando 1 página com assinatura + página 2 com registro fotográfico.</p>
           </div>
 
           <div id="resultado-cirurg" class="hidden mt-6 p-6 border border-emerald-200 bg-emerald-50 rounded-xl">
@@ -746,7 +803,7 @@ app.get('/', (req, res) => {
               <i class="fa-solid fa-circle-check text-xl text-emerald-600"></i>
               <span>Relatório Cirúrgico Concluído!</span>
             </div>
-            <div id="info-paciente-cirurg" class="text-sm text-emerald-950 mb-4 bg-white p-3 rounded-lg border border-emerald-100"></div>
+            <div id="info-paciente-cirurg" class="text-sm text-emerald-950 mb-4 bg-white dark:bg-slate-800 p-3 rounded-lg border border-emerald-100"></div>
             <div class="flex flex-col sm:flex-row gap-3">
               <a id="btn-download-cirurg-pdf" href="#" class="flex-1 bg-red-600 hover:bg-red-700 text-white text-center py-2.5 px-4 rounded-lg font-medium text-sm flex items-center justify-center space-x-2 shadow-sm transition">
                 <i class="fa-solid fa-file-pdf"></i>
@@ -760,17 +817,17 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- SEÇÃO: BIBLIOTECA DE MODELOS CIRÚRGICOS INSTITUCIONAIS -->
-          <div class="mt-8 pt-6 border-t border-slate-200">
+          <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <div class="flex items-center space-x-2">
-                  <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
+                  <h3 class="text-base font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
                     <i class="fa-solid fa-book-medical text-sky-600"></i>
                     <span>Modelos Cirúrgicos Padronizados</span>
                   </h3>
                   <span id="badge-total-modelos" class="bg-sky-100 text-sky-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">Carregando...</span>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">Modelos pré-cadastrados (Dra. Camila Bastos - UPA PET) utilizados pela IA para estruturação dos relatórios. Você pode consultar, editar ou cadastrar novos modelos.</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Modelos pré-cadastrados (Dra. Camila Bastos - UPA PET) utilizados pela IA para estruturação dos relatórios. Você pode consultar, editar ou cadastrar novos modelos.</p>
               </div>
               <button id="btn-novo-modelo" onclick="abrirModalFormModelo(null)" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 self-start sm:self-auto">
                 <i class="fa-solid fa-plus"></i>
@@ -780,14 +837,14 @@ app.get('/', (req, res) => {
 
             <!-- Busca Rápida de Modelos -->
             <div class="relative mb-4">
-              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-              <input type="text" id="input-busca-modelo" oninput="filtrarModelosCirurgicos(this.value)" placeholder="Buscar por procedimento, sinônimo ou palavra-chave (ex: celiotomia, piometra, nódulo)..." class="w-full pl-8 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:bg-white transition">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 dark:text-slate-300 text-xs"></i>
+              <input type="text" id="input-busca-modelo" oninput="filtrarModelosCirurgicos(this.value)" placeholder="Buscar por procedimento, sinônimo ou palavra-chave (ex: celiotomia, piometra, nódulo)..." class="w-full pl-8 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:bg-white dark:bg-slate-800 transition">
             </div>
 
             <!-- Grid de Cards de Modelos -->
             <div id="grid-modelos-cirurgicos" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[540px] overflow-y-auto pr-1">
               <!-- Renderizado via JavaScript -->
-              <div class="col-span-full py-8 text-center text-xs text-slate-400">
+              <div class="col-span-full py-8 text-center text-xs text-slate-400 dark:text-slate-300">
                 <i class="fa-solid fa-spinner animate-spin mr-1"></i> Carregando biblioteca de modelos cirúrgicos...
               </div>
             </div>
@@ -799,47 +856,47 @@ app.get('/', (req, res) => {
 
   <!-- MODAL VISUALIZAR MODELO CIRÚRGICO -->
   <div id="modal-modelo-visualizar" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col p-6">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col p-6">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
         <div>
-          <h3 id="vis-modelo-nome" class="text-base font-bold text-slate-800">Nome do Modelo</h3>
+          <h3 id="vis-modelo-nome" class="text-base font-bold text-slate-800 dark:text-slate-200">Nome do Modelo</h3>
           <p id="vis-modelo-procedimento" class="text-xs text-sky-600 font-medium mt-0.5">Procedimento</p>
         </div>
-        <button onclick="fecharModalVisualizarModelo()" class="text-slate-400 hover:text-slate-600 p-1">
+        <button onclick="fecharModalVisualizarModelo()" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
 
-      <div class="overflow-y-auto py-4 space-y-4 text-xs text-slate-700 leading-relaxed pr-1">
+      <div class="overflow-y-auto py-4 space-y-4 text-xs text-slate-700 dark:text-slate-300 leading-relaxed pr-1">
         <div>
-          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Sinônimos / Palavras-chave:</span>
+          <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Sinônimos / Palavras-chave:</span>
           <div id="vis-modelo-sinonimos" class="flex flex-wrap gap-1.5"></div>
         </div>
 
         <div>
-          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Diagnóstico Pré-Cirúrgico:</span>
-          <p id="vis-modelo-diag" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-800"></p>
+          <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Diagnóstico Pré-Cirúrgico:</span>
+          <p id="vis-modelo-diag" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"></p>
         </div>
 
         <div>
-          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada):</span>
-          <div id="vis-modelo-desc" class="bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-line text-slate-800 font-sans leading-relaxed"></div>
+          <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada):</span>
+          <div id="vis-modelo-desc" class="bg-slate-50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line text-slate-800 dark:text-slate-200 font-sans leading-relaxed"></div>
         </div>
 
         <div>
-          <span class="font-semibold text-slate-500 uppercase text-[10px] tracking-wide block mb-1">Evolução e Considerações:</span>
-          <p id="vis-modelo-evol" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-800"></p>
+          <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Evolução e Considerações:</span>
+          <p id="vis-modelo-evol" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"></p>
         </div>
       </div>
 
-      <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
-        <span id="vis-modelo-id" class="text-[11px] font-mono text-slate-400"></span>
+      <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <span id="vis-modelo-id" class="text-[11px] font-mono text-slate-400 dark:text-slate-300"></span>
         <div class="flex items-center space-x-2">
           <button id="btn-vis-editar" onclick="" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1.5">
             <i class="fa-solid fa-pen-to-square"></i>
             <span>Editar este Modelo</span>
           </button>
-          <button onclick="fecharModalVisualizarModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
+          <button onclick="fecharModalVisualizarModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition">
             Fechar
           </button>
         </div>
@@ -849,13 +906,13 @@ app.get('/', (req, res) => {
 
   <!-- MODAL FORMULÁRIO (CRIAR / EDITAR) MODELO CIRÚRGICO -->
   <div id="modal-modelo-form" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] flex flex-col p-6">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
-        <h3 id="form-modelo-titulo" class="text-base font-bold text-slate-800 flex items-center space-x-2">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] flex flex-col p-6">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 mb-3">
+        <h3 id="form-modelo-titulo" class="text-base font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
           <i class="fa-solid fa-pen-to-square text-sky-600"></i>
           <span>Editar Modelo Cirúrgico</span>
         </h3>
-        <button onclick="fecharModalFormModelo()" class="text-slate-400 hover:text-slate-600 p-1">
+        <button onclick="fecharModalFormModelo()" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
@@ -864,46 +921,46 @@ app.get('/', (req, res) => {
         <input type="hidden" id="form-mod-id" value="">
 
         <div>
-          <label class="block font-semibold text-slate-700 mb-1">Nome do Modelo <span class="text-red-500">*</span></label>
-          <input type="text" id="form-mod-nome" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nome do Modelo <span class="text-red-500">*</span></label>
+          <input type="text" id="form-mod-nome" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-700 mb-1">Procedimento Oficial <span class="text-red-500">*</span></label>
-            <input type="text" id="form-mod-procedimento" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Procedimento Oficial <span class="text-red-500">*</span></label>
+            <input type="text" id="form-mod-procedimento" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
           </div>
           <div>
-            <label class="block font-semibold text-slate-700 mb-1">Diagnóstico Pré-Cirúrgico Padrão</label>
-            <input type="text" id="form-mod-diag" placeholder="Ex: Suspeita de corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Diagnóstico Pré-Cirúrgico Padrão</label>
+            <input type="text" id="form-mod-diag" placeholder="Ex: Suspeita de corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
           </div>
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-700 mb-1">Sinônimos / Palavras-chave (separados por vírgula)</label>
-          <input type="text" id="form-mod-sinonimos" placeholder="Ex: celiotomia, laparotomia, corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
-          <p class="text-[11px] text-slate-400 mt-0.5">Palavras que ajudam a IA a associar o áudio/documento a este modelo.</p>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sinônimos / Palavras-chave (separados por vírgula)</label>
+          <input type="text" id="form-mod-sinonimos" placeholder="Ex: celiotomia, laparotomia, corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+          <p class="text-[11px] text-slate-400 dark:text-slate-300 mt-0.5">Palavras que ajudam a IA a associar o áudio/documento a este modelo.</p>
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-700 mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada) <span class="text-red-500">*</span></label>
-          <textarea id="form-mod-desc" required rows="7" placeholder="Descreva a técnica cirúrgica oficial: preparo, antissepsia, incisão por planos, tempos cirúrgicos, hemostasia, síntese (fios e padrões de sutura)..." class="w-full px-3 py-2 border border-slate-200 rounded-lg font-sans focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada) <span class="text-red-500">*</span></label>
+          <textarea id="form-mod-desc" required rows="7" placeholder="Descreva a técnica cirúrgica oficial: preparo, antissepsia, incisão por planos, tempos cirúrgicos, hemostasia, síntese (fios e padrões de sutura)..." class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg font-sans focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-700 mb-1">Evolução e Considerações Pós-Operatórias</label>
-          <textarea id="form-mod-evol" rows="3" placeholder="Considerações sobre o pós-cirúrgico, achados adicionais e orientações..." class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Evolução e Considerações Pós-Operatórias</label>
+          <textarea id="form-mod-evol" rows="3" placeholder="Considerações sobre o pós-cirúrgico, achados adicionais e orientações..." class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
         </div>
 
         <div id="form-mod-erro" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200"></div>
 
-        <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <button type="button" id="btn-form-excluir" onclick="excluirModeloAtual()" class="hidden text-red-600 hover:text-red-800 text-xs font-semibold px-2 py-1 flex items-center space-x-1">
             <i class="fa-solid fa-trash-can"></i>
             <span>Excluir Modelo</span>
           </button>
           <div class="flex items-center space-x-2 ml-auto">
-            <button type="button" onclick="fecharModalFormModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-medium transition">
+            <button type="button" onclick="fecharModalFormModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-3.5 py-2 rounded-lg text-xs font-medium transition">
               Cancelar
             </button>
             <button type="submit" id="btn-form-salvar" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
@@ -918,20 +975,20 @@ app.get('/', (req, res) => {
 
   <!-- MODAL DE ADMINISTRAÇÃO DE USUÁRIOS -->
   <div id="modal-admin" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
-        <h3 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-2xl w-full p-6">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 mb-4">
+        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
           <i class="fa-solid fa-users-gear text-purple-600"></i>
           <span>Controle de Acessos e Permissões</span>
         </h3>
-        <button onclick="fecharModalAdmin()" class="text-slate-400 hover:text-slate-600 p-1">
+        <button onclick="fecharModalAdmin()" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
 
       <div class="max-h-96 overflow-y-auto">
         <table class="w-full text-left text-xs">
-          <thead class="bg-slate-50 text-slate-600 font-semibold uppercase">
+          <thead class="bg-slate-50 text-slate-600 dark:text-slate-300 font-semibold uppercase">
             <tr>
               <th class="p-2.5">Usuário</th>
               <th class="p-2.5">E-mail</th>
@@ -946,7 +1003,7 @@ app.get('/', (req, res) => {
       </div>
 
       <div class="mt-5 text-right">
-        <button onclick="fecharModalAdmin()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+        <button onclick="fecharModalAdmin()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition">
           Fechar
         </button>
       </div>
@@ -955,19 +1012,19 @@ app.get('/', (req, res) => {
 
   <!-- MODAL DE CONFIGURAÇÕES DE MODELOS E LAYOUT -->
   <div id="modal-layout" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full p-6 flex flex-col max-h-[92vh]">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-5xl w-full p-6 flex flex-col max-h-[92vh]">
       <!-- Header do Modal -->
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 mb-4">
         <div>
-          <h3 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+          <h3 class="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
             <i class="fa-solid fa-palette text-sky-600"></i>
             <span>Editor de Modelos e Layout Institucional</span>
           </h3>
-          <p class="text-xs text-slate-500 mt-0.5">
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Personalize tipografia, espaçamentos, margens e cores aplicados na geração de relatórios em PDF e Word (.docx).
           </p>
         </div>
-        <button onclick="fecharModalLayout()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
+        <button onclick="fecharModalLayout()" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 p-1.5 rounded-lg hover:bg-slate-100 transition">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
@@ -977,15 +1034,15 @@ app.get('/', (req, res) => {
         <!-- Coluna Esquerda: Formulário de Controles (lg:col-span-6) -->
         <div class="lg:col-span-6 space-y-4 text-xs">
           <!-- Bloco: Tipografia -->
-          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-font text-sky-600"></i>
               <span>Tipografia</span>
             </h4>
             <div class="space-y-3">
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Família da Fonte</label>
-                <select id="layout-font-family" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Família da Fonte</label>
+                <select id="layout-font-family" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
                   <option value="Calibri, sans-serif">Calibri (Padrão Institucional UPA PET)</option>
                   <option value="Arial, sans-serif">Arial</option>
                   <option value="'Times New Roman', serif">Times New Roman</option>
@@ -993,8 +1050,8 @@ app.get('/', (req, res) => {
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label class="block font-semibold text-slate-700 mb-1">Tamanho Corpo</label>
-                  <select id="layout-font-size-body" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                  <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tamanho Corpo</label>
+                  <select id="layout-font-size-body" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
                     <option value="9.5pt">9.5pt</option>
                     <option value="10pt">10pt</option>
                     <option value="10.5pt">10.5pt</option>
@@ -1004,8 +1061,8 @@ app.get('/', (req, res) => {
                   </select>
                 </div>
                 <div>
-                  <label class="block font-semibold text-slate-700 mb-1">Tamanho Título</label>
-                  <select id="layout-font-size-titulo" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                  <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tamanho Título</label>
+                  <select id="layout-font-size-titulo" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
                     <option value="12pt">12pt</option>
                     <option value="13pt">13pt</option>
                     <option value="14pt">14pt (Recomendado)</option>
@@ -1018,68 +1075,68 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- Bloco: Margens da Página -->
-          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-arrows-up-down-left-right text-sky-600"></i>
               <span>Margens da Página (A4)</span>
             </h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Superior</label>
-                <input type="text" id="layout-margin-top" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Superior</label>
+                <input type="text" id="layout-margin-top" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Inferior</label>
-                <input type="text" id="layout-margin-bottom" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inferior</label>
+                <input type="text" id="layout-margin-bottom" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Esquerda</label>
-                <input type="text" id="layout-margin-left" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Esquerda</label>
+                <input type="text" id="layout-margin-left" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Direita</label>
-                <input type="text" id="layout-margin-right" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Direita</label>
+                <input type="text" id="layout-margin-right" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
               </div>
             </div>
           </div>
 
           <!-- Bloco: Espaçamentos -->
-          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-arrows-split-up-and-left text-sky-600"></i>
               <span>Espaçamentos</span>
             </h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Entrelinhas (Multiplicador)</label>
-                <input type="number" step="0.05" min="1.1" max="1.8" id="layout-line-height" oninput="atualizarPreviewLayout()" placeholder="1.4" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Entrelinhas (Multiplicador)</label>
+                <input type="number" step="0.05" min="1.1" max="1.8" id="layout-line-height" oninput="atualizarPreviewLayout()" placeholder="1.4" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Entre Parágrafos</label>
-                <input type="text" id="layout-paragraph-spacing" oninput="atualizarPreviewLayout()" placeholder="8pt" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Entre Parágrafos</label>
+                <input type="text" id="layout-paragraph-spacing" oninput="atualizarPreviewLayout()" placeholder="8pt" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
               </div>
             </div>
           </div>
 
           <!-- Bloco: Cores Institucionais -->
-          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-palette text-sky-600"></i>
               <span>Paleta de Cores Institucionais</span>
             </h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Cor Primária (Títulos/Logo)</label>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cor Primária (Títulos/Logo)</label>
                 <div class="flex items-center space-x-2">
-                  <input type="color" id="layout-color-primary-picker" oninput="sincronizarCorPrimaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 rounded cursor-pointer">
-                  <input type="text" id="layout-cor-primaria" oninput="sincronizarCorPrimariaTexto(this.value)" placeholder="#1B365D" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs font-mono uppercase">
+                  <input type="color" id="layout-color-primary-picker" oninput="sincronizarCorPrimaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 dark:border-slate-600 rounded cursor-pointer">
+                  <input type="text" id="layout-cor-primaria" oninput="sincronizarCorPrimariaTexto(this.value)" placeholder="#1B365D" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs font-mono uppercase">
                 </div>
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 mb-1">Cor Secundária (Subtítulos)</label>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cor Secundária (Subtítulos)</label>
                 <div class="flex items-center space-x-2">
-                  <input type="color" id="layout-color-secondary-picker" oninput="sincronizarCorSecundaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 rounded cursor-pointer">
-                  <input type="text" id="layout-cor-secundaria" oninput="sincronizarCorSecundariaTexto(this.value)" placeholder="#4A777A" class="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs font-mono uppercase">
+                  <input type="color" id="layout-color-secondary-picker" oninput="sincronizarCorSecundaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 dark:border-slate-600 rounded cursor-pointer">
+                  <input type="text" id="layout-cor-secundaria" oninput="sincronizarCorSecundariaTexto(this.value)" placeholder="#4A777A" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs font-mono uppercase">
                 </div>
               </div>
             </div>
@@ -1089,23 +1146,23 @@ app.get('/', (req, res) => {
         <!-- Coluna Direita: Preview em Tempo Real (lg:col-span-6) -->
         <div class="lg:col-span-6 flex flex-col">
           <div class="flex items-center justify-between mb-2">
-            <span class="font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+            <span class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider flex items-center space-x-1.5">
               <i class="fa-solid fa-eye text-emerald-600"></i>
               <span>Preview em Tempo Real</span>
             </span>
-            <span class="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded font-mono">Simulação A4 (Pág. 1)</span>
+            <span class="text-[10px] text-slate-400 dark:text-slate-300 bg-slate-100 px-2 py-0.5 rounded font-mono">Simulação A4 (Pág. 1)</span>
           </div>
 
           <!-- Folha do Preview -->
           <div class="flex-1 bg-slate-200/70 p-3 sm:p-4 rounded-xl flex items-center justify-center overflow-auto min-h-[420px]">
-            <div id="layout-preview-sheet" class="bg-white shadow-lg border border-slate-300 rounded w-full max-w-md p-4 transition-all duration-150 flex flex-col justify-between" style="min-height: 480px;">
+            <div id="layout-preview-sheet" class="bg-white dark:bg-slate-800 shadow-lg border border-slate-300 dark:border-slate-600 rounded w-full max-w-md p-4 transition-all duration-150 flex flex-col justify-between" style="min-height: 480px;">
               <div>
                 <!-- Cabeçalho do Laudo -->
                 <div class="flex items-center justify-between border-b pb-2 mb-2" id="preview-header">
                   <div class="text-left font-black tracking-tighter" id="preview-logo" style="color: #1B365D; font-size: 16pt;">
                     UPA PET
                   </div>
-                  <div class="text-[9px] text-slate-600 text-right leading-tight" id="preview-patient-info">
+                  <div class="text-[9px] text-slate-600 dark:text-slate-300 text-right leading-tight" id="preview-patient-info">
                     <p><strong>Paciente:</strong> Thor &bull; <strong>Espécie:</strong> Canina</p>
                     <p><strong>Tutor:</strong> Maria Santos &bull; <strong>Idade:</strong> 4 anos</p>
                     <p><strong>Data:</strong> 11/11/2026</p>
@@ -1123,7 +1180,7 @@ app.get('/', (req, res) => {
                 </div>
 
                 <!-- Conteúdo dos Órgãos -->
-                <div id="preview-conteudo" class="text-justify text-slate-800 space-y-1.5" style="font-size: 9.5pt; line-height: 1.35;">
+                <div id="preview-conteudo" class="text-justify text-slate-800 dark:text-slate-200 space-y-1.5" style="font-size: 9.5pt; line-height: 1.35;">
                   <p id="p-bexiga"><strong class="font-bold">BEXIGA:</strong> Repleção líquida adequada, contornos regulares, paredes finas (0,12 cm), conteúdo anecogênico límpido sem urólitos.</p>
                   <p id="p-rins"><strong class="font-bold">RINS:</strong> Dimensões preservadas (RE: 4,2 cm; RD: 4,0 cm), relação corticomedular mantida, ecotextura usual, sem evidência de nefrolitíase.</p>
                   <p id="p-figado"><strong class="font-bold">FÍGADO:</strong> Dimensões normais, bordos afilados, parênquima homogêneo com ecogenicidade preservada. Vias biliares anatômicas.</p>
@@ -1132,12 +1189,12 @@ app.get('/', (req, res) => {
               </div>
 
               <!-- Assinatura e Rodapé -->
-              <div class="mt-4 pt-2 border-t border-slate-200">
+              <div class="mt-4 pt-2 border-t border-slate-200 dark:border-slate-700">
                 <div class="text-right text-[9px] leading-tight mb-2">
-                  <p class="font-bold text-slate-800">Dra. Camila Bastos</p>
-                  <p class="text-slate-500">Médica Veterinária &bull; CRMV/MG: 22904</p>
+                  <p class="font-bold text-slate-800 dark:text-slate-200">Dra. Camila Bastos</p>
+                  <p class="text-slate-500 dark:text-slate-400">Médica Veterinária &bull; CRMV/MG: 22904</p>
                 </div>
-                <div class="text-center text-[7.5px] text-slate-400 italic">
+                <div class="text-center text-[7.5px] text-slate-400 dark:text-slate-300 italic">
                   O ultrassom é um exame complementar e deve ser correlacionado aos achados clínicos.
                 </div>
               </div>
@@ -1147,13 +1204,13 @@ app.get('/', (req, res) => {
       </div>
 
       <!-- Footer de Ações do Modal -->
-      <div class="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+      <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
         <button type="button" onclick="restaurarPadraoLayoutFront()" class="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-3 py-2 rounded-lg font-medium transition flex items-center space-x-1.5">
           <i class="fa-solid fa-rotate-left"></i>
           <span>Restaurar Padrão Institucional UPA PET</span>
         </button>
         <div class="flex items-center space-x-2 ml-auto">
-          <button type="button" onclick="fecharModalLayout()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-xs font-medium transition">
+          <button type="button" onclick="fecharModalLayout()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-medium transition">
             Cancelar
           </button>
           <button type="button" onclick="salvarLayoutFront()" id="btn-salvar-layout" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
@@ -1165,7 +1222,7 @@ app.get('/', (req, res) => {
     </div>
   </div>
 
-  <footer class="text-center py-6 text-xs text-slate-400 border-t border-slate-200 bg-white">
+  <footer class="text-center py-6 text-xs text-slate-400 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
     UPA PET &bull; Automação Inteligente de Laudos e Procedimentos Cirúrgicos &bull; Dra. Camila Bastos - CRMV/MG: 22904
   </footer>
 
@@ -1236,7 +1293,7 @@ app.get('/', (req, res) => {
       else if (usuarioAtual.role === 'pendente') badgeColor = 'bg-amber-100 text-amber-800';
 
       const avatarHtml = usuarioAtual.foto
-        ? \`<img src="\${usuarioAtual.foto}" class="w-8 h-8 rounded-full border border-slate-200" alt="Avatar">\`
+        ? \`<img src="\${usuarioAtual.foto}" class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" alt="Avatar">\`
         : \`<div class="w-8 h-8 bg-sky-600 text-white font-bold rounded-full flex items-center justify-center text-xs">\${usuarioAtual.nome.substring(0, 2).toUpperCase()}</div>\`;
 
       // Phase 1: Dropdown com engrenagem (Gerenciar Acessos + Sair)
@@ -1248,7 +1305,7 @@ app.get('/', (req, res) => {
         <div class="flex items-center space-x-3">
           \${avatarHtml}
           <div class="text-right hidden sm:block">
-            <div class="text-xs font-bold text-slate-800 leading-tight">\${usuarioAtual.nome}</div>
+            <div class="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">\${usuarioAtual.nome}</div>
             <span class="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full \${badgeColor}">
               \${usuarioAtual.roleDescricao}
             </span>
@@ -1260,20 +1317,38 @@ app.get('/', (req, res) => {
               aria-expanded="false"
               aria-haspopup="true"
               title="Menu do usuário"
-              class="text-slate-400 hover:text-sky-600 p-1.5 rounded-lg border border-slate-200 transition"
+              class="text-slate-400 dark:text-slate-300 hover:text-sky-600 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 transition"
             >
               <i class="fa-solid fa-gear text-xs"></i>
             </button>
             <div
               id="dropdown-usuario"
-              class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50"
+              class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
               role="menu"
             >
               <div class="px-3 py-2 border-b border-slate-100">
-                <p class="text-xs font-medium text-slate-700">\${usuarioAtual.nome}</p>
-                <p class="text-[11px] text-slate-500 truncate">\${usuarioAtual.email}</p>
+                <p class="text-xs font-medium text-slate-700 dark:text-slate-300">\${usuarioAtual.nome}</p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">\${usuarioAtual.email}</p>
               </div>
-              \${adminItem}
+              ${adminItem}
+              <div class="px-3 py-2 border-t border-slate-100 border-b border-slate-100">
+                <label class="flex items-center justify-between w-full cursor-pointer gap-2">
+                  <span class="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center space-x-2">
+                    <i class="fa-solid fa-moon text-slate-500 dark:text-slate-400"></i>
+                    <span>Modo escuro</span>
+                  </span>
+                  <select
+                    id="select-tema"
+                    onchange="salvarTema(this.value)"
+                    class="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:ring-sky-600"
+                    aria-label="Preferência de tema"
+                  >
+                    <option value="system">Sistema</option>
+                    <option value="light">Claro</option>
+                    <option value="dark">Escuro</option>
+                  </select>
+                </label>
+              </div>
               <button onclick="fazerLogout(); fecharMenuUsuario()" class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition flex items-center space-x-2" role="menuitem">
                 <i class="fa-solid fa-arrow-right-from-bracket"></i>
                 <span>Sair</span>
@@ -1329,6 +1404,9 @@ app.get('/', (req, res) => {
       if (btnLayoutUltra && abaAtual === 'ultra') {
         btnLayoutUltra.classList.remove('hidden');
       }
+
+      // Phase 5: Dark Mode — carregar tema salvo do usuário
+      carregarTemaSalvo();
     }
 
     var abaAtual = 'ultra'; // Phase 3: aba ativa
@@ -1356,6 +1434,78 @@ app.get('/', (req, res) => {
         fecharMenuUsuario();
       }
     });
+
+    // Phase 5: Dark Mode — funções de tema
+    function aplicarTema(tema) {
+      const root = document.documentElement;
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('tema_preferencia') : null;
+      const prefersDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)') && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      var effective = tema || saved || 'system';
+      var isDark = (effective === 'dark') || (effective === 'system' && prefersDark);
+
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+
+      // Sincronizar select
+      const select = document.getElementById('select-tema');
+      if (select) select.value = effective;
+
+      // Persistir em localStorage para bootstrap no reload
+      try {
+        localStorage.setItem('tema_preferencia', effective);
+      } catch (e) {}
+    }
+
+    async function salvarTema(tema) {
+      try {
+        const res = await fetch('/api/usuario/tema', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tema: tema })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Erro ao salvar tema: ' + (data.error || 'desconhecido'));
+          return;
+        }
+        aplicarTema(tema);
+      } catch (err) {
+        alert('Erro de rede ao salvar tema.');
+      }
+    }
+
+    async function carregarTemaSalvo() {
+      if (!usuarioAtual) return;
+      try {
+        const res = await fetch('/api/usuario/tema');
+        const data = await res.json();
+        if (res.ok && data.sucesso) {
+          aplicarTema(data.tema);
+        }
+      } catch (e) {
+        // fallback: já aplicado via localStorage no bootstrap
+      }
+    }
+
+    // Phase 5: Dark Mode — reagir a mudança do tema do sistema (modo "system")
+    (function() {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mq.addEventListener) {
+        mq.addEventListener('change', function() {
+          const saved = localStorage.getItem('tema_preferencia');
+          if (saved === 'system') aplicarTema('system');
+        });
+      } else if (mq.onchange) {
+        mq.onchange = function() {
+          const saved = localStorage.getItem('tema_preferencia');
+          if (saved === 'system') aplicarTema('system');
+        };
+      }
+    })();
 
     function renderizarBotaoGoogle() {
       if (!ssoConfig || !ssoConfig.googleClientId) {
@@ -1421,8 +1571,8 @@ app.get('/', (req, res) => {
         const tbody = document.getElementById('tabela-usuarios-corpo');
         tbody.innerHTML = data.usuarios.map(u => \`
           <tr class="hover:bg-slate-50 transition">
-            <td class="p-2.5 font-medium text-slate-800">\${u.nome}</td>
-            <td class="p-2.5 text-slate-500">\${u.email}</td>
+            <td class="p-2.5 font-medium text-slate-800 dark:text-slate-200">\${u.nome}</td>
+            <td class="p-2.5 text-slate-500 dark:text-slate-400">\${u.email}</td>
             <td class="p-2.5">
               <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold \${
                 u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
@@ -1430,7 +1580,7 @@ app.get('/', (req, res) => {
               }">\${u.roleDescricao}</span>
             </td>
             <td class="p-2.5 text-right">
-              <select onchange="alterarCargoUsuario('\${u.email}', this.value)" class="text-xs border border-slate-200 rounded p-1">
+              <select onchange="alterarCargoUsuario('\${u.email}', this.value)" class="text-xs border border-slate-200 dark:border-slate-700 rounded p-1">
                 <option value="admin" \${u.role === 'admin' ? 'selected' : ''}>Administrador</option>
                 <option value="veterinario" \${u.role === 'veterinario' ? 'selected' : ''}>Veterinário (Gera laudos)</option>
                 <option value="assistente" \${u.role === 'assistente' ? 'selected' : ''}>Assistente (Consulta)</option>
@@ -1754,7 +1904,7 @@ app.get('/', (req, res) => {
         document.getElementById('info-paciente-cirurg').innerHTML = \`
           <strong>🐾 Paciente:</strong> \${data.paciente.nome || 'Paciente'} | 
           <strong>Procedimento:</strong> \${data.cirurgia.procedimento || 'Cirurgia'}<br>
-          <span class="text-xs text-slate-500 mt-1 block">Modelo institucional correspondente aplicado com sucesso!</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400 mt-1 block">Modelo institucional correspondente aplicado com sucesso!</span>
         \`;
         document.getElementById('btn-download-cirurg-pdf').href = data.pdfUrl;
         document.getElementById('btn-download-cirurg-docx').href = data.docxUrl;
@@ -1792,8 +1942,8 @@ app.get('/', (req, res) => {
 
       if (!modelos || modelos.length === 0) {
         grid.innerHTML = \`
-          <div class="col-span-full py-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-500">
-            <i class="fa-solid fa-magnifying-glass mb-2 text-base text-slate-400 block"></i>
+          <div class="col-span-full py-8 text-center bg-slate-50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-500 dark:text-slate-400">
+            <i class="fa-solid fa-magnifying-glass mb-2 text-base text-slate-400 dark:text-slate-300 block"></i>
             Nenhum modelo cirúrgico encontrado para a busca.
           </div>
         \`;
@@ -1809,13 +1959,13 @@ app.get('/', (req, res) => {
         const descricaoCurta = (m.descricaoProcedimento || '').substring(0, 130);
 
         return \`
-          <div class="bg-white border border-slate-200 hover:border-sky-300 hover:shadow-sm rounded-xl p-3.5 transition flex flex-col justify-between group">
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-sky-300 hover:shadow-sm rounded-xl p-3.5 transition flex flex-col justify-between group">
             <div>
               <div class="flex items-start justify-between gap-2 mb-1">
-                <h4 class="text-xs font-bold text-slate-800 leading-snug line-clamp-1 group-hover:text-sky-600 transition" title="\${m.nome}">
+                <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug line-clamp-1 group-hover:text-sky-600 transition" title="\${m.nome}">
                   \${m.nome}
                 </h4>
-                <span class="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono shrink-0">\${m.id}</span>
+                <span class="text-[9px] bg-slate-100 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono shrink-0">\${m.id}</span>
               </div>
               <p class="text-[11px] text-sky-700 font-medium mb-2 line-clamp-1">
                 <i class="fa-solid fa-stethoscope mr-1 opacity-70"></i>\${m.procedimento || m.nome}
@@ -1823,12 +1973,12 @@ app.get('/', (req, res) => {
 
               <!-- Tags / Sinônimos -->
               <div class="flex flex-wrap gap-1 mb-2">
-                \${sinonimosExibicao.map(s => \`<span class="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-medium">\${s}</span>\`).join('')}
-                \${restanteSinonimos > 0 ? \`<span class="bg-slate-100 text-slate-400 text-[9px] px-1 py-0.5 rounded">+\${restanteSinonimos}</span>\` : ''}
+                \${sinonimosExibicao.map(s => \`<span class="bg-slate-100 text-slate-600 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded font-medium">\${s}</span>\`).join('')}
+                \${restanteSinonimos > 0 ? \`<span class="bg-slate-100 text-slate-400 dark:text-slate-300 text-[9px] px-1 py-0.5 rounded">+\${restanteSinonimos}</span>\` : ''}
               </div>
 
               <!-- Prévia da Técnica -->
-              <p class="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mb-3">
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3">
                 \${descricaoCurta}...
               </p>
             </div>
@@ -1888,7 +2038,7 @@ app.get('/', (req, res) => {
           <span class="bg-sky-50 text-sky-700 border border-sky-200 text-[11px] px-2 py-0.5 rounded-full font-medium">\${s}</span>
         \`).join('');
       } else {
-        sinContainer.innerHTML = '<span class="text-slate-400 italic">Nenhum sinônimo cadastrado</span>';
+        sinContainer.innerHTML = '<span class="text-slate-400 dark:text-slate-300 italic">Nenhum sinônimo cadastrado</span>';
       }
 
       const btnEdit = document.getElementById('btn-vis-editar');

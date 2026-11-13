@@ -86,6 +86,16 @@ const adminSchemas = {
 };
 
 /**
+ * Schemas de Preferência de Tema (Dark Mode)
+ */
+const temaSchemas = {
+  // POST /api/usuario/tema
+  updateTema: z.object({
+    tema: z.enum(['light', 'dark', 'system'])
+  })
+};
+
+/**
  * Schemas de Modelos Cirúrgicos
  */
 const modelosSchemas = {
@@ -302,6 +312,7 @@ module.exports = {
   baseSchemas,
   authSchemas,
   adminSchemas,
+  temaSchemas,
   modelosSchemas,
   ultrassomSchemas,
   cirurgiaSchemas,

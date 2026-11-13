@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
     CHECK (role IN ('admin', 'veterinario', 'assistente', 'pendente')),
   crmv TEXT,
   foto TEXT,
+  tema_preferencia TEXT NOT NULL DEFAULT 'system'
+    CHECK (tema_preferencia IN ('light', 'dark', 'system')),
   criado_em TEXT NOT NULL DEFAULT (datetime('now')),
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -91,6 +93,21 @@ function getDatabase() {
   db.pragma('synchronous = NORMAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+
+  // Migration: adicionar coluna tema_preferencia se não existir (DBs criados antes)
+  try {
+    const cols = db.prepare(
+      "SELECT name FROM pragma_table_info('usuarios')"
+    ).all().map(r => r.name);
+    if (!cols.includes('tema_preferencia')) {
+      db.exec(
+        "ALTER TABLE usuarios ADD COLUMN tema_preferencia TEXT NOT NULL DEFAULT 'system' " +
+        "CHECK (tema_preferencia IN ('light', 'dark', 'system'))"
+      );
+    }
+  } catch (e) {
+    console.warn('[DB] Migration tema_preferencia:', e.message);
+  }
 
   global.__upaPetDb = { db, dbPath: DB_PATH };
   return db;
