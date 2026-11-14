@@ -729,7 +729,7 @@ app.get('/', (req, res) => {
           </form>
 
           <!-- Loading e Resultado -->
-          <div id="loading-ultra" class="hidden mt-6 p-6 text-center border border-slate-100 rounded-xl bg-slate-50">
+          <div id="loading-ultra" class="hidden mt-6 p-6 text-center border border-slate-100 rounded-xl bg-slate-50 dark:bg-slate-800">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-sky-500 border-t-transparent mb-3"></div>
             <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Analisando capturas do Mindray com IA e gerando laudo...</p>
             <p class="text-xs text-slate-400 dark:text-slate-300 mt-1">Isso costuma levar cerca de 15 a 30 segundos.</p>
@@ -777,7 +777,7 @@ app.get('/', (req, res) => {
             <!-- Fotos Opcionais -->
             <div class="mb-6">
               <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-2">2. Fotos Intraoperatórias / Peça Cirúrgica (Opcional - Página 2)</label>
-              <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/70 transition cursor-pointer" onclick="document.getElementById('input-cirurg-fotos').click()">
+              <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-center bg-slate-50 dark:bg-slate-800 hover:bg-slate-100/70 transition cursor-pointer" onclick="document.getElementById('input-cirurg-fotos').click()">
                 <i class="fa-solid fa-camera text-2xl text-slate-400 dark:text-slate-300 mb-1"></i>
                 <p class="text-xs font-medium text-slate-600 dark:text-slate-300">Clique para adicionar fotos da peça cirúrgica ou procedimento</p>
                 <input type="file" id="input-cirurg-fotos" multiple accept="image/*" class="hidden" onchange="atualizarFotosCirurg(this)">
@@ -792,7 +792,7 @@ app.get('/', (req, res) => {
           </form>
 
           <!-- Loading e Resultado Cirurgia -->
-          <div id="loading-cirurg" class="hidden mt-6 p-6 text-center border border-slate-100 rounded-xl bg-slate-50">
+          <div id="loading-cirurg" class="hidden mt-6 p-6 text-center border border-slate-100 rounded-xl bg-slate-50 dark:bg-slate-800">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-sky-500 border-t-transparent mb-3"></div>
             <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Identificando procedimento e aplicando padrão Dra. Camila Bastos...</p>
             <p class="text-xs text-slate-400 dark:text-slate-300 mt-1">Compilando 1 página com assinatura + página 2 com registro fotográfico.</p>
@@ -875,17 +875,17 @@ app.get('/', (req, res) => {
 
         <div>
           <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Diagnóstico Pré-Cirúrgico:</span>
-          <p id="vis-modelo-diag" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"></p>
+          <p id="vis-modelo-diag" class="bg-slate-50 dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"></p>
         </div>
 
         <div>
           <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada):</span>
-          <div id="vis-modelo-desc" class="bg-slate-50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line text-slate-800 dark:text-slate-200 font-sans leading-relaxed"></div>
+          <div id="vis-modelo-desc" class="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line text-slate-800 dark:text-slate-200 font-sans leading-relaxed"></div>
         </div>
 
         <div>
           <span class="font-semibold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wide block mb-1">Evolução e Considerações:</span>
-          <p id="vis-modelo-evol" class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"></p>
+          <p id="vis-modelo-evol" class="bg-slate-50 dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"></p>
         </div>
       </div>
 
@@ -896,7 +896,7 @@ app.get('/', (req, res) => {
             <i class="fa-solid fa-pen-to-square"></i>
             <span>Editar este Modelo</span>
           </button>
-          <button onclick="fecharModalVisualizarModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition">
+          <button onclick="fecharModalVisualizarModelo()" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-medium transition">
             Fechar
           </button>
         </div>
@@ -960,7 +960,7 @@ app.get('/', (req, res) => {
             <span>Excluir Modelo</span>
           </button>
           <div class="flex items-center space-x-2 ml-auto">
-            <button type="button" onclick="fecharModalFormModelo()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-3.5 py-2 rounded-lg text-xs font-medium transition">
+            <button type="button" onclick="fecharModalFormModelo()" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-3.5 py-2 rounded-lg text-xs font-medium transition">
               Cancelar
             </button>
             <button type="submit" id="btn-form-salvar" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
@@ -988,7 +988,7 @@ app.get('/', (req, res) => {
 
       <div class="max-h-96 overflow-y-auto">
         <table class="w-full text-left text-xs">
-          <thead class="bg-slate-50 text-slate-600 dark:text-slate-300 font-semibold uppercase">
+          <thead class="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold uppercase">
             <tr>
               <th class="p-2.5">Usuário</th>
               <th class="p-2.5">E-mail</th>
@@ -1003,7 +1003,7 @@ app.get('/', (req, res) => {
       </div>
 
       <div class="mt-5 text-right">
-        <button onclick="fecharModalAdmin()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition">
+        <button onclick="fecharModalAdmin()" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition">
           Fechar
         </button>
       </div>
@@ -1034,7 +1034,7 @@ app.get('/', (req, res) => {
         <!-- Coluna Esquerda: Formulário de Controles (lg:col-span-6) -->
         <div class="lg:col-span-6 space-y-4 text-xs">
           <!-- Bloco: Tipografia -->
-          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-font text-sky-600"></i>
               <span>Tipografia</span>
@@ -1075,7 +1075,7 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- Bloco: Margens da Página -->
-          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-arrows-up-down-left-right text-sky-600"></i>
               <span>Margens da Página (A4)</span>
@@ -1101,7 +1101,7 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- Bloco: Espaçamentos -->
-          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-arrows-split-up-and-left text-sky-600"></i>
               <span>Espaçamentos</span>
@@ -1119,7 +1119,7 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- Bloco: Cores Institucionais -->
-          <div class="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-palette text-sky-600"></i>
               <span>Paleta de Cores Institucionais</span>
@@ -1150,11 +1150,11 @@ app.get('/', (req, res) => {
               <i class="fa-solid fa-eye text-emerald-600"></i>
               <span>Preview em Tempo Real</span>
             </span>
-            <span class="text-[10px] text-slate-400 dark:text-slate-300 bg-slate-100 px-2 py-0.5 rounded font-mono">Simulação A4 (Pág. 1)</span>
+            <span class="text-[10px] text-slate-400 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-mono">Simulação A4 (Pág. 1)</span>
           </div>
 
           <!-- Folha do Preview -->
-          <div class="flex-1 bg-slate-200/70 p-3 sm:p-4 rounded-xl flex items-center justify-center overflow-auto min-h-[420px]">
+          <div class="flex-1 bg-slate-200/70 dark:bg-slate-900/40 p-3 sm:p-4 rounded-xl flex items-center justify-center overflow-auto min-h-[420px]">
             <div id="layout-preview-sheet" class="bg-white dark:bg-slate-800 shadow-lg border border-slate-300 dark:border-slate-600 rounded w-full max-w-md p-4 transition-all duration-150 flex flex-col justify-between" style="min-height: 480px;">
               <div>
                 <!-- Cabeçalho do Laudo -->
@@ -1210,7 +1210,7 @@ app.get('/', (req, res) => {
           <span>Restaurar Padrão Institucional UPA PET</span>
         </button>
         <div class="flex items-center space-x-2 ml-auto">
-          <button type="button" onclick="fecharModalLayout()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-medium transition">
+          <button type="button" onclick="fecharModalLayout()" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-medium transition">
             Cancelar
           </button>
           <button type="button" onclick="salvarLayoutFront()" id="btn-salvar-layout" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
@@ -1570,7 +1570,7 @@ app.get('/', (req, res) => {
         const data = await res.json();
         const tbody = document.getElementById('tabela-usuarios-corpo');
         tbody.innerHTML = data.usuarios.map(u => \`
-          <tr class="hover:bg-slate-50 transition">
+          <tr class="hover:bg-slate-50 dark:bg-slate-800 transition">
             <td class="p-2.5 font-medium text-slate-800 dark:text-slate-200">\${u.nome}</td>
             <td class="p-2.5 text-slate-500 dark:text-slate-400">\${u.email}</td>
             <td class="p-2.5">
@@ -1942,7 +1942,7 @@ app.get('/', (req, res) => {
 
       if (!modelos || modelos.length === 0) {
         grid.innerHTML = \`
-          <div class="col-span-full py-8 text-center bg-slate-50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-500 dark:text-slate-400">
+          <div class="col-span-full py-8 text-center bg-slate-50 dark:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-500 dark:text-slate-400">
             <i class="fa-solid fa-magnifying-glass mb-2 text-base text-slate-400 dark:text-slate-300 block"></i>
             Nenhum modelo cirúrgico encontrado para a busca.
           </div>
@@ -1965,7 +1965,7 @@ app.get('/', (req, res) => {
                 <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug line-clamp-1 group-hover:text-sky-600 transition" title="\${m.nome}">
                   \${m.nome}
                 </h4>
-                <span class="text-[9px] bg-slate-100 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono shrink-0">\${m.id}</span>
+                <span class="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono shrink-0">\${m.id}</span>
               </div>
               <p class="text-[11px] text-sky-700 font-medium mb-2 line-clamp-1">
                 <i class="fa-solid fa-stethoscope mr-1 opacity-70"></i>\${m.procedimento || m.nome}
@@ -1973,8 +1973,8 @@ app.get('/', (req, res) => {
 
               <!-- Tags / Sinônimos -->
               <div class="flex flex-wrap gap-1 mb-2">
-                \${sinonimosExibicao.map(s => \`<span class="bg-slate-100 text-slate-600 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded font-medium">\${s}</span>\`).join('')}
-                \${restanteSinonimos > 0 ? \`<span class="bg-slate-100 text-slate-400 dark:text-slate-300 text-[9px] px-1 py-0.5 rounded">+\${restanteSinonimos}</span>\` : ''}
+                \${sinonimosExibicao.map(s => \`<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded font-medium">\${s}</span>\`).join('')}
+                \${restanteSinonimos > 0 ? \`<span class="bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-300 text-[9px] px-1 py-0.5 rounded">+\${restanteSinonimos}</span>\` : ''}
               </div>
 
               <!-- Prévia da Técnica -->
