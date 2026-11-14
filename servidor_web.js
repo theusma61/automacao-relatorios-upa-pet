@@ -921,34 +921,34 @@ app.get('/', (req, res) => {
         <input type="hidden" id="form-mod-id" value="">
 
         <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nome do Modelo <span class="text-red-500">*</span></label>
+          <label class="block font-semibold text-slate-700 dark:text-white mb-1">Nome do Modelo <span class="text-red-500">*</span></label>
           <input type="text" id="form-mod-nome" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Procedimento Oficial <span class="text-red-500">*</span></label>
+            <label class="block font-semibold text-slate-700 dark:text-white mb-1">Procedimento Oficial <span class="text-red-500">*</span></label>
             <input type="text" id="form-mod-procedimento" required placeholder="Ex: Celiotomia exploratória de urgência" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
           </div>
           <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Diagnóstico Pré-Cirúrgico Padrão</label>
+            <label class="block font-semibold text-slate-700 dark:text-white mb-1">Diagnóstico Pré-Cirúrgico Padrão</label>
             <input type="text" id="form-mod-diag" placeholder="Ex: Suspeita de corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
           </div>
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sinônimos / Palavras-chave (separados por vírgula)</label>
+          <label class="block font-semibold text-slate-700 dark:text-white mb-1">Sinônimos / Palavras-chave (separados por vírgula)</label>
           <input type="text" id="form-mod-sinonimos" placeholder="Ex: celiotomia, laparotomia, corpo estranho gástrico" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
           <p class="text-[11px] text-slate-400 dark:text-slate-300 mt-0.5">Palavras que ajudam a IA a associar o áudio/documento a este modelo.</p>
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada) <span class="text-red-500">*</span></label>
+          <label class="block font-semibold text-slate-700 dark:text-white mb-1">Descrição do Procedimento Cirúrgico (Técnica Padronizada) <span class="text-red-500">*</span></label>
           <textarea id="form-mod-desc" required rows="7" placeholder="Descreva a técnica cirúrgica oficial: preparo, antissepsia, incisão por planos, tempos cirúrgicos, hemostasia, síntese (fios e padrões de sutura)..." class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg font-sans focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Evolução e Considerações Pós-Operatórias</label>
+          <label class="block font-semibold text-slate-700 dark:text-white mb-1">Evolução e Considerações Pós-Operatórias</label>
           <textarea id="form-mod-evol" rows="3" placeholder="Considerações sobre o pós-cirúrgico, achados adicionais e orientações..." class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 leading-relaxed"></textarea>
         </div>
 
@@ -1034,15 +1034,15 @@ app.get('/', (req, res) => {
         <!-- Coluna Esquerda: Formulário de Controles (lg:col-span-6) -->
         <div class="lg:col-span-6 space-y-4 text-xs">
           <!-- Bloco: Tipografia -->
-          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-600 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-white text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-font text-sky-600"></i>
               <span>Tipografia</span>
             </h4>
             <div class="space-y-3">
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Família da Fonte</label>
-                <select id="layout-font-family" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Família da Fonte</label>
+                <select id="layout-font-family" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
                   <option value="Calibri, sans-serif">Calibri (Padrão Institucional UPA PET)</option>
                   <option value="Arial, sans-serif">Arial</option>
                   <option value="'Times New Roman', serif">Times New Roman</option>
@@ -1050,8 +1050,8 @@ app.get('/', (req, res) => {
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tamanho Corpo</label>
-                  <select id="layout-font-size-body" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                  <label class="block font-semibold text-slate-700 dark:text-white mb-1">Tamanho Corpo</label>
+                  <select id="layout-font-size-body" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
                     <option value="9.5pt">9.5pt</option>
                     <option value="10pt">10pt</option>
                     <option value="10.5pt">10.5pt</option>
@@ -1061,8 +1061,8 @@ app.get('/', (req, res) => {
                   </select>
                 </div>
                 <div>
-                  <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tamanho Título</label>
-                  <select id="layout-font-size-titulo" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                  <label class="block font-semibold text-slate-700 dark:text-white mb-1">Tamanho Título</label>
+                  <select id="layout-font-size-titulo" onchange="atualizarPreviewLayout()" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
                     <option value="12pt">12pt</option>
                     <option value="13pt">13pt</option>
                     <option value="14pt">14pt (Recomendado)</option>
@@ -1075,68 +1075,68 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- Bloco: Margens da Página -->
-          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-600 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-white text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-arrows-up-down-left-right text-sky-600"></i>
               <span>Margens da Página (A4)</span>
             </h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Superior</label>
-                <input type="text" id="layout-margin-top" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Superior</label>
+                <input type="text" id="layout-margin-top" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inferior</label>
-                <input type="text" id="layout-margin-bottom" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Inferior</label>
+                <input type="text" id="layout-margin-bottom" oninput="atualizarPreviewLayout()" placeholder="20mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Esquerda</label>
-                <input type="text" id="layout-margin-left" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Esquerda</label>
+                <input type="text" id="layout-margin-left" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Direita</label>
-                <input type="text" id="layout-margin-right" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Direita</label>
+                <input type="text" id="layout-margin-right" oninput="atualizarPreviewLayout()" placeholder="15mm" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
               </div>
             </div>
           </div>
 
           <!-- Bloco: Espaçamentos -->
-          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-600 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-white text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-arrows-split-up-and-left text-sky-600"></i>
               <span>Espaçamentos</span>
             </h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Entrelinhas (Multiplicador)</label>
-                <input type="number" step="0.05" min="1.1" max="1.8" id="layout-line-height" oninput="atualizarPreviewLayout()" placeholder="1.4" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Entrelinhas (Multiplicador)</label>
+                <input type="number" step="0.05" min="1.1" max="1.8" id="layout-line-height" oninput="atualizarPreviewLayout()" placeholder="1.4" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Entre Parágrafos</label>
-                <input type="text" id="layout-paragraph-spacing" oninput="atualizarPreviewLayout()" placeholder="8pt" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs">
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Entre Parágrafos</label>
+                <input type="text" id="layout-paragraph-spacing" oninput="atualizarPreviewLayout()" placeholder="8pt" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs">
               </div>
             </div>
           </div>
 
           <!-- Bloco: Cores Institucionais -->
-          <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-            <h4 class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
+          <div class="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-600 rounded-xl p-4">
+            <h4 class="font-bold text-slate-700 dark:text-white text-xs uppercase tracking-wider mb-3 flex items-center space-x-1.5">
               <i class="fa-solid fa-palette text-sky-600"></i>
               <span>Paleta de Cores Institucionais</span>
             </h4>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cor Primária (Títulos/Logo)</label>
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Cor Primária (Títulos/Logo)</label>
                 <div class="flex items-center space-x-2">
                   <input type="color" id="layout-color-primary-picker" oninput="sincronizarCorPrimaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 dark:border-slate-600 rounded cursor-pointer">
-                  <input type="text" id="layout-cor-primaria" oninput="sincronizarCorPrimariaTexto(this.value)" placeholder="#1B365D" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs font-mono uppercase">
+                  <input type="text" id="layout-cor-primaria" oninput="sincronizarCorPrimariaTexto(this.value)" placeholder="#1B365D" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs font-mono uppercase">
                 </div>
               </div>
               <div>
-                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cor Secundária (Subtítulos)</label>
+                <label class="block font-semibold text-slate-700 dark:text-white mb-1">Cor Secundária (Subtítulos)</label>
                 <div class="flex items-center space-x-2">
                   <input type="color" id="layout-color-secondary-picker" oninput="sincronizarCorSecundaria(this.value)" class="w-9 h-9 p-0.5 border border-slate-300 dark:border-slate-600 rounded cursor-pointer">
-                  <input type="text" id="layout-cor-secundaria" oninput="sincronizarCorSecundariaTexto(this.value)" placeholder="#4A777A" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-xs font-mono uppercase">
+                  <input type="text" id="layout-cor-secundaria" oninput="sincronizarCorSecundariaTexto(this.value)" placeholder="#4A777A" class="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-xs font-mono uppercase">
                 </div>
               </div>
             </div>
@@ -1146,7 +1146,7 @@ app.get('/', (req, res) => {
         <!-- Coluna Direita: Preview em Tempo Real (lg:col-span-6) -->
         <div class="lg:col-span-6 flex flex-col">
           <div class="flex items-center justify-between mb-2">
-            <span class="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+            <span class="font-bold text-slate-700 dark:text-white text-xs uppercase tracking-wider flex items-center space-x-1.5">
               <i class="fa-solid fa-eye text-emerald-600"></i>
               <span>Preview em Tempo Real</span>
             </span>
