@@ -22,8 +22,8 @@ describe('Integração de Motores com Layout (gerar_html.js e gerar_docx.js)', (
     { orgao: 'CONSIDERAÇÕES', texto: 'Exame ultrassonográfico sem alterações.', diagDif: '' }
   ];
 
-  afterAll(() => {
-    restaurarLayoutPadrao();
+  afterAll(async () => {
+    await restaurarLayoutPadrao();
   });
 
   test('gerarRelatorioHTML injeta estilos configurados no CSS', () => {
@@ -56,7 +56,7 @@ describe('Integração de Motores com Layout (gerar_html.js e gerar_docx.js)', (
     fs.unlinkSync(caminhoHtml);
   });
 
-  test('gerarDocxLaudo gera arquivo .docx válido com layout personalizado', async () => {
+  test('gerarDocxLaudo gera arquivo .docx válido com layout e médico personalizados', async () => {
     const caminhoDocx = path.join(tmpDir, `teste_docx_layout_${Date.now()}.docx`);
     const customLayout = {
       font_family: 'Calibri, sans-serif',
@@ -72,11 +72,15 @@ describe('Integração de Motores com Layout (gerar_html.js e gerar_docx.js)', (
       cor_secundaria: '#4A777A'
     };
 
-    await gerarDocxLaudo(pacienteTeste, laudoExemplo, caminhoDocx, null, [], customLayout);
+    await gerarDocxLaudo(pacienteTeste, laudoExemplo, caminhoDocx, null, [], customLayout, {
+      nomeMedico: 'Dra. Camila Bastos',
+      crmvMedico: 'CRMV/MG: 22904',
+      clinicaNome: 'UPA PET'
+    });
 
     expect(fs.existsSync(caminhoDocx)).toBe(true);
     const stats = fs.statSync(caminhoDocx);
-    expect(stats.size).toBeGreaterThan(1000); // Arquivo gerado com sucesso
+    expect(stats.size).toBeGreaterThan(1000);
 
     fs.unlinkSync(caminhoDocx);
   });

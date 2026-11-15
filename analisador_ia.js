@@ -5,19 +5,25 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 function fileToGenerativePart(filePath, mimeType) {
   return {
     inlineData: {
-      data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
+      data: Buffer.from(fs.readFileSync(filePath)).toString('base64'),
       mimeType
-    },
+    }
   };
 }
 
-async function analisarExameComIA(caminhoImagens, apiKey) {
+async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const modelosCandidatos = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"];
+  const modelosCandidatos = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+
+  const usuario = opcoes.usuario || null;
+  const nomeClinica = usuario?.nomeClinica || 'UPA PET';
+  const identificacaoProfissional = usuario?.nome
+    ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
+    : 'Dra. Camila Bastos - CRMV/MG: 22904';
 
   const promptInstrucoes = `
 Você é um médico veterinário especialista em diagnóstico por imagem (ultrassonografia abdominal de cães e gatos).
-Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultrassom do aparelho Mindray fornecidas e estruturar os dados no padrão oficial da clínica UPA PET (Dra. Camila Bastos - CRMV/MG: 22904).
+Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultrassom do aparelho Mindray fornecidas e estruturar os dados no padrão oficial da clínica ${nomeClinica} (${identificacaoProfissional}).
 
 ---
 
@@ -220,7 +226,6 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
       const jsonClean = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       const jsonParsed = JSON.parse(jsonClean);
 
-      // Ordenação Canônica Robusta e Determinística
       jsonParsed.caminhosOrdenados = ordenarImagensCanonicamente(
         caminhoImagens,
         jsonParsed.classificacaoImagens,
@@ -239,50 +244,30 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
 }
 
 const MAPA_ORDEM_CANONICA = {
-  // 1° Bexiga e suas variações
   'BEX': 1, 'BEXIGA': 1, 'SED': 1, 'SEDIMENTO': 1, 'UROLITO': 1, 'CALC': 1, 'CALCULO': 1, 'URETER': 1,
-  // 2° Rim Esquerdo
   'RE': 2, 'RIM ESQUERDO': 2, 'RIME': 2, 'RIM E': 2, 'R.E': 2,
-  // 3° Rim Direito
   'RD': 3, 'RIM DIREITO': 3, 'RIMD': 3, 'RIM D': 3, 'R.D': 3,
-  // 4° Baço e variações
   'BACO': 4, 'BAÇO': 4, 'B': 4, 'ESPLEN': 4, 'ESPLENO': 4,
-  // 5° Estômago
   'EST': 5, 'ESTOMAGO': 5, 'ESTÔMAGO': 5,
-  // 6° Fígado
   'FIG': 6, 'FIGADO': 6, 'FÍGADO': 6, 'HEP': 6,
-  // 7° Vesícula Biliar
   'VB': 7, 'VESICULA BILIAR': 7, 'VESÍCULA BILIAR': 7, 'VESICULA': 7, 'VESÍCULA': 7,
-  // 8° Duodeno
   'DUO': 8, 'DUODENO': 8,
-  // 9° Jejuno
   'JJ': 9, 'JEJUNO': 9,
-  // 10° Cólon Descendente
   'CD': 10, 'COLON': 10, 'CÓLON': 10, 'COLON DESCENDENTE': 10, 'CÓLON DESCENDENTE': 10,
-  // 11° Ovário Esquerdo
   'OE': 11, 'OVARIO ESQUERDO': 11, 'OVÁRIO ESQUERDO': 11, 'TOP OE': 11,
-  // 12° Ovário Direito
   'OD': 12, 'OVARIO DIREITO': 12, 'OVÁRIO DIREITO': 12, 'TOP OD': 12,
-  // 13° Útero
   'UTERO': 13, 'ÚTERO': 13, 'CUE': 13, 'CUD': 13, 'CORPO UTERINO': 13,
-  // 14° Testículo Esquerdo
   'TE': 14, 'TESTICULO ESQUERDO': 14, 'TESTÍCULO ESQUERDO': 14,
-  // 15° Testículo Direito
   'TD': 15, 'TESTICULO DIREITO': 15, 'TESTÍCULO DIREITO': 15,
-  // 16° Próstata
   'PTT': 16, 'PROSTATA': 16, 'PRÓSTATA': 16, 'PROST': 16,
-  // 17° Adrenal Esquerda
   'AE': 17, 'ADRENAL ESQUERDA': 17, 'ADRE': 17,
-  // 18° Adrenal Direita
   'AD': 18, 'ADRENAL DIREITA': 18, 'ADRD': 18,
-  // 19° Pâncreas
   'PANC': 19, 'PANCREAS': 19, 'PÂNCREAS': 19,
-  // 20° Cavidade / Líquido Livre
   'LL': 20, 'LIQUIDO LIVRE': 20, 'LÍQUIDO LIVRE': 20, 'CAVIDADE': 20
 };
 
 function normalizarTexto(texto) {
-  return (texto || '').toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return (texto || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
 function calcularPrioridadeOrgao(item) {
@@ -314,7 +299,6 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
 
     let prioridade = calcularPrioridadeOrgao(classif);
 
-    // Se não encontrou pela classificação da IA, tenta pelo próprio nome do arquivo (ex: "Bexiga.jpg", "Adrenal esquerda.jpg")
     if (prioridade === 99) {
       prioridade = calcularPrioridadeOrgao({ orgao: path.parse(nomeBase).name });
     }
@@ -333,7 +317,7 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
     if (a.prioridade !== b.prioridade) {
       return a.prioridade - b.prioridade;
     }
-    return a.idx - b.idx; // Estabilidade para imagens do mesmo órgão
+    return a.idx - b.idx;
   });
 
   return itens.map(i => i.caminho);

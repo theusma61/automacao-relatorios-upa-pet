@@ -1,0 +1,162 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Clinica {
+  id           String               @id @default(cuid())
+  nome         String
+  razaoSocial  String?              @map("razao_social")
+  cnpj         String?              @unique
+  telefone     String?
+  cidade       String?
+  estado       String?
+  logoUrl      String?              @map("logo_url")
+  criadoEm     DateTime             @default(now()) @map("criado_em")
+  atualizadoEm DateTime             @updatedAt @map("atualizado_em")
+
+  usuarios     Usuario[]
+  layouts      ConfiguracaoLayout[]
+
+  @@map("clinicas")
+}
+
+model Usuario {
+  id                String               @id @default(cuid())
+  email             String               @unique
+  nome              String
+  role              String               @default("pendente")
+  crmv              String?
+  nomeClinica       String?              @map("nome_clinica")
+  logoUrl           String?              @map("logo_url")
+  assinaturaUrl     String?              @map("assinatura_url")
+  foto              String?
+  telefone          String?
+  temaPreferencia   String               @default("system") @map("tema_preferencia")
+  ativo             Boolean              @default(true)
+
+  clinicaId         String?              @map("clinica_id")
+  clinica           Clinica?             @relation(fields: [clinicaId], references: [id], onDelete: SetNull)
+
+  modelosCriados    ModeloCirurgico[]
+  layoutsCriados    ConfiguracaoLayout[]
+  examesEmitidos    ExameLaudo[]
+  cirurgiasEmitidas RelatorioCirurgico[]
+
+  criadoEm          DateTime             @default(now()) @map("criado_em")
+  atualizadoEm      DateTime             @updatedAt @map("atualizado_em")
+
+  @@index([email])
+  @@index([role])
+  @@map("usuarios")
+}
+
+model ConfiguracaoLayout {
+  id                String   @id @default(cuid())
+  nome              String   @default("Padrão Oficial")
+  isPadrao          Boolean  @default(false) @map("is_padrao")
+
+  usuarioId         String?  @unique @map("usuario_id")
+  usuario           Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  clinicaId         String?  @map("clinica_id")
+  clinica           Clinica? @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+
+  fontFamily        String   @default("Calibri, sans-serif") @map("font_family")
+  fontSizeBody      String   @default("11pt") @map("font_size_body")
+  fontSizeTitulo    String   @default("14pt") @map("font_size_titulo")
+  marginTop         String   @default("20mm") @map("margin_top")
+  marginBottom      String   @default("20mm") @map("margin_bottom")
+  marginLeft        String   @default("15mm") @map("margin_left")
+  marginRight       String   @default("15mm") @map("margin_right")
+  lineHeight        String   @default("1.4") @map("line_height")
+  paragraphSpacing  String   @default("8pt") @map("paragraph_spacing")
+
+  corPrimaria       String   @default("#1B365D") @map("cor_primaria")
+  corSecundaria     String   @default("#4A777A") @map("cor_secundaria")
+
+  criadoEm          DateTime @default(now()) @map("criado_em")
+  atualizadoEm      DateTime @updatedAt @map("atualizado_em")
+
+  @@index([usuarioId])
+  @@index([isPadrao])
+  @@map("configuracoes_layout")
+}
+
+model ModeloCirurgico {
+  id                      String   @id
+  isGlobal                Boolean  @default(false) @map("is_global")
+
+  usuarioId               String?  @map("usuario_id")
+  usuario                 Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  nome                    String
+  sinonimos               String[]
+  procedimento            String
+  diagnosticoPreCirurgico String?  @map("diagnostico_pre_cirurgico")
+  descricaoProcedimento   String   @db.Text @map("descricao_procedimento")
+  evolucaoConsideracoes   String?  @db.Text @map("evolucao_consideracoes")
+
+  criadoEm                DateTime @default(now()) @map("criado_em")
+  atualizadoEm            DateTime @updatedAt @map("atualizado_em")
+
+  @@index([usuarioId])
+  @@index([isGlobal])
+  @@index([nome])
+  @@map("modelos_cirurgicos")
+}
+
+model ExameLaudo {
+  id               String   @id @default(cuid())
+  usuarioId        String   @map("usuario_id")
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  pacienteNome     String   @map("paciente_nome")
+  pacienteEspecie  String   @map("paciente_especie")
+  pacienteSexo     String?  @map("paciente_sexo")
+  pacienteIdade    String?  @map("paciente_idade")
+  tutorNome        String?  @map("tutor_nome")
+  dataExame        String   @map("data_exame")
+
+  laudoEstruturado Json     @map("laudo_estruturado")
+  imagensQtd       Int      @default(0) @map("imagens_qtd")
+
+  pdfArquivo       String?  @map("pdf_arquivo")
+  docxArquivo      String?  @map("docx_arquivo")
+
+  criadoEm         DateTime @default(now()) @map("criado_em")
+
+  @@index([usuarioId])
+  @@index([pacienteNome])
+  @@index([criadoEm])
+  @@map("exames_laudos")
+}
+
+model RelatorioCirurgico {
+  id              String   @id @default(cuid())
+  usuarioId       String   @map("usuario_id")
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  pacienteNome    String   @map("paciente_nome")
+  pacienteEspecie String?  @map("paciente_especie")
+  procedimento    String
+  diagnostico     String?
+  modeloUtilizado String?  @map("modelo_utilizado")
+
+  dadosCirurgia   Json     @map("dados_cirurgia")
+  possuiFoto      Boolean  @default(false) @map("possui_foto")
+
+  pdfArquivo      String?  @map("pdf_arquivo")
+  docxArquivo     String?  @map("docx_arquivo")
+
+  criadoEm        DateTime @default(now()) @map("criado_em")
+
+  @@index([usuarioId])
+  @@index([pacienteNome])
+  @@index([criadoEm])
+  @@map("relatorios_cirurgicos")
+}

@@ -8,19 +8,17 @@ const {
   ptParaHalfPoints
 } = require('../gerenciador_layout');
 
-describe('Gerenciador de Layout (gerenciador_layout.js)', () => {
-  beforeEach(() => {
-    // Garante que o banco comece com o layout padrão
-    restaurarLayoutPadrao();
+describe('Gerenciador de Layout (gerenciador_layout.js - Prisma Async)', () => {
+  beforeEach(async () => {
+    await restaurarLayoutPadrao();
   });
 
-  afterAll(() => {
-    // Restaura o padrão ao final
-    restaurarLayoutPadrao();
+  afterAll(async () => {
+    await restaurarLayoutPadrao();
   });
 
-  test('obterLayout retorna o layout padrão com todos os campos esperados', () => {
-    const layout = obterLayout();
+  test('obterLayout retorna o layout padrão com todos os campos esperados', async () => {
+    const layout = await obterLayout();
     expect(layout).toBeDefined();
     expect(layout.id).toBe('padrao');
     expect(layout.font_family).toBe('Calibri, sans-serif');
@@ -31,8 +29,8 @@ describe('Gerenciador de Layout (gerenciador_layout.js)', () => {
     expect(layout.cor_secundaria).toBe('#4A777A');
   });
 
-  test('salvarLayout atualiza propriedades selecionadas e preserva as demais', () => {
-    const atualizado = salvarLayout({
+  test('salvarLayout atualiza propriedades selecionadas e preserva as demais', async () => {
+    const atualizado = await salvarLayout({
       font_family: 'Arial, sans-serif',
       cor_primaria: '#0284C7',
       margin_top: '15mm'
@@ -41,18 +39,31 @@ describe('Gerenciador de Layout (gerenciador_layout.js)', () => {
     expect(atualizado.font_family).toBe('Arial, sans-serif');
     expect(atualizado.cor_primaria).toBe('#0284C7');
     expect(atualizado.margin_top).toBe('15mm');
-    // Campos não enviados devem ser preservados
     expect(atualizado.font_size_body).toBe('11pt');
     expect(atualizado.margin_bottom).toBe('20mm');
   });
 
-  test('restaurarLayoutPadrao reseta os valores para a configuração oficial', () => {
-    salvarLayout({
+  test('salvarLayout suporta isolamento Multi-Tenant por médico veterinário', async () => {
+    const medicoParceiro = { id: 'vet_parceiro_1', nome: 'Dr. Parceiro', role: 'veterinario' };
+    const layoutVet = await salvarLayout({
+      cor_primaria: '#0F766E',
+      font_family: 'Arial, sans-serif'
+    }, medicoParceiro);
+
+    expect(layoutVet.cor_primaria).toBe('#0F766E');
+    expect(layoutVet.usuario_id).toBe('vet_parceiro_1');
+
+    const layoutGlobal = await obterLayout(null);
+    expect(layoutGlobal.cor_primaria).toBe('#1B365D');
+  });
+
+  test('restaurarLayoutPadrao reseta os valores para a configuração oficial', async () => {
+    await salvarLayout({
       font_family: 'Times New Roman, serif',
       cor_primaria: '#FF0000'
     });
 
-    const resetado = restaurarLayoutPadrao();
+    const resetado = await restaurarLayoutPadrao();
     expect(resetado.font_family).toBe('Calibri, sans-serif');
     expect(resetado.cor_primaria).toBe('#1B365D');
   });
@@ -90,8 +101,8 @@ describe('Gerenciador de Layout (gerenciador_layout.js)', () => {
       expect(docxCfg.szTitulo).toBe(28);
       expect(docxCfg.marginTop).toBe(1134);
       expect(docxCfg.marginLeft).toBe(850);
-      expect(docxCfg.spacingAfter).toBe(160); // 8pt * 20 twips
-      expect(docxCfg.lineSpacing).toBe(336);  // 1.4 * 240
+      expect(docxCfg.spacingAfter).toBe(160);
+      expect(docxCfg.lineSpacing).toBe(336);
       expect(docxCfg.corPrimariaHex).toBe('1B365D');
       expect(docxCfg.corSecundariaHex).toBe('4A777A');
     });

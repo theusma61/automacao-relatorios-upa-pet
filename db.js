@@ -1,120 +1,287 @@
 /**
- * Conexão centralizada com SQLite (better-sqlite3)
- *
- * Caminho: process.env.DB_PATH (se definida) ou ./upa_pet.db ao lado do projeto
- *
- * Esquema:
- *   usuarios             -> substitui usuarios.json
- *   modelos_cirurgicos   -> substitui modelos_cirurgicos/*.json
- *
- * A migração de dados é feita via `node scripts/migrate-to-sqlite.js`
- * (seed inicial: `node scripts/seed-sqlite.js`)
+ * Conexão centralizada com PostgreSQL via Prisma ORM (Multi-Tenant SaaS)
  */
 
-const fs = require('fs');
-const path = require('path');
+function criarPrismaMockMemoria() {
+  const store = {
+    clinicas: new Map(),
+    usuarios: new Map(),
+    layouts: new Map(),
+    modelos: new Map(),
+    exames: new Map(),
+    cirurgias: new Map()
+  };
 
-const DB_PATH = process.env.DB_PATH
-  ? path.resolve(process.env.DB_PATH)
-  : path.join(__dirname, 'upa_pet.db');
+  let seq = 1;
+  const cuid = () => `cuid_test_${Date.now()}_${seq++}`;
 
-const DB_DIR = path.dirname(DB_PATH);
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
+  return {
+    clinica: {
+      upsert: async ({ where, update, create }) => {
+        const key = where.id || where.cnpj;
+        const existing = store.clinicas.get(key);
+        if (existing) {
+          const updated = { ...existing, ...update, atualizadoEm: new Date() };
+          store.clinicas.set(updated.id, updated);
+          return updated;
+        }
+        const created = { id: create.id || cuid(), criadoEm: new Date(), atualizadoEm: new Date(), ...create };
+        store.clinicas.set(created.id, created);
+        return created;
+      },
+      findUnique: async ({ where }) => store.clinicas.get(where.id) || null
+    },
+    usuario: {
+      findUnique: async ({ where, select }) => {
+        let u = null;
+        if (where.id) u = store.usuarios.get(where.id) || null;
+        else if (where.email) {
+          const emailNorm = String(where.email).toLowerCase();
+          for (const item of store.usuarios.values()) {
+            if (item.email.toLowerCase() === emailNorm) { u = item; break; }
+          }
+        }
+        if (!u) return null;
+        const clone = { ...u, clinica: u.clinicaId ? store.clinicas.get(u.clinicaId) || null : null };
+        if (select) {
+          const out = {};
+          for (const k of Object.keys(select)) if (select[k]) out[k] = clone[k];
+          return out;
+        }
+        return clone;
+      },
+      create: async ({ data }) => {
+        const id = data.id || cuid();
+        const novo = {
+          id,
+          role: 'pendente',
+          crmv: null,
+          nomeClinica: null,
+          logoUrl: null,
+          assinaturaUrl: null,
+          foto: null,
+          telefone: null,
+          temaPreferencia: 'system',
+          ativo: true,
+          clinicaId: null,
+          criadoEm: new Date(),
+          atualizadoEm: new Date(),
+          ...data
+        };
+        store.usuarios.set(id, novo);
+        return { ...novo, clinica: novo.clinicaId ? store.clinicas.get(novo.clinicaId) || null : null };
+      },
+      update: async ({ where, data, select }) => {
+        let alvo = null;
+        if (where.id) alvo = store.usuarios.get(where.id);
+        else if (where.email) {
+          const emailNorm = String(where.email).toLowerCase();
+          for (const item of store.usuarios.values()) {
+            if (item.email.toLowerCase() === emailNorm) { alvo = item; break; }
+          }
+        }
+        if (!alvo) throw new Error('Usuário não encontrado.');
+        const atualizado = { ...alvo, ...data, atualizadoEm: new Date() };
+        store.usuarios.set(atualizado.id, atualizado);
+        const clone = { ...atualizado, clinica: atualizado.clinicaId ? store.clinicas.get(atualizado.clinicaId) || null : null };
+        if (select) {
+          const out = {};
+          for (const k of Object.keys(select)) if (select[k]) out[k] = clone[k];
+          return out;
+        }
+        return clone;
+      },
+      upsert: async ({ where, update, create }) => {
+        const emailNorm = where.email ? String(where.email).toLowerCase() : null;
+        let existente = null;
+        if (where.id) existente = store.usuarios.get(where.id);
+        else if (emailNorm) {
+          for (const item of store.usuarios.values()) {
+            if (item.email.toLowerCase() === emailNorm) { existente = item; break; }
+          }
+        }
+        if (existente) {
+          const atualizado = { ...existente, ...update, atualizadoEm: new Date() };
+          store.usuarios.set(atualizado.id, atualizado);
+          return atualizado;
+        }
+        const id = create.id || cuid();
+        const novo = {
+          id,
+          role: 'pendente',
+          temaPreferencia: 'system',
+          ativo: true,
+          criadoEm: new Date(),
+          atualizadoEm: new Date(),
+          ...create
+        };
+        store.usuarios.set(id, novo);
+        return novo;
+      },
+      findMany: async () => {
+        return Array.from(store.usuarios.values())
+          .sort((a, b) => a.email.localeCompare(b.email))
+          .map(u => ({ ...u, clinica: u.clinicaId ? store.clinicas.get(u.clinicaId) || null : null }));
+      },
+      count: async () => store.usuarios.size
+    },
+    configuracaoLayout: {
+      findUnique: async ({ where }) => {
+        if (where.id) return store.layouts.get(where.id) || null;
+        if (where.usuarioId) {
+          for (const l of store.layouts.values()) {
+            if (l.usuarioId === where.usuarioId) return l;
+          }
+        }
+        return null;
+      },
+      upsert: async ({ where, update, create }) => {
+        let existente = null;
+        if (where.id) existente = store.layouts.get(where.id);
+        else if (where.usuarioId) {
+          for (const l of store.layouts.values()) {
+            if (l.usuarioId === where.usuarioId) { existente = l; break; }
+          }
+        }
+        if (existente) {
+          const atualizado = { ...existente, ...update, atualizadoEm: new Date() };
+          store.layouts.set(atualizado.id, atualizado);
+          return atualizado;
+        }
+        const id = create.id || cuid();
+        const novo = { id, criadoEm: new Date(), atualizadoEm: new Date(), ...create };
+        store.layouts.set(id, novo);
+        return novo;
+      },
+      update: async ({ where, data }) => {
+        const existente = store.layouts.get(where.id);
+        if (!existente) throw new Error('Layout não encontrado.');
+        const atualizado = { ...existente, ...data, atualizadoEm: new Date() };
+        store.layouts.set(atualizado.id, atualizado);
+        return atualizado;
+      },
+      deleteMany: async ({ where }) => {
+        let count = 0;
+        for (const [k, v] of store.layouts.entries()) {
+          if (where.usuarioId && v.usuarioId === where.usuarioId) {
+            store.layouts.delete(k);
+            count++;
+          }
+        }
+        return { count };
+      }
+    },
+    modeloCirurgico: {
+      findMany: async ({ where } = {}) => {
+        let arr = Array.from(store.modelos.values());
+        if (where && Array.isArray(where.OR)) {
+          arr = arr.filter(m =>
+            where.OR.some(cond =>
+              (cond.isGlobal !== undefined && m.isGlobal === cond.isGlobal) ||
+              (cond.usuarioId !== undefined && m.usuarioId === cond.usuarioId)
+            )
+          );
+        }
+        return arr.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+      },
+      findFirst: async ({ where }) => {
+        const m = store.modelos.get(where.id);
+        if (!m) return null;
+        if (Array.isArray(where.OR)) {
+          const ok = where.OR.some(cond =>
+            (cond.isGlobal !== undefined && m.isGlobal === cond.isGlobal) ||
+            (cond.usuarioId !== undefined && m.usuarioId === cond.usuarioId)
+          );
+          if (!ok) return null;
+        }
+        return m;
+      },
+      findUnique: async ({ where }) => store.modelos.get(where.id) || null,
+      upsert: async ({ where, update, create }) => {
+        const existente = store.modelos.get(where.id);
+        if (existente) {
+          const atualizado = { ...existente, ...update, atualizadoEm: new Date() };
+          store.modelos.set(where.id, atualizado);
+          return atualizado;
+        }
+        const novo = { criadoEm: new Date(), atualizadoEm: new Date(), ...create };
+        store.modelos.set(novo.id, novo);
+        return novo;
+      },
+      create: async ({ data }) => {
+        const novo = { criadoEm: new Date(), atualizadoEm: new Date(), ...data };
+        store.modelos.set(novo.id, novo);
+        return novo;
+      },
+      delete: async ({ where }) => {
+        const existente = store.modelos.get(where.id);
+        store.modelos.delete(where.id);
+        return existente;
+      },
+      count: async () => store.modelos.size
+    },
+    exameLaudo: {
+      create: async ({ data }) => {
+        const id = data.id || cuid();
+        const novo = { id, criadoEm: new Date(), ...data };
+        store.exames.set(id, novo);
+        return novo;
+      },
+      findMany: async ({ where, take = 50 } = {}) => {
+        let arr = Array.from(store.exames.values());
+        if (where?.usuarioId) arr = arr.filter(e => e.usuarioId === where.usuarioId);
+        return arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(0, take);
+      }
+    },
+    relatorioCirurgico: {
+      create: async ({ data }) => {
+        const id = data.id || cuid();
+        const novo = { id, criadoEm: new Date(), ...data };
+        store.cirurgias.set(id, novo);
+        return novo;
+      },
+      findMany: async ({ where, take = 50 } = {}) => {
+        let arr = Array.from(store.cirurgias.values());
+        if (where?.usuarioId) arr = arr.filter(c => c.usuarioId === where.usuarioId);
+        return arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(0, take);
+      }
+    },
+    $disconnect: async () => {}
+  };
 }
 
-const Database = require('better-sqlite3');
+function criarClientePrisma() {
+  if (global.__upaPrisma) return global.__upaPrisma;
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS usuarios (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  nome TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'pendente'
-    CHECK (role IN ('admin', 'veterinario', 'assistente', 'pendente')),
-  crmv TEXT,
-  foto TEXT,
-  tema_preferencia TEXT NOT NULL DEFAULT 'system'
-    CHECK (tema_preferencia IN ('light', 'dark', 'system')),
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_usuarios_email
-  ON usuarios (email COLLATE NOCASE);
-
-CREATE TABLE IF NOT EXISTS modelos_cirurgicos (
-  id TEXT PRIMARY KEY,
-  nome TEXT NOT NULL,
-  sinonimos TEXT,
-  procedimento TEXT NOT NULL,
-  diagnostico_pre_cirurgico TEXT,
-  descricao_procedimento TEXT NOT NULL,
-  evolucao_consideracoes TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_modelos_cirurgicos_nome
-  ON modelos_cirurgicos (nome);
-
-CREATE TABLE IF NOT EXISTS configuracoes_layout (
-  id TEXT PRIMARY KEY DEFAULT 'padrao',
-  font_family TEXT DEFAULT 'Calibri, sans-serif',
-  font_size_body TEXT DEFAULT '11pt',
-  font_size_titulo TEXT DEFAULT '14pt',
-  margin_top TEXT DEFAULT '20mm',
-  margin_bottom TEXT DEFAULT '20mm',
-  margin_left TEXT DEFAULT '15mm',
-  margin_right TEXT DEFAULT '15mm',
-  line_height TEXT DEFAULT '1.4',
-  paragraph_spacing TEXT DEFAULT '8pt',
-  cor_primaria TEXT DEFAULT '#1B365D',
-  cor_secundaria TEXT DEFAULT '#4A777A',
-  atualizado_em TEXT DEFAULT (datetime('now'))
-);
-
-INSERT OR IGNORE INTO configuracoes_layout (id) VALUES ('padrao');
-`;
-
-/**
- * Abre a conexão (síncrona e estável) e aplica o schema idempotentemente.
- * Chama-se uma única vez por processo; o resultado é reutilizado globalmente.
- */
-function getDatabase() {
-  // Cache da conexão: reutiliza só se ainda estiver aberta.
-  // `db.open` reflete o estado real do SQLite (false após db.close()).
-  if (global.__upaPetDb && global.__upaPetDb.db && global.__upaPetDb.db.open) {
-    return global.__upaPetDb.db;
+  if (process.env.NODE_ENV === 'test' && !process.env.DATABASE_URL) {
+    global.__upaPrisma = criarPrismaMockMemoria();
+    return global.__upaPrisma;
   }
 
-  const db = new Database(DB_PATH, { strictForeignKeys: true });
-  db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = NORMAL');
-  db.pragma('foreign_keys = ON');
-  db.exec(SCHEMA);
-
-  // Migration: adicionar coluna tema_preferencia se não existir (DBs criados antes)
   try {
-    const cols = db.prepare(
-      "SELECT name FROM pragma_table_info('usuarios')"
-    ).all().map(r => r.name);
-    if (!cols.includes('tema_preferencia')) {
-      db.exec(
-        "ALTER TABLE usuarios ADD COLUMN tema_preferencia TEXT NOT NULL DEFAULT 'system' " +
-        "CHECK (tema_preferencia IN ('light', 'dark', 'system'))"
-      );
+    const { PrismaClient } = require('@prisma/client');
+    const client = new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
+    });
+    if (process.env.NODE_ENV !== 'production') {
+      global.__upaPrisma = client;
     }
-  } catch (e) {
-    console.warn('[DB] Migration tema_preferencia:', e.message);
+    return client;
+  } catch (err) {
+    if (process.env.NODE_ENV === 'test') {
+      global.__upaPrisma = criarPrismaMockMemoria();
+      return global.__upaPrisma;
+    }
+    throw new Error(
+      `Falha ao carregar @prisma/client (${err.message}). Execute "npm install && npx prisma generate".`
+    );
   }
-
-  global.__upaPetDb = { db, dbPath: DB_PATH };
-  return db;
 }
+
+const prisma = criarClientePrisma();
 
 module.exports = {
-  get db() { return getDatabase(); }, // lazy: só abre a conexão no primeiro acesso
-  getDatabase,
-  getDbPath: () => DB_PATH
+  prisma,
+  getDatabase: () => prisma,
+  getDbPath: () => process.env.DATABASE_URL ? 'postgresql://[prisma]' : 'prisma-client'
 };

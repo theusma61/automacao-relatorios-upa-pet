@@ -1,12 +1,9 @@
 /**
- * Gerenciador de usuários — camada de acesso ao banco SQLite
- * (migrado de usuarios.json; assinaturas mantidas por compatibilidade
- *  com servidor_web.js — ver docs/AI_AGENT_GUIDELINES.md §2.3)
+ * Gerenciador de usuários e perfis médicos — Camada Prisma PostgreSQL Multi-Tenant
  */
 
-const { getDatabase } = require('./db');
+const { prisma } = require('./db');
 
-// Papéis e suas permissões associadas (mesmo mapa de sempre)
 const ROLES = {
   admin: {
     nome: 'Administrador(a)',
@@ -37,6 +34,7 @@ function emailsDeEnv(prefixo) {
 function perfilParaResposta(usuario) {
   const roleDef = ROLES[usuario.role] || ROLES.pendente;
   return {
+    id: usuario.id,
     email: usuario.email,
     nome: usuario.nome,
     foto: usuario.foto || null,
@@ -45,122 +43,147 @@ function perfilParaResposta(usuario) {
     permissoes: roleDef.permissoes,
     podeGerarLaudos: roleDef.permissoes.includes('gerar_ultrassom'),
     podeGerarCirurgia: roleDef.permissoes.includes('gerar_cirurgia'),
-    crmv: usuario.crmv || null
+    crmv: usuario.crmv || null,
+    clinicaId: usuario.clinicaId || null,
+    nomeClinica: usuario.nomeClinica || (usuario.clinica && usuario.clinica.nome) || 'UPA PET',
+    logoUrl: usuario.logoUrl || null,
+    assinaturaUrl: usuario.assinaturaUrl || null,
+    temaPreferencia: usuario.temaPreferencia || 'system'
   };
 }
 
-/**
- * Obtém ou registra o usuário no primeiro login via Google SSO
- * @param {string} email — e-mail do token do Google
- * @param {string} nome  — nome completo (pode ser null/undefined)
- * @param {string} [foto] — URL da foto de perfil
- * @returns {{email, nome, foto, role, roleDescricao, permissoes, podeGerarLaudos, podeGerarCirurgia, crmv}}
- */
-function obterPerfilUsuario(email, nome, foto = null) {
-  const db = getDatabase();
+async function obterPerfilUsuario(email, nome, foto = null) {
   const emailNorm = (email || '').toLowerCase().trim();
   if (!emailNorm) {
     throw new Error('E-mail do usuário não informado.');
   }
-  nome = (nome || '').trim() || emailNorm.split('@')[0];
-  foto = foto || null;
-  const now = new Date().toISOString();
-
-  const select = db.prepare('SELECT * FROM usuarios WHERE email = ? COLLATE NOCASE');
-  let usuario = select.get(emailNorm);
-
+  const nomeLimpo = (nome || '').trim() || emailNorm.split('@')[0];
   const adminEmails = emailsDeEnv('ADMIN');
   const vetEmails = emailsDeEnv('VET');
+
+  let usuario = await prisma.usuario.findUnique({
+    where: { email: emailNorm },
+    include: { clinica: true }
+  });
 
   if (!usuario) {
     let roleInicial = 'pendente';
     if (adminEmails.includes(emailNorm)) roleInicial = 'admin';
     else if (vetEmails.includes(emailNorm)) roleInicial = 'veterinario';
 
-    db.prepare(`
-      INSERT INTO usuarios (email, nome, role, foto, criado_em, atualizado_em)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(emailNorm, nome, roleInicial, foto, now, now);
-    usuario = select.get(emailNorm);
+    usuario = await prisma.usuario.create({
+      data: {
+        email: emailNorm,
+        nome: nomeLimpo,
+        role: roleInicial,
+        foto: foto || null,
+        crmv: emailNorm.includes('camila') ? 'CRMV/MG: 22904' : null,
+        nomeClinica: 'UPA PET'
+      },
+      include: { clinica: true }
+    });
   } else {
-    // Atualiza nome ou foto se tiver mudado
-    let alterou = false;
-    if (nome && usuario.nome !== nome) alterou = true;
-    if (foto && usuario.foto !== foto) alterou = true;
-    if (adminEmails.includes(emailNorm) && usuario.role !== 'admin') alterou = true;
+    const dataUpdate = {};
+    if (nome && usuario.nome !== nomeLimpo) dataUpdate.nome = nomeLimpo;
+    if (foto && usuario.foto !== foto) dataUpdate.foto = foto;
+    if (adminEmails.includes(emailNorm) && usuario.role !== 'admin') {
+      dataUpdate.role = 'admin';
+    }
 
-    if (alterou) {
-      const setParts = ['atualizado_em = ?'];
-      const params = [now];
-      if (nome && usuario.nome !== nome) { setParts.push('nome = ?'); params.push(nome); }
-      if (foto && usuario.foto !== foto) { setParts.push('foto = ?'); params.push(foto); }
-      if (adminEmails.includes(emailNorm) && usuario.role !== 'admin') {
-        setParts.push('role = ?');
-        params.push('admin');
-      }
-      db.prepare(`UPDATE usuarios SET ${setParts.join(', ')} WHERE email = ? COLLATE NOCASE`)
-        .run(...params, emailNorm);
-      usuario = select.get(emailNorm);
+    if (Object.keys(dataUpdate).length > 0) {
+      usuario = await prisma.usuario.update({
+        where: { email: emailNorm },
+        data: dataUpdate,
+        include: { clinica: true }
+      });
     }
   }
 
   return perfilParaResposta(usuario);
 }
 
-/**
- * Verifica se um usuário possui uma permissão específica
- */
 function temPermissao(usuario, permissao) {
   if (!usuario) return false;
   if (usuario.role === 'admin') return true;
   const roleDef = ROLES[usuario.role];
-  return roleDef && roleDef.permissoes.includes(permissao);
+  return Boolean(roleDef && roleDef.permissoes.includes(permissao));
 }
 
-/**
- * Lista todos os usuários cadastrados (ordem estável por e-mail)
- */
-function listarUsuarios() {
-  const db = getDatabase();
-  return db.prepare(`
-    SELECT email, nome, role, crmv FROM usuarios
-    ORDER BY email COLLATE NOCASE
-  `)
-    .all()
-    .map((u) => {
-      const roleDef = ROLES[u.role] || ROLES.pendente;
-      return {
-        email: u.email,
-        nome: u.nome,
-        role: u.role,
-        roleDescricao: roleDef.nome,
-        permissoes: roleDef.permissoes,
-        crmv: u.crmv || null
-      };
-    });
+async function listarUsuarios() {
+  const lista = await prisma.usuario.findMany({
+    orderBy: { email: 'asc' },
+    include: { clinica: true }
+  });
+  return lista.map(perfilParaResposta);
 }
 
-/**
- * Atualiza o cargo de um usuário existente
- */
-function atualizarCargoUsuario(email, novoRole) {
+async function atualizarCargoUsuario(email, novoRole) {
   if (!ROLES[novoRole]) throw new Error(`Cargo inválido: ${novoRole}`);
-  const db = getDatabase();
   const emailNorm = (email || '').toLowerCase().trim();
-  if (!db.prepare('SELECT 1 FROM usuarios WHERE email = ? COLLATE NOCASE').get(emailNorm)) {
+  const existente = await prisma.usuario.findUnique({ where: { email: emailNorm } });
+  if (!existente) {
     throw new Error(`Usuário não encontrado: ${email}`);
   }
 
-  db.prepare(`
-    UPDATE usuarios
-    SET role = ?, atualizado_em = ?
-    WHERE email = ? COLLATE NOCASE
-  `).run(novoRole, new Date().toISOString(), emailNorm);
+  const atualizado = await prisma.usuario.update({
+    where: { email: emailNorm },
+    data: { role: novoRole },
+    include: { clinica: true }
+  });
 
-  const nome = db
-    .prepare('SELECT nome FROM usuarios WHERE email = ? COLLATE NOCASE')
-    .get(emailNorm).nome;
-  return obterPerfilUsuario(emailNorm, nome);
+  return perfilParaResposta(atualizado);
+}
+
+async function obterTemaUsuario(email) {
+  const emailNorm = (email || '').toLowerCase().trim();
+  if (!emailNorm) return 'system';
+  const row = await prisma.usuario.findUnique({
+    where: { email: emailNorm },
+    select: { temaPreferencia: true }
+  });
+  return row?.temaPreferencia || 'system';
+}
+
+async function atualizarTemaUsuario(email, tema) {
+  const emailNorm = (email || '').toLowerCase().trim();
+  const existente = await prisma.usuario.findUnique({ where: { email: emailNorm } });
+  if (!existente) {
+    throw new Error('Usuário não encontrado.');
+  }
+  const atualizado = await prisma.usuario.update({
+    where: { email: emailNorm },
+    data: { temaPreferencia: tema },
+    select: { temaPreferencia: true }
+  });
+  return atualizado.temaPreferencia;
+}
+
+async function atualizarPerfilProfissional(usuarioId, dados = {}) {
+  if (!usuarioId) throw new Error('ID do usuário não informado.');
+  const dataUpdate = {};
+  if (dados.nome !== undefined && String(dados.nome).trim()) {
+    dataUpdate.nome = String(dados.nome).trim();
+  }
+  if (dados.crmv !== undefined) {
+    dataUpdate.crmv = String(dados.crmv).trim() || null;
+  }
+  if (dados.nomeClinica !== undefined) {
+    dataUpdate.nomeClinica = String(dados.nomeClinica).trim() || null;
+  }
+  if (dados.logoUrl !== undefined) {
+    dataUpdate.logoUrl = dados.logoUrl || null;
+  }
+  if (dados.assinaturaUrl !== undefined) {
+    dataUpdate.assinaturaUrl = dados.assinaturaUrl || null;
+  }
+
+  const atualizado = await prisma.usuario.update({
+    where: { id: usuarioId },
+    data: dataUpdate,
+    include: { clinica: true }
+  });
+
+  return perfilParaResposta(atualizado);
 }
 
 module.exports = {
@@ -168,5 +191,8 @@ module.exports = {
   obterPerfilUsuario,
   temPermissao,
   listarUsuarios,
-  atualizarCargoUsuario
+  atualizarCargoUsuario,
+  obterTemaUsuario,
+  atualizarTemaUsuario,
+  atualizarPerfilProfissional
 };

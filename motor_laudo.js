@@ -6,17 +6,33 @@ const { compilarPDF } = require('./compilador_pdf');
 const { obterLayout } = require('./gerenciador_layout');
 
 const assetsDir = path.join(__dirname, 'assets');
-const logoPath = fs.existsSync(path.join(assetsDir, 'logo_upa_pet_oficial.png'))
+const logoPadraoPath = fs.existsSync(path.join(assetsDir, 'logo_upa_pet_oficial.png'))
   ? path.join(assetsDir, 'logo_upa_pet_oficial.png')
   : path.join(assetsDir, 'logo_upa_pet.jpg');
 
-async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida, customLayout = null) {
-  const layout = customLayout || obterLayout();
+async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida, customLayout = null, opcoes = {}) {
+  const usuario = opcoes.usuario || {};
+  const layout = customLayout || await obterLayout(usuario.id || null);
   const nomeSanitizado = (dadosPaciente.nome || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
-  const logoMime = path.extname(logoPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
 
-  // 1. Gera o HTML com o CSS idêntico aprovado
+  const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
+  const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
+  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'UPA PET';
+
+  const caminhoLogoEfetivo = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
+    ? usuario.logoUrl
+    : logoPadraoPath;
+
+  const logoBase64 = fs.existsSync(caminhoLogoEfetivo) ? fs.readFileSync(caminhoLogoEfetivo).toString('base64') : '';
+  const logoMime = path.extname(caminhoLogoEfetivo).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+
+  let assinaturaImgHtml = '';
+  if (usuario.assinaturaUrl && fs.existsSync(usuario.assinaturaUrl)) {
+    const assExt = path.extname(usuario.assinaturaUrl).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+    const assBase64 = fs.readFileSync(usuario.assinaturaUrl).toString('base64');
+    assinaturaImgHtml = `<img src="data:${assExt};base64,${assBase64}" style="max-height:42px; display:inline-block; margin-bottom:2px;" alt="Assinatura"><br>`;
+  }
+
   const paginasImagens = [];
   for (let i = 0; i < imagensPaths.length; i += 8) {
     paginasImagens.push(imagensPaths.slice(i, i + 8));
@@ -25,7 +41,9 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   const cabecalho = `
     <div class="header">
       <div class="logo-box">
-        <img src="data:${logoMime};base64,${logoBase64}" class="logo-img" alt="UPA PET">
+        ${logoBase64
+          ? `<img src="data:${logoMime};base64,${logoBase64}" class="logo-img" alt="${clinicaNome}">`
+          : `<div style="font-weight:900;font-size:18pt;color:${layout.cor_primaria};">${clinicaNome}</div>`}
       </div>
       <div class="patient-info">
         <div class="col">
@@ -49,11 +67,8 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   `;
 
   const laudoTextoHTML = laudoArray.map(item => {
-    // Remove repetição do nome do órgão caso venha duplicado no início do texto
     const regexOrgao = new RegExp(`^${item.orgao}[:\\s-]*`, 'i');
-    let textoLimpo = (item.texto || '').replace(regexOrgao, '').trim();
-
-    // Mantém quebras de linha para órgãos com subdivisões (como GLÂNDULA ADRENAL para AE: e AD:)
+    const textoLimpo = (item.texto || '').replace(regexOrgao, '').trim();
     const textoFormatado = textoLimpo.replace(/\r?\n/g, '<br>');
 
     let p = `<p><strong>${item.orgao}:</strong> ${textoFormatado}`;
@@ -128,7 +143,6 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   </style>
 </head>
 <body>
-  <!-- PÁGINA 1 -->
   <div class="page-container">
     <div>
       ${cabecalho}
@@ -142,15 +156,15 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     </div>
     <div>
       <div class="signature">
-        <p><strong>Camila Bastos</strong></p>
-        <p>CRMV/MG: 22904</p>
+        ${assinaturaImgHtml}
+        <p><strong>${nomeMedico}</strong></p>
+        <p>${crmvMedico}</p>
       </div>
       ${rodape}
     </div>
   </div>
 
-  <!-- PÁGINAS DE IMAGENS -->
-  ${paginasImagens.map((fotos, idx) => `
+  ${paginasImagens.map((fotos) => `
     <div class="page-container">
       <div>
         ${cabecalho}
@@ -168,22 +182,17 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
 </body>
 </html>`;
 
-  // Compila o PDF usando um arquivo temporário para não poluir a pasta do exame com arquivo .html
   const caminhoHtmlTemp = path.join(os.tmpdir(), `laudo_temp_${Date.now()}_${nomeSanitizado}.html`);
   const caminhoPdf = path.join(pastaSaida, `Laudo_${nomeSanitizado}.pdf`);
   const caminhoDocx = path.join(pastaSaida, `Laudo_${nomeSanitizado}.docx`);
 
   fs.writeFileSync(caminhoHtmlTemp, html, 'utf8');
-
-  // Compila o PDF oficial
   await compilarPDF(caminhoHtmlTemp, caminhoPdf);
 
-  // Remove o arquivo temporário HTML
   try {
     fs.unlinkSync(caminhoHtmlTemp);
   } catch (e) {}
 
-  // Remove qualquer arquivo HTML legado que porventura exista na pasta do paciente
   const caminhoHtmlAntigo = path.join(pastaSaida, `Laudo_${nomeSanitizado}.html`);
   if (fs.existsSync(caminhoHtmlAntigo)) {
     try {
@@ -191,11 +200,15 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     } catch (e) {}
   }
 
-  // Compila o DOCX para Word/Pages com as imagens incluídas
-  return gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, logoPath, imagensPaths, layout)
-    .then(() => {
-      return { caminhoPdf, caminhoDocx };
-    });
+  await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layout, {
+    usuario,
+    nomeMedico,
+    crmvMedico,
+    clinicaNome,
+    assinaturaPath: usuario.assinaturaUrl || null
+  });
+
+  return { caminhoPdf, caminhoDocx };
 }
 
 module.exports = { gerarDocumentosExame };

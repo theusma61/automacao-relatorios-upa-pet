@@ -1,34 +1,44 @@
 {
   "name": "vet-ultrasound-automation",
-  "version": "1.0.0",
-  "description": "Central Inteligente de Laudos de Ultrassom e Relatórios Cirúrgicos da UPA PET (Dra. Camila Bastos - CRMV/MG: 22904).",
-  "main": "monitor_exames.js",
+  "version": "2.1.0",
+  "description": "Plataforma SaaS Multi-Tenant de Laudos de Ultrassom e Relatórios Cirúrgicos Veterinários (Vetaro / UPA PET - PostgreSQL + Prisma + React).",
+  "main": "servidor_web.js",
   "scripts": {
-    "postinstall": "npx puppeteer browsers install chrome",
+    "postinstall": "npx prisma generate",
     "start": "node servidor_web.js",
     "start:monitor": "node monitor_exames.js",
     "start:web": "node servidor_web.js",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend install && npm --prefix frontend run build",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "lint": "eslint . --ext .js",
-    "db:migrate": "node scripts/migrate-to-sqlite.js",
-    "db:seed": "node scripts/seed-sqlite.js"
+    "db:generate": "npx prisma generate",
+    "db:migrate:dev": "npx prisma migrate dev",
+    "db:migrate:deploy": "npx prisma migrate deploy",
+    "db:migrate:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.js",
+    "db:seed": "node seed.js"
   },
   "keywords": [
     "veterinary",
+    "vetaro",
     "ultrasound",
     "surgery",
     "reports",
     "automation",
-    "gemini-ai"
+    "gemini-ai",
+    "postgresql",
+    "prisma",
+    "react",
+    "multitenant"
   ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "better-sqlite3": "^13.0.3",
+    "@prisma/client": "^5.22.0",
     "chokidar": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -42,6 +52,7 @@
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.2",
     "multer": "^2.5.0",
+    "p-queue": "6.6.2",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
     "puppeteer": "^25.17.0",
@@ -51,6 +62,7 @@
   "devDependencies": {
     "eslint": "^9.0.0",
     "jest": "^29.7.0",
+    "prisma": "^5.22.0",
     "supertest": "^7.0.0"
   },
   "jest": {
@@ -62,6 +74,7 @@
       "*.js",
       "!**/tests/**",
       "!**/node_modules/**",
+      "!**/frontend/**",
       "!*.config.js"
     ],
     "coverageDirectory": "coverage",

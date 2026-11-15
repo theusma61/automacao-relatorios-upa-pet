@@ -1,14 +1,30 @@
 /**
- * Compilador Universal de PDF (Windows, Linux, Mac, Render, Docker)
- * Suporta Microsoft Edge (Windows), Puppeteer (Nuvem/Render) e Chromium/Chrome do sistema.
+ * Compilador Universal de PDF com Fila de Concorrência para VPS (1 vCPU)
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-async function compilarPDF(caminhoHtml, caminhoPdf) {
-  // 1. Tenta Microsoft Edge (Padrão no Windows)
+function criarFilaConcorrenciaUnica() {
+  try {
+    const PQueue = require('p-queue').default || require('p-queue');
+    return new PQueue({ concurrency: 1 });
+  } catch (_) {
+    let cadeia = Promise.resolve();
+    return {
+      add(fn) {
+        const execucao = cadeia.then(() => fn());
+        cadeia = execucao.catch(() => {});
+        return execucao;
+      }
+    };
+  }
+}
+
+const filaPdf = criarFilaConcorrenciaUnica();
+
+async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
   const edgePaths = [
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -22,7 +38,6 @@ async function compilarPDF(caminhoHtml, caminhoPdf) {
     return caminhoPdf;
   }
 
-  // 2. Tenta Puppeteer (Nuvem / Linux / Render / Docker)
   let puppeteer;
   try {
     puppeteer = require('puppeteer');
@@ -54,10 +69,9 @@ async function compilarPDF(caminhoHtml, caminhoPdf) {
       await browser.close();
       return caminhoPdf;
     } catch (errPup) {
-      console.warn("Aviso Puppeteer:", errPup.message);
-      // Se não encontrou o Chrome, instala na hora e tenta novamente
+      console.warn('Aviso Puppeteer:', errPup.message);
       if (errPup.message.includes('Could not find Chrome') || errPup.message.includes('not find Chrome')) {
-        console.log("⚡ Auto-recuperação: Instalando Chrome headless no servidor...");
+        console.log('⚡ Auto-recuperação: Instalando Chrome headless no servidor...');
         try {
           execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
           const browserRetry = await puppeteer.launch({
@@ -75,13 +89,12 @@ async function compilarPDF(caminhoHtml, caminhoPdf) {
           await browserRetry.close();
           return caminhoPdf;
         } catch (errRetry) {
-          console.error("Erro na auto-instalação do Chrome:", errRetry.message);
+          console.error('Erro na auto-instalação do Chrome:', errRetry.message);
         }
       }
     }
   }
 
-  // 3. Fallback: Tenta executável do Chromium ou Google Chrome no Linux
   const linuxBinaries = ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', process.env.CHROME_BIN];
   const linuxBin = linuxBinaries.find(b => b && fs.existsSync(b));
   if (linuxBin) {
@@ -91,7 +104,11 @@ async function compilarPDF(caminhoHtml, caminhoPdf) {
     return caminhoPdf;
   }
 
-  throw new Error("Falha na compilação do PDF: Nenhum motor compatível encontrado (Edge, Puppeteer ou Chromium).");
+  throw new Error('Falha na compilação do PDF: Nenhum motor compatível encontrado (Edge, Puppeteer ou Chromium).');
 }
 
-module.exports = { compilarPDF };
+async function compilarPDF(caminhoHtml, caminhoPdf) {
+  return await filaPdf.add(() => compilarPDFInterno(caminhoHtml, caminhoPdf));
+}
+
+module.exports = { compilarPDF, filaPdf };

@@ -1,7 +1,8 @@
 FROM node:20-slim
 
-# Instala Chromium e dependências para compilação headless de PDF
 RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
     chromium \
     fonts-liberation \
     fonts-crosextra-carlito \
@@ -31,10 +32,15 @@ ENV CHROME_BIN=/usr/bin/chromium \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --production
+COPY prisma ./prisma/
+RUN npm install --omit=dev && npx prisma generate
+
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm install
 
 COPY . .
+RUN cd frontend && npm run build
 
 EXPOSE 3000
 
-CMD ["node", "servidor_web.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node servidor_web.js"]

@@ -1,16 +1,19 @@
 /**
- * Gerador de Relatório de Ultrassonografia Veterinária (Padrão UPA PET)
- * Gera um arquivo HTML pronto para impressão / salvar como PDF com layout pixel-perfect.
+ * Gerador de Relatório de Ultrassonografia Veterinária (Multi-Tenant / Padrão UPA PET)
  */
 
 const fs = require('fs');
-const path = require('path');
-const { obterLayout } = require('./gerenciador_layout');
+const { LAYOUT_PADRAO } = require('./gerenciador_layout');
 
-function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminhoSaida = 'laudo_final.html', customLayout = null) {
-  const layout = customLayout || obterLayout();
+function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminhoSaida = 'laudo_final.html', customLayout = null, opcoes = {}) {
+  const layout = { ...LAYOUT_PADRAO, ...(customLayout || {}) };
+  const usuario = opcoes.usuario || {};
+  const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
+  const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
+  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'UPA PET';
+
   const paginasImagens = [];
-  const fotosPorPagina = 8; // 2 colunas x 4 linhas
+  const fotosPorPagina = 8;
 
   for (let i = 0; i < imagensUrls.length; i += fotosPorPagina) {
     paginasImagens.push(imagensUrls.slice(i, i + fotosPorPagina));
@@ -19,7 +22,7 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
   const cabecalhoHTML = `
     <div class="header">
       <div class="logo-box">
-        <div class="logo-text">UPA PET</div>
+        <div class="logo-text">${clinicaNome}</div>
       </div>
       <div class="patient-info">
         <div class="col">
@@ -42,8 +45,7 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
     </div>
   `;
 
-  // Formata o texto do laudo convertendo negrito nos nomes dos órgãos e itálico em DIAG DIF.
-  let textoFormatado = laudoTexto
+  const textoFormatado = String(laudoTexto || '')
     .replace(/(BEXIGA:|RINS:|RIM ESQUERDO:|RIM DIREITO:|BAÇO:|ESTOMAGO:|FÍGADO:|VESICULA BILIAR:|ALÇAS INTESTINAIS:|GLANDULA ADRENAL:|ÚTERO:|OVÁRIOS:|OVÁRIO ESQUERDO:|OVÁRIO DIREITO:|ÚTERO \/ OVÁRIOS:|TESTICULOS:|PROSTATA:|PANCREAS:|PÂNCREAS:|CAVIDADE ABDOMINAL:|CONSIDERAÇÕES:)/g, '<br><strong>$1</strong>')
     .replace(/(DIAG DIF\.[^<\n]*|DIAG DIFERENCIAL\.[^<\n]*)/g, '<em>$1</em>');
 
@@ -146,7 +148,6 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
       padding-top: 5px;
       margin-top: 10px;
     }
-    /* Grid de Imagens */
     .image-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -172,7 +173,6 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
 </head>
 <body>
 
-  <!-- PÁGINA 1: TEXTO DO LAUDO -->
   <div class="page">
     ${cabecalhoHTML}
     <div class="title-box">
@@ -185,15 +185,14 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
     </div>
 
     <div class="signature">
-      <p><strong>Camila Bastos</strong></p>
-      <p>CRMV/MG: 22904</p>
+      <p><strong>${nomeMedico}</strong></p>
+      <p>${crmvMedico}</p>
     </div>
 
     ${rodapeHTML}
   </div>
 
-  <!-- PÁGINAS SEGUINTES: MOSAICO DE IMAGENS -->
-  ${paginasImagens.map((fotos, idx) => `
+  ${paginasImagens.map((fotos) => `
     <div class="page">
       ${cabecalhoHTML}
       <div class="image-grid">

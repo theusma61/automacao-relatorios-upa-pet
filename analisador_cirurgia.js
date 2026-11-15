@@ -37,20 +37,26 @@ function obterMimeTypeImagem(caminhoArquivo) {
   return 'image/jpeg';
 }
 
-async function analisarCirurgiaComIA(arquivos, apiKey) {
+async function analisarCirurgiaComIA(arquivos, apiKey, opcoes = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const modelosBiblioteca = obterTextoModelosParaPrompt();
+  const usuario = opcoes.usuario || null;
+  const modelosBiblioteca = await obterTextoModelosParaPrompt(usuario?.id || null);
   const dataHoje = formatarDataHoje();
 
+  const nomeClinica = usuario?.nomeClinica || 'UPA PET';
+  const identificacaoMedico = usuario?.nome
+    ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
+    : 'Dra. Camila Bastos - CRMV/MG: 22904';
+
   const promptInstrucoes = `
-Você é o assistente cirúrgico veterinário sênior oficial da UPA PET (Dra. Camila Bastos - CRMV/MG: 22904).
+Você é o assistente cirúrgico veterinário sênior oficial de ${nomeClinica} (${identificacaoMedico}).
 Sua missão é ouvir o áudio gravado pelo cirurgião veterinário (ou ler os arquivos de texto e fotos anexas) e redigir o RELATÓRIO CIRÚRGICO oficial da clínica, seguindo rigorosamente o padrão institucional já estabelecido.
 
 ${modelosBiblioteca}
 
 REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
-1. **Padrão Institucional UPA PET**:
-   - Utilize a terminologia médica exata da Dra. Camila Bastos.
+1. **Padrão Institucional**:
+   - Utilize a terminologia médica cirúrgica formal dos modelos fornecidos.
    - A antissepsia deve sempre citar clorexidina degermante seguida de alcoólica em no mínimo 3 ciclos.
    - A monitorização é sempre contínua sob anestesia geral.
    - A síntese por planos deve especificar detalhadamente os fios e padrões (ex: peritônio e musculatura com nylon em padrão reverdin; subcutâneo com proliglecaprone ou poliglactina em padrão intradérmico; pele com nylon em padrão sultan ou simples).
@@ -102,7 +108,6 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
 
   const partes = [{ text: promptInstrucoes }];
 
-  // Adiciona áudios, imagens e textos
   for (const arq of arquivos) {
     const ext = path.extname(arq).toLowerCase();
     if (/\.(m4a|mp3|wav|ogg|opus)$/i.test(ext)) {
@@ -170,12 +175,11 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
     }
   }
 
-  // Lista de modelos suportados para fallback
   const modelosIA = [
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-flash-latest",
-    "gemini-3.8-flash"
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.8-flash'
   ];
 
   let ultimoErro = null;

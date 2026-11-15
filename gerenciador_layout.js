@@ -1,10 +1,8 @@
 /**
- * Gerenciador de configurações de layout e modelos (UPA PET)
- * Centraliza a leitura, atualização e conversão das regras tipográficas e visuais
- * persistidas no SQLite (tabela `configuracoes_layout`).
+ * Gerenciador de configurações de layout e modelos (Multi-Tenant PostgreSQL / Prisma)
  */
 
-const { getDatabase } = require('./db');
+const { prisma } = require('./db');
 
 const LAYOUT_PADRAO = {
   id: 'padrao',
@@ -21,109 +19,149 @@ const LAYOUT_PADRAO = {
   cor_secundaria: '#4A777A'
 };
 
-/**
- * Retorna as configurações atuais de layout gravadas no SQLite.
- * Caso o registro não exista, inicializa com o padrão institucional.
- */
-function obterLayout() {
-  const db = getDatabase();
-  let row = db.prepare('SELECT * FROM configuracoes_layout WHERE id = ?').get('padrao');
+function prismaParaSnakeCase(row) {
+  if (!row) return { ...LAYOUT_PADRAO };
+  return {
+    id: row.id || 'padrao',
+    usuario_id: row.usuarioId || null,
+    clinica_id: row.clinicaId || null,
+    font_family: row.fontFamily || LAYOUT_PADRAO.font_family,
+    font_size_body: row.fontSizeBody || LAYOUT_PADRAO.font_size_body,
+    font_size_titulo: row.fontSizeTitulo || LAYOUT_PADRAO.font_size_titulo,
+    margin_top: row.marginTop || LAYOUT_PADRAO.margin_top,
+    margin_bottom: row.marginBottom || LAYOUT_PADRAO.margin_bottom,
+    margin_left: row.marginLeft || LAYOUT_PADRAO.margin_left,
+    margin_right: row.marginRight || LAYOUT_PADRAO.margin_right,
+    line_height: row.lineHeight || LAYOUT_PADRAO.line_height,
+    paragraph_spacing: row.paragraphSpacing || LAYOUT_PADRAO.paragraph_spacing,
+    cor_primaria: row.corPrimaria || LAYOUT_PADRAO.cor_primaria,
+    cor_secundaria: row.corSecundaria || LAYOUT_PADRAO.cor_secundaria,
+    atualizado_em: row.atualizadoEm instanceof Date
+      ? row.atualizadoEm.toISOString()
+      : (row.atualizado_em || new Date().toISOString())
+  };
+}
 
-  if (!row) {
-    db.prepare(`
-      INSERT INTO configuracoes_layout (
-        id, font_family, font_size_body, font_size_titulo,
-        margin_top, margin_bottom, margin_left, margin_right,
-        line_height, paragraph_spacing, cor_primaria, cor_secundaria
-      ) VALUES (
-        @id, @font_family, @font_size_body, @font_size_titulo,
-        @margin_top, @margin_bottom, @margin_left, @margin_right,
-        @line_height, @paragraph_spacing, @cor_primaria, @cor_secundaria
-      )
-    `).run(LAYOUT_PADRAO);
+async function garantirLayoutPadrao() {
+  return await prisma.configuracaoLayout.upsert({
+    where: { id: 'padrao' },
+    update: {},
+    create: {
+      id: 'padrao',
+      nome: 'Padrão Oficial UPA PET',
+      isPadrao: true,
+      fontFamily: LAYOUT_PADRAO.font_family,
+      fontSizeBody: LAYOUT_PADRAO.font_size_body,
+      fontSizeTitulo: LAYOUT_PADRAO.font_size_titulo,
+      marginTop: LAYOUT_PADRAO.margin_top,
+      marginBottom: LAYOUT_PADRAO.margin_bottom,
+      marginLeft: LAYOUT_PADRAO.margin_left,
+      marginRight: LAYOUT_PADRAO.margin_right,
+      lineHeight: LAYOUT_PADRAO.line_height,
+      paragraphSpacing: LAYOUT_PADRAO.paragraph_spacing,
+      corPrimaria: LAYOUT_PADRAO.cor_primaria,
+      corSecundaria: LAYOUT_PADRAO.cor_secundaria
+    }
+  });
+}
 
-    row = db.prepare('SELECT * FROM configuracoes_layout WHERE id = ?').get('padrao');
+async function obterLayout(usuarioId = null) {
+  if (usuarioId) {
+    const custom = await prisma.configuracaoLayout.findUnique({
+      where: { usuarioId: String(usuarioId) }
+    });
+    if (custom) return prismaParaSnakeCase(custom);
   }
 
-  return row;
+  const row = await garantirLayoutPadrao();
+  return prismaParaSnakeCase(row);
 }
 
-/**
- * Atualiza as configurações de layout no banco.
- * Apenas os campos fornecidos são alterados.
- */
-function salvarLayout(dadosNovos = {}) {
-  const db = getDatabase();
-  const atual = obterLayout();
+async function salvarLayout(dadosNovos = {}, usuario = null) {
+  const isCustomUser = Boolean(usuario && usuario.id && usuario.role !== 'admin');
+  const atual = await obterLayout(isCustomUser ? usuario.id : null);
 
-  const atualizado = {
-    font_family: dadosNovos.font_family || atual.font_family,
-    font_size_body: dadosNovos.font_size_body || atual.font_size_body,
-    font_size_titulo: dadosNovos.font_size_titulo || atual.font_size_titulo,
-    margin_top: dadosNovos.margin_top || atual.margin_top,
-    margin_bottom: dadosNovos.margin_bottom || atual.margin_bottom,
-    margin_left: dadosNovos.margin_left || atual.margin_left,
-    margin_right: dadosNovos.margin_right || atual.margin_right,
-    line_height: dadosNovos.line_height !== undefined ? String(dadosNovos.line_height) : atual.line_height,
-    paragraph_spacing: dadosNovos.paragraph_spacing || atual.paragraph_spacing,
-    cor_primaria: dadosNovos.cor_primaria || atual.cor_primaria,
-    cor_secundaria: dadosNovos.cor_secundaria || atual.cor_secundaria,
-    id: 'padrao'
+  const payloadPrisma = {
+    fontFamily: dadosNovos.font_family || atual.font_family,
+    fontSizeBody: dadosNovos.font_size_body || atual.font_size_body,
+    fontSizeTitulo: dadosNovos.font_size_titulo || atual.font_size_titulo,
+    marginTop: dadosNovos.margin_top || atual.margin_top,
+    marginBottom: dadosNovos.margin_bottom || atual.margin_bottom,
+    marginLeft: dadosNovos.margin_left || atual.margin_left,
+    marginRight: dadosNovos.margin_right || atual.margin_right,
+    lineHeight: dadosNovos.line_height !== undefined ? String(dadosNovos.line_height) : atual.line_height,
+    paragraphSpacing: dadosNovos.paragraph_spacing || atual.paragraph_spacing,
+    corPrimaria: dadosNovos.cor_primaria || atual.cor_primaria,
+    corSecundaria: dadosNovos.cor_secundaria || atual.cor_secundaria
   };
 
-  const stmt = db.prepare(`
-    UPDATE configuracoes_layout
-    SET
-      font_family = @font_family,
-      font_size_body = @font_size_body,
-      font_size_titulo = @font_size_titulo,
-      margin_top = @margin_top,
-      margin_bottom = @margin_bottom,
-      margin_left = @margin_left,
-      margin_right = @margin_right,
-      line_height = @line_height,
-      paragraph_spacing = @paragraph_spacing,
-      cor_primaria = @cor_primaria,
-      cor_secundaria = @cor_secundaria,
-      atualizado_em = datetime('now')
-    WHERE id = @id
-  `);
+  if (isCustomUser) {
+    const row = await prisma.configuracaoLayout.upsert({
+      where: { usuarioId: String(usuario.id) },
+      update: payloadPrisma,
+      create: {
+        id: `layout_${usuario.id}`,
+        nome: `Layout de ${usuario.nome || usuario.email}`,
+        isPadrao: false,
+        usuarioId: String(usuario.id),
+        ...payloadPrisma
+      }
+    });
+    return prismaParaSnakeCase(row);
+  }
 
-  stmt.run(atualizado);
-  return obterLayout();
+  await garantirLayoutPadrao();
+  const row = await prisma.configuracaoLayout.update({
+    where: { id: 'padrao' },
+    data: payloadPrisma
+  });
+  return prismaParaSnakeCase(row);
 }
 
-/**
- * Restaura todas as configurações de layout para o padrão oficial da UPA PET.
- */
-function restaurarLayoutPadrao() {
-  const db = getDatabase();
-  const stmt = db.prepare(`
-    UPDATE configuracoes_layout
-    SET
-      font_family = @font_family,
-      font_size_body = @font_size_body,
-      font_size_titulo = @font_size_titulo,
-      margin_top = @margin_top,
-      margin_bottom = @margin_bottom,
-      margin_left = @margin_left,
-      margin_right = @margin_right,
-      line_height = @line_height,
-      paragraph_spacing = @paragraph_spacing,
-      cor_primaria = @cor_primaria,
-      cor_secundaria = @cor_secundaria,
-      atualizado_em = datetime('now')
-    WHERE id = @id
-  `);
+async function restaurarLayoutPadrao(usuario = null) {
+  const isCustomUser = Boolean(usuario && usuario.id && usuario.role !== 'admin');
+  if (isCustomUser) {
+    await prisma.configuracaoLayout.deleteMany({
+      where: { usuarioId: String(usuario.id) }
+    });
+    return await obterLayout(null);
+  }
 
-  stmt.run(LAYOUT_PADRAO);
-  return obterLayout();
+  const row = await prisma.configuracaoLayout.upsert({
+    where: { id: 'padrao' },
+    update: {
+      fontFamily: LAYOUT_PADRAO.font_family,
+      fontSizeBody: LAYOUT_PADRAO.font_size_body,
+      fontSizeTitulo: LAYOUT_PADRAO.font_size_titulo,
+      marginTop: LAYOUT_PADRAO.margin_top,
+      marginBottom: LAYOUT_PADRAO.margin_bottom,
+      marginLeft: LAYOUT_PADRAO.margin_left,
+      marginRight: LAYOUT_PADRAO.margin_right,
+      lineHeight: LAYOUT_PADRAO.line_height,
+      paragraphSpacing: LAYOUT_PADRAO.paragraph_spacing,
+      corPrimaria: LAYOUT_PADRAO.cor_primaria,
+      corSecundaria: LAYOUT_PADRAO.cor_secundaria
+    },
+    create: {
+      id: 'padrao',
+      nome: 'Padrão Oficial UPA PET',
+      isPadrao: true,
+      fontFamily: LAYOUT_PADRAO.font_family,
+      fontSizeBody: LAYOUT_PADRAO.font_size_body,
+      fontSizeTitulo: LAYOUT_PADRAO.font_size_titulo,
+      marginTop: LAYOUT_PADRAO.margin_top,
+      marginBottom: LAYOUT_PADRAO.margin_bottom,
+      marginLeft: LAYOUT_PADRAO.margin_left,
+      marginRight: LAYOUT_PADRAO.margin_right,
+      lineHeight: LAYOUT_PADRAO.line_height,
+      paragraphSpacing: LAYOUT_PADRAO.paragraph_spacing,
+      corPrimaria: LAYOUT_PADRAO.cor_primaria,
+      corSecundaria: LAYOUT_PADRAO.cor_secundaria
+    }
+  });
+  return prismaParaSnakeCase(row);
 }
 
-/**
- * Converte strings CSS de medida para Twips (1/20 de ponto) utilizado na biblioteca docx.
- * Suporta 'mm' e 'pt'. Exemplo: '20mm' -> 1134 twips, '10pt' -> 200 twips.
- */
 function medidaParaTwips(valorStr, fallbackTwips = 850) {
   if (!valorStr || typeof valorStr !== 'string') return fallbackTwips;
   const limpo = valorStr.trim().toLowerCase();
@@ -142,16 +180,12 @@ function medidaParaTwips(valorStr, fallbackTwips = 850) {
 
   const num = parseFloat(limpo);
   if (!isNaN(num)) {
-    // Por padrão assume mm se < 40, senão twips
     return num <= 40 ? Math.round(num * 56.6929) : Math.round(num);
   }
 
   return fallbackTwips;
 }
 
-/**
- * Converte valor de fonte em 'pt' para half-points da biblioteca docx (ex: '11pt' -> 22 half-points).
- */
 function ptParaHalfPoints(valorStr, fallbackHalfPoints = 22) {
   if (!valorStr || typeof valorStr !== 'string') return fallbackHalfPoints;
   const match = valorStr.trim().match(/^([\d.]+)/);
@@ -160,33 +194,22 @@ function ptParaHalfPoints(valorStr, fallbackHalfPoints = 22) {
   return isNaN(pt) ? fallbackHalfPoints : Math.round(pt * 2);
 }
 
-/**
- * Converte as configurações de layout do banco para os formatos aceitos pela biblioteca `docx`.
- */
 function converterParaDocx(layout) {
-  const cfg = layout || obterLayout();
+  const cfg = layout || LAYOUT_PADRAO;
 
-  // Família da fonte principal (sem fallback CSS e sem aspas)
   const fontMatch = (cfg.font_family || 'Calibri').split(',')[0].replace(/['"]/g, '').trim();
-
-  // Half-points (pt * 2)
   const szCorpo = ptParaHalfPoints(cfg.font_size_body, 22);
   const szTitulo = ptParaHalfPoints(cfg.font_size_titulo, 28);
 
-  // Margens da página em twips
   const marginTop = medidaParaTwips(cfg.margin_top, 1134);
   const marginBottom = medidaParaTwips(cfg.margin_bottom, 1134);
   const marginLeft = medidaParaTwips(cfg.margin_left, 850);
   const marginRight = medidaParaTwips(cfg.margin_right, 850);
 
-  // Espaçamentos
-  // Na biblioteca docx: spacing.after é em twips (1 pt = 20 twips)
   const spacingAfter = medidaParaTwips(cfg.paragraph_spacing, 160);
-  // line spacing no docx: 240 equivale a 1.0 (linha simples)
   const lineMultiplier = parseFloat(cfg.line_height) || 1.4;
   const lineSpacing = Math.round(lineMultiplier * 240);
 
-  // Cores hexadecimais sem '#'
   const corPrimariaHex = (cfg.cor_primaria || '#1B365D').replace(/^#/, '').toUpperCase();
   const corSecundariaHex = (cfg.cor_secundaria || '#4A777A').replace(/^#/, '').toUpperCase();
 
