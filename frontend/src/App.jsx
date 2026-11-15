@@ -263,8 +263,10 @@ export default function App() {
     <div
       style={{ fontFamily: "'Manrope', sans-serif" }}
       onClick={() => profileMenuOpen && setProfileMenuOpen(false)}
-      className={`min-h-screen transition-colors duration-300 flex ${
-        isMobile ? 'flex-col justify-between' : 'flex-row'
+      className={`transition-colors duration-300 flex ${
+        isMobile
+          ? 'flex-col justify-between min-h-screen'
+          : 'flex-row h-screen overflow-hidden'
       } ${darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]'}`}
     >
       {/* Sidebar Esquerda (Desktop w-64 | Tablet w-52) */}
@@ -284,8 +286,12 @@ export default function App() {
       {/* Área Principal Centralizada */}
       <main
         className={`flex-1 w-full ${
-          isMobile ? 'p-4 pb-24' : isTablet ? 'p-6' : 'py-8 px-8 lg:px-12'
-        } relative overflow-y-auto`}
+          isMobile
+            ? 'p-4 pb-24'
+            : isTablet
+            ? 'p-6 h-full overflow-y-auto'
+            : 'py-8 px-8 lg:px-12 h-full overflow-y-auto'
+        } relative`}
       >
         <div className="w-full max-w-5xl mx-auto flex flex-col">
           {isMobile ? (

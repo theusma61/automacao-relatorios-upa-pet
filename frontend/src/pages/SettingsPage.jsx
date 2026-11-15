@@ -476,7 +476,7 @@ export default function SettingsPage({
             >
               <div>
                 <p className="text-xs sm:text-sm font-extrabold">
-                  Modo Claro (Tema da Interface)
+                  Modo Escuro (Tema da Interface)
                 </p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Alterna instantaneamente entre o tema Escuro (#0A141D) e Claro (#F8FAFC).
@@ -484,7 +484,7 @@ export default function SettingsPage({
               </div>
               <div
                 className={`w-12 h-6 rounded-full p-0.5 transition-colors flex items-center shrink-0 ${
-                  !darkMode ? 'bg-[#00D296]' : 'bg-[#00A878]'
+                  darkMode ? 'bg-[#00D296]' : 'bg-slate-300 dark:bg-slate-600'
                 }`}
               >
                 <span

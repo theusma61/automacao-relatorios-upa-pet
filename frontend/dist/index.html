@@ -7,45 +7,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          fontFamily: { sans: ["Manrope", "system-ui", "sans-serif"] }
-        }
-      }
-    };
     (function initVetaroTheme() {
       try {
-        var saved = localStorage.getItem("tema_preferencia");
-        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-        var isDark = saved ? (saved === "dark" || (saved === "system" && prefersDark)) : true;
-        if (isDark) document.documentElement.classList.add("dark");
-        else document.documentElement.classList.remove("dark");
+        var saved = localStorage.getItem('tema_preferencia');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var isDark = saved ? (saved === 'dark' || (saved === 'system' && prefersDark)) : true;
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
       } catch (e) {}
     })();
   </script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <style>
-    body { font-family: "Manrope", system-ui, -apple-system, sans-serif; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  </style>
+  <script type="module" crossorigin src="/assets/index-0g-MC9bm.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-saQRcjaV.css">
 </head>
-<body class="bg-[#F8FAFC] dark:bg-[#0A141D] text-[#0A141D] dark:text-white antialiased">
+<body class="bg-[#F8FAFC] dark:bg-[#0A141D] text-[#0A141D] dark:text-white antialiased selection:bg-[#00D296]/30">
   <div id="root"></div>
-  <script type="module">
-    import React from "https://esm.sh/react@18.3.1";
-    import ReactDOMClient from "https://esm.sh/react-dom@18.3.1/client";
-    import * as LucideReact from "https://esm.sh/lucide-react@0.460.0?deps=react@18.3.1";
-    window.React = React;
-    window.ReactDOMClient = ReactDOMClient;
-    window.LucideReact = LucideReact;
-    const s = document.createElement("script");
-    s.src = "/assets/vetaro-app.js";
-    document.body.appendChild(s);
-  </script>
 </body>
 </html>

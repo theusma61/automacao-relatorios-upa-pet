@@ -27,7 +27,7 @@ export default function Sidebar({
     <aside
       className={`${
         compact ? 'w-52 p-5' : 'w-64 p-6'
-      } shrink-0 border-r flex flex-col justify-between transition-colors ${
+      } shrink-0 border-r flex flex-col justify-between transition-colors sticky top-0 h-screen overflow-y-auto ${
         darkMode ? 'bg-[#0C1720] border-slate-800' : 'bg-white border-slate-200'
       }`}
     >
