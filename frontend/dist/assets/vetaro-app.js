@@ -67,34 +67,6 @@ function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o =
 function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i]; return arr2; }
 function _iterableToArrayLimit(arr, i) { var _i = null == arr ? null : "undefined" != typeof Symbol && arr[Symbol.iterator] || arr["@@iterator"]; if (null != _i) { var _s, _e, _x, _r, _arr = [], _n = !0, _d = !1; try { if (_x = (_i = _i.call(arr)).next, 0 === i) { if (Object(_i) !== _i) return; _n = !1; } else for (; !(_n = (_s = _x.call(_i)).done) && (_arr.push(_s.value), _arr.length !== i); _n = !0); } catch (err) { _d = !0, _e = err; } finally { try { if (!_n && null != _i["return"] && (_r = _i["return"](), Object(_r) !== _r)) return; } finally { if (_d) throw _e; } } return _arr; } }
 function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
-var INITIAL_ACTIVITIES = [{
-  id: 'laudo-01',
-  type: 'ultrassom',
-  title: 'Laudo de Ultrassom',
-  patient: 'Thor (Golden Retriever, 6 anos)',
-  tutor: 'Carlos Eduardo Silva',
-  date: 'Gerado em 14/11/2025 às 16:32',
-  status: 'Concluído',
-  summary: 'Ultrassonografia abdominal total (Mindray Vetus 7). Fígado com dimensões preservadas, parênquima homogêneo e ecogenicidade normal. Vesícula biliar moderadamente repleta (parede 0,11 cm), sem lama biliar. Baço e rins sem alterações topográficas ou morfológicas. Impressão diagnóstica: Exame dentro dos padrões de normalidade para a espécie.'
-}, {
-  id: 'rel-02',
-  type: 'relatorio',
-  title: 'Relatório Cirúrgico Oficial',
-  patient: 'Luna (Felino SRD, 3 anos)',
-  tutor: 'Beatriz Mendes',
-  date: 'Gerado em 13/11/2025 às 11:20',
-  status: 'Concluído',
-  summary: 'Relatório Cirúrgico Oficial — Ovariohisterectomia Eletiva + Exérese de Nódulo Cutâneo. Anestesia inalatória com Isofluorano estável. Celiotomia retro-umbilical, ligadura tripla dos pedículos ovarianos e corpo uterino com Poliglactina 910 (3-0). Síntese em três planos. Anexo fotográfico da peça cirúrgica na Página 2.'
-}, {
-  id: 'laudo-03',
-  type: 'ultrassom',
-  title: 'Laudo de Ultrassom',
-  patient: 'Max (Bulldog Francês, 4 anos)',
-  tutor: 'Fernanda Costa',
-  date: 'Gerado em 12/11/2025 às 09:17',
-  status: 'Concluído',
-  summary: 'Avaliação vesical e renal. Bexiga urinária com repleção adequada, parede discretamente espessada (0,38 cm) em região crânio-ventral e presença de moderada quantidade de sedimento ecogênico em suspensão. Impressão diagnóstica: Achados compatíveis com cistite + sedimento urinário.'
-}];
 function formatDatePtBr(dateInput) {
   if (!dateInput) return '';
   try {
@@ -112,48 +84,30 @@ function App() {
   var _useAuth = (0, _AuthContext.useAuth)(),
     usuario = _useAuth.usuario,
     ssoConfig = _useAuth.ssoConfig,
+    carregandoSessao = _useAuth.carregandoSessao,
     loginComGoogleCredential = _useAuth.loginComGoogleCredential,
-    entrarModoDemonstracao = _useAuth.entrarModoDemonstracao,
     atualizarUsuarioLocal = _useAuth.atualizarUsuarioLocal,
     logout = _useAuth.logout;
-
-  // Modo de visualização: 'auto' (App Responsivo Real) | 'prancha' | 'desktop' | 'tablet' | 'mobile' | 'specs'
-  var _useState = (0, _react.useState)('auto'),
+  var _useState = (0, _react.useState)('inicio'),
     _useState2 = _slicedToArray(_useState, 2),
-    deviceView = _useState2[0],
-    setDeviceView = _useState2[1];
-  var _useState3 = (0, _react.useState)(true),
+    activeNav = _useState2[0],
+    setActiveNav = _useState2[1];
+  var _useState3 = (0, _react.useState)('perfil'),
     _useState4 = _slicedToArray(_useState3, 2),
-    showStudioBar = _useState4[0],
-    setShowStudioBar = _useState4[1];
-  var _useState5 = (0, _react.useState)('inicio'),
+    settingsTab = _useState4[0],
+    setSettingsTab = _useState4[1];
+  var _useState5 = (0, _react.useState)(false),
     _useState6 = _slicedToArray(_useState5, 2),
-    activeNav = _useState6[0],
-    setActiveNav = _useState6[1];
-  var _useState7 = (0, _react.useState)('perfil'),
+    profileMenuOpen = _useState6[0],
+    setProfileMenuOpen = _useState6[1];
+  var _useState7 = (0, _react.useState)(false),
     _useState8 = _slicedToArray(_useState7, 2),
-    settingsTab = _useState8[0],
-    setSettingsTab = _useState8[1];
-  var _useState9 = (0, _react.useState)(false),
+    adminModalOpen = _useState8[0],
+    setAdminModalOpen = _useState8[1];
+  var _useState9 = (0, _react.useState)(typeof window !== 'undefined' ? window.innerWidth : 1280),
     _useState10 = _slicedToArray(_useState9, 2),
-    profileMenuOpen = _useState10[0],
-    setProfileMenuOpen = _useState10[1];
-  var _useState11 = (0, _react.useState)(false),
-    _useState12 = _slicedToArray(_useState11, 2),
-    adminModalOpen = _useState12[0],
-    setAdminModalOpen = _useState12[1];
-  var _useState13 = (0, _react.useState)(false),
-    _useState14 = _slicedToArray(_useState13, 2),
-    showLoginModal = _useState14[0],
-    setShowLoginModal = _useState14[1];
-  var _useState15 = (0, _react.useState)(true),
-    _useState16 = _slicedToArray(_useState15, 2),
-    fitToPhone = _useState16[0],
-    setFitToPhone = _useState16[1];
-  var _useState17 = (0, _react.useState)(typeof window !== 'undefined' ? window.innerWidth : 1280),
-    _useState18 = _slicedToArray(_useState17, 2),
-    screenWidth = _useState18[0],
-    setScreenWidth = _useState18[1];
+    screenWidth = _useState10[0],
+    setScreenWidth = _useState10[1];
   (0, _react.useEffect)(function () {
     var handleResize = function handleResize() {
       return setScreenWidth(window.innerWidth);
@@ -163,35 +117,30 @@ function App() {
       return window.removeEventListener('resize', handleResize);
     };
   }, []);
-  var userProfile = usuario || _AuthContext.DEMO_USER_PROFILE;
-  var _useState19 = (0, _react.useState)(INITIAL_ACTIVITIES),
-    _useState20 = _slicedToArray(_useState19, 2),
-    activities = _useState20[0],
-    setActivities = _useState20[1];
-  var _useState21 = (0, _react.useState)(false),
-    _useState22 = _slicedToArray(_useState21, 2),
-    loadingHistory = _useState22[0],
-    setLoadingHistory = _useState22[1];
-  var _useState23 = (0, _react.useState)(null),
-    _useState24 = _slicedToArray(_useState23, 2),
-    selectedReport = _useState24[0],
-    setSelectedReport = _useState24[1];
-  var _useState25 = (0, _react.useState)(null),
-    _useState26 = _slicedToArray(_useState25, 2),
-    copiedHex = _useState26[0],
-    setCopiedHex = _useState26[1];
-  var _useState27 = (0, _react.useState)(null),
-    _useState28 = _slicedToArray(_useState27, 2),
-    toastMessage = _useState28[0],
-    setToastMessage = _useState28[1];
-  var _useState29 = (0, _react.useState)({
+  var _useState11 = (0, _react.useState)([]),
+    _useState12 = _slicedToArray(_useState11, 2),
+    activities = _useState12[0],
+    setActivities = _useState12[1];
+  var _useState13 = (0, _react.useState)(false),
+    _useState14 = _slicedToArray(_useState13, 2),
+    loadingHistory = _useState14[0],
+    setLoadingHistory = _useState14[1];
+  var _useState15 = (0, _react.useState)(null),
+    _useState16 = _slicedToArray(_useState15, 2),
+    selectedReport = _useState16[0],
+    setSelectedReport = _useState16[1];
+  var _useState17 = (0, _react.useState)(null),
+    _useState18 = _slicedToArray(_useState17, 2),
+    toastMessage = _useState18[0],
+    setToastMessage = _useState18[1];
+  var _useState19 = (0, _react.useState)({
       headerStyle: 'Logotipo + CRMV Centralizado',
       gridColumns: '2 colunas (6 fotos por página)',
       autoCalipers: true
     }),
-    _useState30 = _slicedToArray(_useState29, 2),
-    layoutConfig = _useState30[0],
-    setLayoutConfig = _useState30[1];
+    _useState20 = _slicedToArray(_useState19, 2),
+    layoutConfig = _useState20[0],
+    setLayoutConfig = _useState20[1];
   var showToast = (0, _react.useCallback)(function (msg) {
     setToastMessage(msg);
     setTimeout(function () {
@@ -203,11 +152,17 @@ function App() {
     return _regeneratorRuntime().wrap(function _callee$(_context) {
       while (1) switch (_context.prev = _context.next) {
         case 0:
+          if (usuario) {
+            _context.next = 2;
+            break;
+          }
+          return _context.abrupt("return");
+        case 2:
           setLoadingHistory(true);
-          _context.prev = 1;
-          _context.next = 4;
+          _context.prev = 3;
+          _context.next = 6;
           return _api.api.getHistorico();
-        case 4:
+        case 6:
           res = _context.sent;
           exames = Array.isArray(res.exames) ? res.exames : [];
           cirurgias = Array.isArray(res.cirurgias) ? res.cirurgias : [];
@@ -247,53 +202,32 @@ function App() {
           combined = [].concat(_toConsumableArray(mappedExames), _toConsumableArray(mappedCirurgias)).sort(function (a, b) {
             return b.timestamp - a.timestamp;
           });
-          if (combined.length > 0) {
-            setActivities([].concat(_toConsumableArray(combined), INITIAL_ACTIVITIES));
-          }
-          _context.next = 15;
+          setActivities(combined);
+          _context.next = 18;
           break;
-        case 13:
-          _context.prev = 13;
-          _context.t0 = _context["catch"](1);
         case 15:
           _context.prev = 15;
-          setLoadingHistory(false);
-          return _context.finish(15);
+          _context.t0 = _context["catch"](3);
+          setActivities([]);
         case 18:
+          _context.prev = 18;
+          setLoadingHistory(false);
+          return _context.finish(18);
+        case 21:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[1, 13, 15, 18]]);
-  })), []);
+    }, _callee, null, [[3, 15, 18, 21]]);
+  })), [usuario]);
   (0, _react.useEffect)(function () {
-    carregarHistoricoServidor();
-  }, [carregarHistoricoServidor, usuario]);
-  var handleCopyHex = function handleCopyHex(hex) {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(hex);
+    if (usuario) {
+      carregarHistoricoServidor();
     }
-    setCopiedHex(hex);
-    showToast("C\xF3digo ".concat(hex, " copiado!"));
-    setTimeout(function () {
-      return setCopiedHex(null);
-    }, 1800);
-  };
+  }, [carregarHistoricoServidor, usuario]);
   var openFromProfileMenu = function openFromProfileMenu(tab) {
-    var targetDevice = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
     setActiveNav('configuracoes');
     setSettingsTab(tab);
     setProfileMenuOpen(false);
-    if (targetDevice) {
-      setDeviceView(targetDevice);
-    } else if (deviceView === 'prancha' || deviceView === 'specs') {
-      setDeviceView('auto');
-    }
-    var titles = {
-      perfil: "Meu perfil (".concat(userProfile.name, ")"),
-      assinatura: 'Plano e assinatura (Vetaro Pro IA)',
-      preferencias: 'Configurações do Sistema & IA'
-    };
-    showToast("Tela aberta: ".concat(titles[tab]));
   };
   var handleAddActivity = function handleAddActivity(newAct) {
     setActivities(function (prev) {
@@ -320,54 +254,41 @@ function App() {
       return _ref2.apply(this, arguments);
     };
   }();
-  if (showLoginModal) {
+  if (carregandoSessao) {
+    return /*#__PURE__*/_react["default"].createElement("div", {
+      style: {
+        fontFamily: "'Manrope', sans-serif"
+      },
+      className: "min-h-screen flex items-center justify-center ".concat(darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]')
+    }, /*#__PURE__*/_react["default"].createElement("div", {
+      className: "flex flex-col items-center gap-3"
+    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
+      size: 38,
+      dark: darkMode
+    }), /*#__PURE__*/_react["default"].createElement("p", {
+      className: "text-xs font-bold text-slate-400 animate-pulse"
+    }, "Verificando sess\xE3o...")));
+  }
+  if (!usuario) {
     return /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_LoginPage["default"], {
       darkMode: darkMode,
       setDarkMode: setDarkMode,
       ssoConfig: ssoConfig,
-      onGoogleCredential: /*#__PURE__*/function () {
-        var _ref3 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(cred) {
-          return _regeneratorRuntime().wrap(function _callee3$(_context3) {
-            while (1) switch (_context3.prev = _context3.next) {
-              case 0:
-                _context3.next = 2;
-                return loginComGoogleCredential(cred);
-              case 2:
-                setShowLoginModal(false);
-              case 3:
-              case "end":
-                return _context3.stop();
-            }
-          }, _callee3);
-        }));
-        return function (_x2) {
-          return _ref3.apply(this, arguments);
-        };
-      }(),
-      onEnterDemo: function onEnterDemo() {
-        entrarModoDemonstracao();
-        setShowLoginModal(false);
-        showToast('Modo interativo Vetaro ativado!');
-      },
+      onGoogleCredential: loginComGoogleCredential,
       onToast: showToast
     }), /*#__PURE__*/_react["default"].createElement(_Toast["default"], {
       message: toastMessage
     }));
   }
-  var availableWidth = Math.max(screenWidth - 24, 300);
-  var boardZoom = fitToPhone && screenWidth < 1200 ? Math.min(1, availableWidth / 1180) : 1;
-  var desktopZoom = fitToPhone && screenWidth < 1160 ? Math.min(1, availableWidth / 1120) : 1;
-  var tabletZoom = fitToPhone && screenWidth < 860 ? Math.min(1, availableWidth / 820) : 1;
-  var isAutoMobile = screenWidth < 768;
-  var isAutoTablet = screenWidth >= 768 && screenWidth < 1024;
+  var isMobile = screenWidth < 768;
+  var isTablet = screenWidth >= 768 && screenWidth < 1024;
+  var podeEmitir = usuario.podeGerarLaudos || usuario.podeGerarCirurgia || usuario.role === 'admin' || usuario.role === 'veterinario';
   var renderMainScreenContent = function renderMainScreenContent() {
-    var isTabletLayout = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-    var isMobileLayout = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
     if (activeNav === 'inicio') {
       return /*#__PURE__*/_react["default"].createElement(_DashboardHome["default"], {
         darkMode: darkMode,
-        isTabletLayout: isTabletLayout,
-        isMobileLayout: isMobileLayout,
+        isTabletLayout: isTablet,
+        isMobileLayout: isMobile,
         activities: activities,
         loadingHistory: loadingHistory,
         onRefreshHistory: carregarHistoricoServidor,
@@ -382,7 +303,7 @@ function App() {
     if (activeNav === 'ultrassom') {
       return /*#__PURE__*/_react["default"].createElement(_UltrasoundGenerator["default"], {
         darkMode: darkMode,
-        userProfile: userProfile,
+        userProfile: usuario,
         layoutConfig: layoutConfig,
         setLayoutConfig: setLayoutConfig,
         onOpenProfile: function onOpenProfile() {
@@ -398,7 +319,7 @@ function App() {
     if (activeNav === 'relatorio') {
       return /*#__PURE__*/_react["default"].createElement(_SurgeryGenerator["default"], {
         darkMode: darkMode,
-        userProfile: userProfile,
+        userProfile: usuario,
         layoutConfig: layoutConfig,
         onOpenProfile: function onOpenProfile() {
           return openFromProfileMenu('perfil');
@@ -413,10 +334,10 @@ function App() {
     return /*#__PURE__*/_react["default"].createElement(_SettingsPage["default"], {
       darkMode: darkMode,
       setDarkMode: setDarkMode,
-      isMobileLayout: isMobileLayout,
+      isMobileLayout: isMobile,
       settingsTab: settingsTab,
       setSettingsTab: setSettingsTab,
-      userProfile: userProfile,
+      userProfile: usuario,
       setUserProfile: atualizarUsuarioLocal,
       activitiesCount: activities.length,
       onOpenAdminModal: function onOpenAdminModal() {
@@ -425,164 +346,6 @@ function App() {
       onToast: showToast
     });
   };
-  var renderMiniDesktopForBoard = function renderMiniDesktopForBoard(isDarkTheme) {
-    return /*#__PURE__*/_react["default"].createElement("div", {
-      className: "rounded-2xl border overflow-hidden shadow-xl flex ".concat(isDarkTheme ? 'bg-[#0A141D] border-slate-800 text-white' : 'bg-[#F8FAFC] border-slate-200 text-[#0A141D]'),
-      style: {
-        width: '550px',
-        height: '355px'
-      }
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "w-36 shrink-0 border-r p-3.5 flex flex-col justify-between ".concat(isDarkTheme ? 'bg-[#0C1720] border-slate-800' : 'bg-white border-slate-200')
-    }, /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center gap-1.5 mb-3"
-    }, /*#__PURE__*/_react["default"].createElement("span", {
-      className: "w-2 h-2 rounded-full bg-[#FF5F56]"
-    }), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "w-2 h-2 rounded-full bg-[#FFBD2E]"
-    }), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "w-2 h-2 rounded-full bg-[#27C93F]"
-    })), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "mb-4"
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
-      size: 20,
-      dark: isDarkTheme,
-      textSize: "text-base"
-    })), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "space-y-1 text-[11px] font-semibold"
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        setActiveNav('inicio');
-        setDeviceView('desktop');
-      },
-      className: "flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer relative ".concat(isDarkTheme ? 'bg-[#0D3131] text-[#00D296]' : 'bg-[#DDF7F0] text-[#0D5C56]')
-    }, /*#__PURE__*/_react["default"].createElement("span", {
-      className: "absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-[#00D296]"
-    }), /*#__PURE__*/_react["default"].createElement(_lucideReact.Home, {
-      className: "w-3.5 h-3.5"
-    }), /*#__PURE__*/_react["default"].createElement("span", null, "In\xEDcio")), /*#__PURE__*/_react["default"].createElement("div", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        setActiveNav('ultrassom');
-        setDeviceView('desktop');
-      },
-      className: "flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer opacity-75 hover:opacity-100"
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
-      className: "w-3.5 h-3.5"
-    }), /*#__PURE__*/_react["default"].createElement("span", null, "Ultrassom")), /*#__PURE__*/_react["default"].createElement("div", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        setActiveNav('relatorio');
-        setDeviceView('desktop');
-      },
-      className: "flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer opacity-75 hover:opacity-100"
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-      className: "w-3.5 h-3.5"
-    }), /*#__PURE__*/_react["default"].createElement("span", null, "Relat\xF3rio")), /*#__PURE__*/_react["default"].createElement("div", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        openFromProfileMenu('preferencias', 'desktop');
-      },
-      className: "flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer opacity-75 hover:opacity-100"
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Settings, {
-      className: "w-3.5 h-3.5"
-    }), /*#__PURE__*/_react["default"].createElement("span", null, "Configura\xE7\xF5es")))), /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-[9px] font-semibold ".concat(isDarkTheme ? 'border-slate-800 bg-[#0F1C26] text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600')
-    }, /*#__PURE__*/_react["default"].createElement("span", null, "? Ajuda e suporte"), /*#__PURE__*/_react["default"].createElement("span", null, "\u2197")), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[8px] text-slate-400 mt-1 px-1"
-    }, "v1.0.0"))), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex-1 p-4 flex flex-col justify-between"
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-start justify-between"
-    }, /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("h3", {
-      className: "font-extrabold text-sm"
-    }, "Ol\xE1, ", userProfile.greetingName, "!"), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[10px] ".concat(isDarkTheme ? 'text-slate-400' : 'text-slate-500')
-    }, "Tudo pronto para otimizar seu trabalho hoje?")), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center gap-2"
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Bell, {
-      className: "w-3.5 h-3.5"
-    }), /*#__PURE__*/_react["default"].createElement("span", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        setProfileMenuOpen(true);
-        setDeviceView('desktop');
-      },
-      className: "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold cursor-pointer ".concat(isDarkTheme ? 'bg-white text-[#0A141D]' : 'bg-[#1E2D3D] text-white')
-    }, userProfile.initials), /*#__PURE__*/_react["default"].createElement(_lucideReact.ChevronDown, {
-      className: "w-3 h-3"
-    }))), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "grid grid-cols-2 gap-3 my-1.5"
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "relative rounded-xl p-3 overflow-hidden border ".concat(isDarkTheme ? 'bg-gradient-to-br from-[#132530] to-[#0E3130] border-teal-500/20' : 'bg-gradient-to-br from-[#E4F8F2] to-[#D5F4EC] border-[#C5EFE3]')
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.CardWaveBackground, {
-      dark: isDarkTheme
-    }), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "relative z-10"
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "w-7 h-7 rounded-lg flex items-center justify-center mb-1.5 ".concat(isDarkTheme ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#C4F1E3] text-[#00A878]')
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
-      className: "w-4 h-4"
-    })), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "font-extrabold text-xs"
-    }, "Ultrassom"), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[9px] opacity-80 my-1"
-    }, "Envie suas imagens e receba um laudo completo com IA."), /*#__PURE__*/_react["default"].createElement("span", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        setActiveNav('ultrassom');
-        setDeviceView('desktop');
-      },
-      className: "mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ".concat(isDarkTheme ? 'bg-[#00D296] text-[#062E2B]' : 'bg-[#0D5C56] text-white')
-    }, "Come\xE7ar agora \u2192"))), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "relative rounded-xl p-3 overflow-hidden border ".concat(isDarkTheme ? 'bg-gradient-to-br from-[#13232F] to-[#0F2C30] border-teal-500/20' : 'bg-gradient-to-br from-[#EAF6F6] to-[#DDF1F0] border-[#D0EAE8]')
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.CardWaveBackground, {
-      dark: isDarkTheme
-    }), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "relative z-10"
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "w-7 h-7 rounded-lg flex items-center justify-center mb-1.5 ".concat(isDarkTheme ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#CBEFE4] text-[#0D5C56]')
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-      className: "w-4 h-4"
-    })), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "font-extrabold text-xs"
-    }, "Relat\xF3rio"), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[9px] opacity-80 my-1"
-    }, "Envie seu documento e gere um relat\xF3rio personalizado."), /*#__PURE__*/_react["default"].createElement("span", {
-      onClick: function onClick() {
-        setDarkMode(isDarkTheme);
-        setActiveNav('relatorio');
-        setDeviceView('desktop');
-      },
-      className: "mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ".concat(isDarkTheme ? 'bg-[#00D296] text-[#062E2B]' : 'bg-[#0D5C56] text-white')
-    }, "Come\xE7ar agora \u2192")))), /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center justify-between mb-1"
-    }, /*#__PURE__*/_react["default"].createElement("span", {
-      className: "font-extrabold text-[10px]"
-    }, "Atividade recente"), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "text-[9px] font-bold ".concat(isDarkTheme ? 'text-[#00D296]' : 'text-[#0D5C56]')
-    }, "Ver todos \u2192")), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "rounded-lg border divide-y text-[9px] ".concat(isDarkTheme ? 'bg-[#0E1A24] border-slate-800 divide-slate-800' : 'bg-white border-slate-200 divide-slate-100')
-    }, activities.slice(0, 3).map(function (act) {
-      return /*#__PURE__*/_react["default"].createElement("div", {
-        key: act.id,
-        className: "px-2.5 py-1.5 flex items-center justify-between"
-      }, /*#__PURE__*/_react["default"].createElement("span", {
-        className: "font-bold flex items-center gap-1.5 truncate"
-      }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-        className: "w-3 h-3 opacity-70 shrink-0"
-      }), /*#__PURE__*/_react["default"].createElement("span", {
-        className: "truncate"
-      }, act.title)), /*#__PURE__*/_react["default"].createElement("span", {
-        className: "text-slate-400 shrink-0"
-      }, act.date), /*#__PURE__*/_react["default"].createElement("span", {
-        className: "px-2 py-0.5 rounded-full text-[8px] font-bold shrink-0 ".concat(isDarkTheme ? 'bg-[#0D4A3E] text-[#2CE5B1]' : 'bg-[#D3F7E9] text-[#0D684E]')
-      }, act.status), /*#__PURE__*/_react["default"].createElement(_lucideReact.MoreHorizontal, {
-        className: "w-3 h-3 text-slate-400 shrink-0"
-      }));
-    })))));
-  };
   return /*#__PURE__*/_react["default"].createElement("div", {
     style: {
       fontFamily: "'Manrope', sans-serif"
@@ -590,167 +353,19 @@ function App() {
     onClick: function onClick() {
       return profileMenuOpen && setProfileMenuOpen(false);
     },
-    className: "min-h-screen transition-colors duration-300 flex flex-col ".concat(darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F1F6F8] text-[#0A141D]')
-  }, showStudioBar ? /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-full border-b px-3 sm:px-6 py-2.5 flex flex-col gap-2 z-40 sticky top-0 backdrop-blur-md ".concat(darkMode ? 'bg-[#070E14]/95 border-slate-800 text-slate-200' : 'bg-white/95 border-slate-200 text-[#0A141D]')
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex flex-wrap items-center justify-between gap-2"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
-    size: 24,
-    dark: darkMode,
-    textSize: "text-base"
-  }), /*#__PURE__*/_react["default"].createElement("span", {
-    className: "text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#00D296]/15 text-[#00D296]"
-  }, "Vetaro SaaS \u2022 React + PostgreSQL")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-1.5"
-  }, !usuario || usuario.isDemo ? /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return setShowLoginModal(true);
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-[#00D296]/40 text-[#00D296] hover:bg-[#00D296]/10"
-  }, "Login Google SSO") : null, screenWidth < 1160 && deviceView !== 'auto' && deviceView !== 'mobile' && deviceView !== 'specs' && /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return setFitToPhone(!fitToPhone);
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1 shadow-xs"
-  }, fitToPhone ? /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_lucideReact.ZoomIn, {
-    className: "w-3.5 h-3.5"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Ver Tamanho 100%")) : /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_lucideReact.ZoomOut, {
-    className: "w-3.5 h-3.5"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Encaixar na Tela"))), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return setDarkMode(!darkMode);
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 ".concat(darkMode ? 'border-slate-700 bg-slate-800 text-[#00D296]' : 'border-slate-300 bg-slate-100 text-[#0D5C56]')
-  }, darkMode ? /*#__PURE__*/_react["default"].createElement(_lucideReact.Sun, {
-    className: "w-3.5 h-3.5"
-  }) : /*#__PURE__*/_react["default"].createElement(_lucideReact.Moon, {
-    className: "w-3.5 h-3.5"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, darkMode ? 'Claro' : 'Escuro')), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      setDeviceView('auto');
-      setShowStudioBar(false);
-    },
-    title: "Ocultar barra de dispositivos e usar em tela cheia",
-    className: "px-2 py-1 rounded-lg text-[11px] font-bold text-slate-400 hover:text-white"
-  }, "Tela Cheia \u2715"))), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar"
-  }, [{
-    id: 'auto',
-    label: '⚡ App Responsivo (Produção)',
-    icon: _lucideReact.Layout
-  }, {
-    id: 'prancha',
-    label: '1. Prancha Completa (Foto 1 + 2)',
-    icon: _lucideReact.Palette
-  }, {
-    id: 'desktop',
-    label: '2. Computador (Desktop)',
-    icon: _lucideReact.Monitor
-  }, {
-    id: 'tablet',
-    label: '3. Tablet (iPad)',
-    icon: _lucideReact.Tablet
-  }, {
-    id: 'mobile',
-    label: '4. Celular (App)',
-    icon: _lucideReact.Smartphone
-  }, {
-    id: 'specs',
-    label: '5. Guia & Medidas (Dev)',
-    icon: _lucideReact.Sliders
-  }].map(function (item) {
-    var Icon = item.icon;
-    var active = deviceView === item.id;
-    return /*#__PURE__*/_react["default"].createElement("button", {
-      key: item.id,
-      type: "button",
-      onClick: function onClick() {
-        return setDeviceView(item.id);
-      },
-      className: "px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition flex items-center gap-1.5 shrink-0 ".concat(active ? 'bg-[#00D296] text-[#062E2B] shadow-xs' : darkMode ? 'bg-[#111F2B] text-slate-300 hover:bg-slate-800' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
-    }, /*#__PURE__*/_react["default"].createElement(Icon, {
-      className: "w-3.5 h-3.5"
-    }), /*#__PURE__*/_react["default"].createElement("span", null, item.label));
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-1.5 overflow-x-auto pt-0.5 no-scrollbar"
-  }, /*#__PURE__*/_react["default"].createElement("span", {
-    className: "text-[10px] font-extrabold uppercase tracking-wider text-slate-400 shrink-0 mr-1"
-  }, "Telas:"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      setActiveNav('inicio');
-      if (deviceView === 'prancha' || deviceView === 'specs') setDeviceView('auto');
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ".concat(activeNav === 'inicio' && deviceView !== 'prancha' ? 'bg-[#0D5C56] text-white' : 'bg-slate-500/10 text-slate-400')
-  }, "In\xEDcio (Dashboard)"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      setActiveNav('ultrassom');
-      if (deviceView === 'prancha' || deviceView === 'specs') setDeviceView('auto');
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ".concat(activeNav === 'ultrassom' && deviceView !== 'prancha' ? 'bg-[#00D296] text-[#062E2B]' : 'bg-slate-500/10 text-slate-400')
-  }, "\u2728 Ultrassom (Mindray IA)"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      setActiveNav('relatorio');
-      if (deviceView === 'prancha' || deviceView === 'specs') setDeviceView('auto');
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ".concat(activeNav === 'relatorio' && deviceView !== 'prancha' ? 'bg-[#00D296] text-[#062E2B]' : 'bg-slate-500/10 text-slate-400')
-  }, "\u2728 Relat\xF3rio Cir\xFArgico IA"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick(e) {
-      e.stopPropagation();
-      if (deviceView === 'prancha' || deviceView === 'specs') setDeviceView('auto');
-      setProfileMenuOpen(!profileMenuOpen);
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 border ".concat(profileMenuOpen ? 'bg-[#00D296] text-[#062E2B] border-[#00D296]' : 'border-[#00D296]/40 text-[#00D296]')
-  }, "Menu Perfil ", userProfile.initials, " \u25BE"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return openFromProfileMenu('perfil');
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ".concat(activeNav === 'configuracoes' && settingsTab === 'perfil' ? 'bg-[#0D5C56] text-white' : 'bg-slate-500/10 text-slate-400')
-  }, "Meu Perfil"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return openFromProfileMenu('assinatura');
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ".concat(activeNav === 'configuracoes' && settingsTab === 'assinatura' ? 'bg-[#0D5C56] text-white' : 'bg-slate-500/10 text-slate-400')
-  }, "Plano e Assinatura"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return openFromProfileMenu('preferencias');
-    },
-    className: "px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ".concat(activeNav === 'configuracoes' && settingsTab === 'preferencias' ? 'bg-[#0D5C56] text-white' : 'bg-slate-500/10 text-slate-400')
-  }, "Configura\xE7\xF5es IA"))) : /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return setShowStudioBar(true);
-    },
-    className: "fixed bottom-4 left-4 z-40 px-3 py-1.5 rounded-full text-[11px] font-extrabold bg-[#0D5C56] text-white border border-[#00D296]/40 shadow-lg flex items-center gap-1.5 opacity-80 hover:opacity-100 transition"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Palette, {
-    className: "w-3.5 h-3.5 text-[#00D296]"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Design System / Telas")), deviceView === 'auto' && /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 flex ".concat(isAutoMobile ? 'flex-col justify-between' : 'flex-row', " min-h-0")
-  }, !isAutoMobile && /*#__PURE__*/_react["default"].createElement(_Sidebar["default"], {
+    className: "min-h-screen transition-colors duration-300 flex ".concat(isMobile ? 'flex-col justify-between' : 'flex-row', " ").concat(darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]')
+  }, !isMobile && /*#__PURE__*/_react["default"].createElement(_Sidebar["default"], {
     darkMode: darkMode,
     activeNav: activeNav,
     setActiveNav: setActiveNav,
-    compact: isAutoTablet,
+    compact: isTablet,
     showWindowDots: false,
     onHelpClick: function onHelpClick() {
       return showToast('Suporte Técnico Veterinário Vetaro disponível!');
     }
   }), /*#__PURE__*/_react["default"].createElement("main", {
-    className: "flex-1 ".concat(isAutoMobile ? 'p-4 pb-20' : isAutoTablet ? 'p-6' : 'p-8 max-w-6xl', " flex flex-col relative overflow-y-auto")
-  }, isAutoMobile ? /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement("div", {
+    className: "flex-1 ".concat(isMobile ? 'p-4 pb-24' : isTablet ? 'p-6' : 'p-8 max-w-6xl', " flex flex-col relative overflow-y-auto")
+  }, isMobile ? /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex items-center justify-between mb-5 relative"
   }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
     size: 26,
@@ -775,11 +390,11 @@ function App() {
       setProfileMenuOpen(!profileMenuOpen);
     },
     className: "w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center ".concat(darkMode ? 'bg-white text-[#0A141D]' : 'bg-[#1E2D3D] text-white')
-  }, userProfile.initials)), profileMenuOpen && /*#__PURE__*/_react["default"].createElement(_ProfileDropdown["default"], {
+  }, usuario.initials)), profileMenuOpen && /*#__PURE__*/_react["default"].createElement(_ProfileDropdown["default"], {
     isStandalone: false,
     darkMode: darkMode,
     setDarkMode: setDarkMode,
-    userProfile: userProfile,
+    userProfile: usuario,
     activeNav: activeNav,
     settingsTab: settingsTab,
     onSelectTab: openFromProfileMenu,
@@ -792,12 +407,12 @@ function App() {
     className: "mb-5"
   }, /*#__PURE__*/_react["default"].createElement("h2", {
     className: "text-2xl font-extrabold"
-  }, "Ol\xE1, ", userProfile.greetingName, "!"), /*#__PURE__*/_react["default"].createElement("p", {
+  }, "Ol\xE1, ", usuario.greetingName, "!"), /*#__PURE__*/_react["default"].createElement("p", {
     className: "text-xs text-slate-400 mt-0.5"
-  }, "Tudo pronto para otimizar seu trabalho hoje?")), renderMainScreenContent(false, true)) : /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_TopHeader["default"], {
+  }, "Tudo pronto para otimizar seu trabalho hoje?"))) : /*#__PURE__*/_react["default"].createElement(_TopHeader["default"], {
     darkMode: darkMode,
     setDarkMode: setDarkMode,
-    userProfile: userProfile,
+    userProfile: usuario,
     activeNav: activeNav,
     settingsTab: settingsTab,
     profileMenuOpen: profileMenuOpen,
@@ -811,480 +426,22 @@ function App() {
     onBellClick: function onBellClick() {
       return showToast('Nenhuma notificação pendente.');
     },
-    compact: isAutoTablet
-  }), renderMainScreenContent(isAutoTablet, false))), isAutoMobile && /*#__PURE__*/_react["default"].createElement("div", {
+    compact: isTablet
+  }), !podeEmitir && /*#__PURE__*/_react["default"].createElement("div", {
+    className: "mb-6 p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3 text-xs"
+  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.ShieldAlert, {
+    className: "w-5 h-5 text-amber-400 shrink-0 mt-0.5"
+  }), /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("p", {
+    className: "font-extrabold text-amber-300"
+  }, "Acesso em Modo de Consulta / Aguardando Libera\xE7\xE3o"), /*#__PURE__*/_react["default"].createElement("p", {
+    className: "mt-0.5 opacity-90"
+  }, "Voc\xEA est\xE1 conectado como ", /*#__PURE__*/_react["default"].createElement("strong", null, usuario.email), ", mas sua conta ainda n\xE3o possui permiss\xE3o para emitir laudos e relat\xF3rios oficiais."))), renderMainScreenContent()), isMobile && /*#__PURE__*/_react["default"].createElement("div", {
     className: "fixed bottom-0 left-0 right-0 z-30"
   }, /*#__PURE__*/_react["default"].createElement(_MobileTabBar["default"], {
     darkMode: darkMode,
     activeNav: activeNav,
     setActiveNav: setActiveNav
-  }))), deviceView === 'prancha' && /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 p-3 sm:p-6 overflow-x-auto"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-full overflow-x-auto pb-4 flex justify-center"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "rounded-3xl p-6 bg-[#EBF2F7] text-[#0A141D] shadow-2xl border border-slate-300 shrink-0",
-    style: {
-      width: '1150px',
-      zoom: boardZoom
-    }
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "grid grid-cols-2 gap-6 mb-6"
-  }, renderMiniDesktopForBoard(false), renderMiniDesktopForBoard(true)), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "grid grid-cols-12 gap-5 items-stretch"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "col-span-5 rounded-[26px] border-[10px] border-[#151D26] bg-[#F8FAFC] text-[#0A141D] shadow-xl flex overflow-hidden"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-32 bg-white border-r border-slate-200 p-3 flex flex-col justify-between shrink-0"
-  }, /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "mb-4"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
-    size: 18,
-    dark: false,
-    textSize: "text-sm"
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "space-y-1 text-[10px] font-semibold"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#DDF7F0] text-[#0D5C56] relative"
-  }, /*#__PURE__*/_react["default"].createElement("span", {
-    className: "absolute left-0 top-1 bottom-1 w-0.5 bg-[#00D296]"
-  }), /*#__PURE__*/_react["default"].createElement(_lucideReact.Home, {
-    className: "w-3 h-3"
-  }), " In\xEDcio"), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 px-2 py-1.5 text-slate-600"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
-    className: "w-3 h-3"
-  }), " Ultrassom"), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 px-2 py-1.5 text-slate-600"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-    className: "w-3 h-3"
-  }), " Relat\xF3rio"), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 px-2 py-1.5 text-slate-600"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Settings, {
-    className: "w-3 h-3"
-  }), " Configura\xE7\xF5es"))), /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "px-2 py-1 rounded border border-slate-200 text-[8px] font-semibold flex items-center justify-between"
-  }, /*#__PURE__*/_react["default"].createElement("span", null, "? Ajuda e suporte"), /*#__PURE__*/_react["default"].createElement("span", null, "\u2197")), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-[8px] text-slate-400 mt-1"
-  }, "v1.0.0"))), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 p-4 flex flex-col justify-between"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-start justify-between mb-2"
-  }, /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("h4", {
-    className: "font-extrabold text-sm"
-  }, "Ol\xE1, ", userProfile.greetingName, "!"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-[10px] text-slate-500"
-  }, "Tudo pronto para otimizar seu trabalho hoje?")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-1.5"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Bell, {
-    className: "w-3.5 h-3.5"
-  }), /*#__PURE__*/_react["default"].createElement("span", {
-    className: "w-6 h-6 rounded-full bg-[#1E2D3D] text-white text-[9px] font-bold flex items-center justify-center"
-  }, userProfile.initials), /*#__PURE__*/_react["default"].createElement(_lucideReact.ChevronDown, {
-    className: "w-3 h-3"
-  }))), /*#__PURE__*/_react["default"].createElement("div", {
-    onClick: function onClick() {
-      return setDeviceView('tablet');
-    },
-    className: "relative rounded-xl p-3 bg-gradient-to-r from-[#E4F8F2] to-[#D5F4EC] border border-[#C5EFE3] flex items-center gap-3 overflow-hidden my-1 cursor-pointer"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.CardWaveBackground, {
-    dark: false
-  }), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-11 h-11 rounded-xl bg-[#C4F1E3] text-[#00A878] flex items-center justify-center shrink-0 relative z-10"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
-    className: "w-6 h-6"
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "relative z-10"
-  }, /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-extrabold text-xs"
-  }, "Ultrassom"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-[9px] text-slate-600 mb-1.5"
-  }, "Envie suas imagens e receba um laudo completo com IA."), /*#__PURE__*/_react["default"].createElement("span", {
-    className: "px-3 py-1 rounded-full bg-[#0D5C56] text-white text-[9px] font-bold inline-block"
-  }, "Come\xE7ar agora \u2192"))), /*#__PURE__*/_react["default"].createElement("div", {
-    onClick: function onClick() {
-      return setDeviceView('tablet');
-    },
-    className: "relative rounded-xl p-3 bg-gradient-to-r from-[#EAF6F6] to-[#DDF1F0] border border-[#D0EAE8] flex items-center gap-3 overflow-hidden my-1 cursor-pointer"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.CardWaveBackground, {
-    dark: false
-  }), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-11 h-11 rounded-xl bg-[#CBEFE4] text-[#0D5C56] flex items-center justify-center shrink-0 relative z-10"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-    className: "w-5 h-5"
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "relative z-10"
-  }, /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-extrabold text-xs"
-  }, "Relat\xF3rio"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-[9px] text-slate-600 mb-1.5"
-  }, "Envie seu documento e gere um relat\xF3rio personalizado."), /*#__PURE__*/_react["default"].createElement("span", {
-    className: "px-3 py-1 rounded-full bg-[#0D5C56] text-white text-[9px] font-bold inline-block"
-  }, "Come\xE7ar agora \u2192"))))), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "col-span-4 grid grid-cols-2 gap-3"
-  }, [false, true].map(function (isDarkPhone, idx) {
-    return /*#__PURE__*/_react["default"].createElement("div", {
-      key: idx,
-      onClick: function onClick() {
-        setDarkMode(isDarkPhone);
-        setDeviceView('mobile');
-      },
-      className: "rounded-[28px] border-[6px] border-[#1A242F] p-3 flex flex-col justify-between shadow-lg cursor-pointer ".concat(isDarkPhone ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]')
-    }, /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center justify-between text-[8px] font-bold mb-2"
-    }, /*#__PURE__*/_react["default"].createElement("span", null, "9:41"), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "w-8 h-2 rounded-full bg-black"
-    }), /*#__PURE__*/_react["default"].createElement("span", null, "5G")), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center justify-between mb-2"
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
-      size: 16,
-      dark: isDarkPhone,
-      textSize: "text-xs"
-    }), /*#__PURE__*/_react["default"].createElement(_lucideReact.Bell, {
-      className: "w-3 h-3"
-    })), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "font-extrabold text-xs"
-    }, "Ol\xE1, ", userProfile.greetingName, "!"), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[8px] opacity-70 mb-2"
-    }, "Tudo pronto para otimizar seu trabalho hoje?"), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "space-y-2"
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "p-2.5 rounded-xl border ".concat(isDarkPhone ? 'bg-[#132530] border-teal-500/20' : 'bg-[#E4F8F2] border-[#C5EFE3]')
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "w-6 h-6 rounded-lg flex items-center justify-center mb-1 ".concat(isDarkPhone ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#C4F1E3] text-[#00A878]')
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
-      className: "w-3.5 h-3.5"
-    })), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "font-extrabold text-[10px]"
-    }, "Ultrassom"), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[8px] opacity-80 mb-1.5"
-    }, "Envie suas imagens e receba um laudo completo com IA."), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "px-2.5 py-0.5 rounded-full text-[8px] font-bold inline-block ".concat(isDarkPhone ? 'bg-[#00D296] text-[#062E2B]' : 'bg-[#0D5C56] text-white')
-    }, "Come\xE7ar agora \u2192")), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "p-2.5 rounded-xl border ".concat(isDarkPhone ? 'bg-[#13232F] border-teal-500/20' : 'bg-[#EAF6F6] border-[#D0EAE8]')
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "w-6 h-6 rounded-lg flex items-center justify-center mb-1 ".concat(isDarkPhone ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#CBEFE4] text-[#0D5C56]')
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-      className: "w-3.5 h-3.5"
-    })), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "font-extrabold text-[10px]"
-    }, "Relat\xF3rio"), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[8px] opacity-80 mb-1.5"
-    }, "Envie seu documento e gere um relat\xF3rio personalizado."), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "px-2.5 py-0.5 rounded-full text-[8px] font-bold inline-block ".concat(isDarkPhone ? 'bg-[#00D296] text-[#062E2B]' : 'bg-[#0D5C56] text-white')
-    }, "Come\xE7ar agora \u2192")))), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "pt-2 border-t flex justify-around text-[7px] font-bold text-slate-400 ".concat(isDarkPhone ? 'border-slate-800' : 'border-slate-200')
-    }, /*#__PURE__*/_react["default"].createElement("span", {
-      className: "text-[#00D296] flex flex-col items-center"
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Home, {
-      className: "w-3 h-3"
-    }), " In\xEDcio"), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "flex flex-col items-center"
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-      className: "w-3 h-3"
-    }), " Hist\xF3rico"), /*#__PURE__*/_react["default"].createElement("span", {
-      className: "flex flex-col items-center"
-    }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Settings, {
-      className: "w-3 h-3"
-    }), " Configura\xE7\xF5es")));
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "col-span-3 flex flex-col justify-between p-2"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "py-1"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
-    size: 44,
-    dark: false,
-    textSize: "text-4xl"
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2.5 my-2"
-  }, _VetaroIcons.BRAND_COLORS.map(function (c) {
-    return /*#__PURE__*/_react["default"].createElement("div", {
-      key: c.hex,
-      onClick: function onClick() {
-        return handleCopyHex(c.hex);
-      },
-      title: "Copiar ".concat(c.hex),
-      className: "w-10 h-10 rounded-xl shadow-sm border border-slate-300 cursor-pointer hover:scale-105 transition",
-      style: {
-        backgroundColor: c.hex
-      }
-    });
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "py-2 border-y border-slate-300"
-  }, /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-bold text-sm text-[#0A141D]"
-  }, "Manrope"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs font-medium text-[#637692] mt-0.5"
-  }, "Aa Bb Cc 0123456789")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center justify-between px-1 py-2 text-[#0A141D]"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Home, {
-    className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
-    className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement(_lucideReact.FileText, {
-    className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement(_lucideReact.Settings, {
-    className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement(_lucideReact.Bell, {
-    className: "w-5 h-5"
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "px-4 py-3 rounded-2xl bg-[#E1ECEE] flex items-center justify-between"
-  }, /*#__PURE__*/_react["default"].createElement("span", {
-    className: "font-bold text-xs text-[#0A141D]"
-  }, "Tecnologia que cuida."), /*#__PURE__*/_react["default"].createElement("span", {
-    className: "w-8 h-0.5 bg-[#00D296] rounded-full"
-  })))))), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center max-w-6xl mx-auto"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "lg:col-span-4 flex flex-col items-center"
-  }, /*#__PURE__*/_react["default"].createElement("span", {
-    className: "text-xs font-extrabold uppercase tracking-wider text-[#00D296] mb-2"
-  }, "Menu da 2\xAA Foto (Toque nos itens para abrir!)"), /*#__PURE__*/_react["default"].createElement(_ProfileDropdown["default"], {
-    isStandalone: true,
-    darkMode: darkMode,
-    setDarkMode: setDarkMode,
-    userProfile: userProfile,
-    activeNav: activeNav,
-    settingsTab: settingsTab,
-    onSelectTab: openFromProfileMenu,
-    onOpenAdminModal: function onOpenAdminModal() {
-      return setAdminModalOpen(true);
-    },
-    onLogout: handleLogout
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "lg:col-span-8 space-y-4"
-  }, /*#__PURE__*/_react["default"].createElement("h3", {
-    className: "text-base sm:text-xl font-extrabold"
-  }, "Telas geradas ao clicar no menu de perfil (Computador, Tablet e Celular):"), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-3 gap-3"
-  }, /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return openFromProfileMenu('perfil', 'desktop');
-    },
-    className: "p-4 rounded-2xl border text-left transition hover:border-[#00D296] ".concat(darkMode ? 'bg-[#101E29] border-slate-800' : 'bg-white border-slate-200')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.User, {
-    className: "w-6 h-6 text-[#00D296] mb-2"
-  }), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-extrabold text-sm"
-  }, "1. Meu Perfil"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 mt-1"
-  }, "Edi\xE7\xE3o do CRMV, cl\xEDnica, logotipo e assinatura digital nos laudos.")), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return openFromProfileMenu('assinatura', 'desktop');
-    },
-    className: "p-4 rounded-2xl border text-left transition hover:border-[#00D296] ".concat(darkMode ? 'bg-[#101E29] border-slate-800' : 'bg-white border-slate-200')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.CreditCard, {
-    className: "w-6 h-6 text-[#00D296] mb-2"
-  }), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-extrabold text-sm"
-  }, "2. Plano e Assinatura"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 mt-1"
-  }, "Detalhes do plano Vetaro Pro IA ilimitado, m\xE9tricas de uso mensal e faturas.")), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return openFromProfileMenu('preferencias', 'desktop');
-    },
-    className: "p-4 rounded-2xl border text-left transition hover:border-[#00D296] ".concat(darkMode ? 'bg-[#101E29] border-slate-800' : 'bg-white border-slate-200')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Settings, {
-    className: "w-6 h-6 text-[#00D296] mb-2"
-  }), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-extrabold text-sm"
-  }, "3. Configura\xE7\xF5es & IA"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 mt-1"
-  }, "Prefer\xEAncias de conclus\xE3o autom\xE1tica, transcri\xE7\xE3o de voz e Modo Claro.")))))), deviceView === 'desktop' && /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 p-2 sm:p-6 overflow-x-auto flex justify-center"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "rounded-3xl border shadow-2xl flex overflow-hidden shrink-0 transition-colors ".concat(darkMode ? 'bg-[#0A141D] border-slate-800 text-white' : 'bg-[#F8FAFC] border-slate-200 text-[#0A141D]'),
-    style: {
-      width: '1120px',
-      minHeight: '680px',
-      zoom: desktopZoom
-    }
-  }, /*#__PURE__*/_react["default"].createElement(_Sidebar["default"], {
-    darkMode: darkMode,
-    activeNav: activeNav,
-    setActiveNav: setActiveNav,
-    compact: false,
-    showWindowDots: true,
-    onHelpClick: function onHelpClick() {
-      return showToast('Suporte Técnico Veterinário Vetaro disponível!');
-    }
-  }), /*#__PURE__*/_react["default"].createElement("main", {
-    className: "flex-1 p-8 flex flex-col relative"
-  }, /*#__PURE__*/_react["default"].createElement(_TopHeader["default"], {
-    darkMode: darkMode,
-    setDarkMode: setDarkMode,
-    userProfile: userProfile,
-    activeNav: activeNav,
-    settingsTab: settingsTab,
-    profileMenuOpen: profileMenuOpen,
-    setProfileMenuOpen: setProfileMenuOpen,
-    onSelectTab: openFromProfileMenu,
-    onOpenAdminModal: function onOpenAdminModal() {
-      setProfileMenuOpen(false);
-      setAdminModalOpen(true);
-    },
-    onLogout: handleLogout,
-    onBellClick: function onBellClick() {
-      return showToast('Nenhuma notificação pendente.');
-    },
-    compact: false
-  }), renderMainScreenContent(false, false)))), deviceView === 'tablet' && /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 p-2 sm:p-6 overflow-x-auto flex justify-center"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "rounded-[34px] border-[12px] border-[#161F29] shadow-2xl flex overflow-hidden shrink-0 ".concat(darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]'),
-    style: {
-      width: '820px',
-      minHeight: '580px',
-      zoom: tabletZoom
-    }
-  }, /*#__PURE__*/_react["default"].createElement(_Sidebar["default"], {
-    darkMode: darkMode,
-    activeNav: activeNav,
-    setActiveNav: setActiveNav,
-    compact: true,
-    showWindowDots: false,
-    onHelpClick: function onHelpClick() {
-      return showToast('Suporte Técnico Veterinário Vetaro disponível!');
-    }
-  }), /*#__PURE__*/_react["default"].createElement("main", {
-    className: "flex-1 p-7 flex flex-col relative"
-  }, /*#__PURE__*/_react["default"].createElement(_TopHeader["default"], {
-    darkMode: darkMode,
-    setDarkMode: setDarkMode,
-    userProfile: userProfile,
-    activeNav: activeNav,
-    settingsTab: settingsTab,
-    profileMenuOpen: profileMenuOpen,
-    setProfileMenuOpen: setProfileMenuOpen,
-    onSelectTab: openFromProfileMenu,
-    onOpenAdminModal: function onOpenAdminModal() {
-      setProfileMenuOpen(false);
-      setAdminModalOpen(true);
-    },
-    onLogout: handleLogout,
-    onBellClick: function onBellClick() {
-      return showToast('Nenhuma notificação pendente.');
-    },
-    compact: true
-  }), renderMainScreenContent(true, false)))), deviceView === 'mobile' && /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 p-3 flex justify-center"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-full max-w-[400px] rounded-[38px] border-[8px] border-[#1A242F] shadow-2xl flex flex-col justify-between overflow-hidden ".concat(darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]')
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "p-5 flex-1 overflow-y-auto"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center justify-between text-xs font-bold mb-4 px-1"
-  }, /*#__PURE__*/_react["default"].createElement("span", null, "9:41"), /*#__PURE__*/_react["default"].createElement("span", {
-    className: "w-20 h-4 rounded-full bg-black"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "5G 100%")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center justify-between mb-5 relative"
-  }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
-    size: 26,
-    dark: darkMode,
-    textSize: "text-xl"
-  }), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2.5"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Bell, {
-    className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick(e) {
-      e.stopPropagation();
-      setProfileMenuOpen(!profileMenuOpen);
-    },
-    className: "w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center ".concat(darkMode ? 'bg-white text-[#0A141D]' : 'bg-[#1E2D3D] text-white')
-  }, userProfile.initials)), profileMenuOpen && /*#__PURE__*/_react["default"].createElement(_ProfileDropdown["default"], {
-    isStandalone: false,
-    darkMode: darkMode,
-    setDarkMode: setDarkMode,
-    userProfile: userProfile,
-    activeNav: activeNav,
-    settingsTab: settingsTab,
-    onSelectTab: openFromProfileMenu,
-    onOpenAdminModal: function onOpenAdminModal() {
-      setProfileMenuOpen(false);
-      setAdminModalOpen(true);
-    },
-    onLogout: handleLogout
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "mb-5"
-  }, /*#__PURE__*/_react["default"].createElement("h2", {
-    className: "text-2xl font-extrabold"
-  }, "Ol\xE1, ", userProfile.greetingName, "!"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 mt-0.5"
-  }, "Tudo pronto para otimizar seu trabalho hoje?")), renderMainScreenContent(false, true)), /*#__PURE__*/_react["default"].createElement(_MobileTabBar["default"], {
-    darkMode: darkMode,
-    activeNav: activeNav,
-    setActiveNav: setActiveNav
-  }))), deviceView === 'specs' && /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex-1 p-4 sm:p-8 max-w-6xl mx-auto w-full space-y-6"
-  }, /*#__PURE__*/_react["default"].createElement("div", null, /*#__PURE__*/_react["default"].createElement("span", {
-    className: "text-xs font-extrabold uppercase tracking-wider text-[#00D296]"
-  }, "Design System Oficial \u2022 vetaro"), /*#__PURE__*/_react["default"].createElement("h2", {
-    className: "text-2xl font-extrabold mt-1"
-  }, "Cores, Tipografia e Regras para Computador, Tablet e Celular")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-5 gap-3"
-  }, _VetaroIcons.BRAND_COLORS.map(function (color) {
-    return /*#__PURE__*/_react["default"].createElement("div", {
-      key: color.hex,
-      onClick: function onClick() {
-        return handleCopyHex(color.hex);
-      },
-      className: "p-4 rounded-2xl border cursor-pointer transition hover:scale-[1.02] ".concat(darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200')
-    }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "w-full h-16 rounded-xl mb-3 border border-black/10",
-      style: {
-        backgroundColor: color.hex
-      }
-    }), /*#__PURE__*/_react["default"].createElement("div", {
-      className: "flex items-center justify-between"
-    }, /*#__PURE__*/_react["default"].createElement("span", {
-      className: "font-extrabold text-sm"
-    }, color.hex), copiedHex === color.hex ? /*#__PURE__*/_react["default"].createElement(_lucideReact.Check, {
-      className: "w-4 h-4 text-[#00D296]"
-    }) : /*#__PURE__*/_react["default"].createElement(_lucideReact.Copy, {
-      className: "w-3.5 h-3.5 text-slate-400"
-    })), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-xs font-bold mt-1"
-    }, color.name), /*#__PURE__*/_react["default"].createElement("p", {
-      className: "text-[11px] text-slate-400 mt-1 leading-snug"
-    }, color.usage));
-  })), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "grid grid-cols-1 md:grid-cols-3 gap-4"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "p-5 rounded-2xl border space-y-2 ".concat(darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200')
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 text-[#00D296] font-extrabold text-sm"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Monitor, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Tela de Computador (Desktop \u2265 1024px)")), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 leading-relaxed"
-  }, "\u2022 ", /*#__PURE__*/_react["default"].createElement("strong", null, "Sidebar Esquerda Fixa (256px):"), " Logo Vetaro, 4 rotas principais com indicador vertical verde (4px) e card inferior", ' ', /*#__PURE__*/_react["default"].createElement("em", null, "Ajuda e suporte \u2197 v1.0.0"), "."), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 leading-relaxed"
-  }, "\u2022 ", /*#__PURE__*/_react["default"].createElement("strong", null, "Cards Lado a Lado (Grid 2 Colunas):"), " Cards de Ultrassom e Relat\xF3rio dividem 50%/50% da largura com \xEDcone de 56x56px no topo.")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "p-5 rounded-2xl border space-y-2 ".concat(darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200')
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 text-[#00D296] font-extrabold text-sm"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Tablet, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Tela de Tablet / iPad (768px \u2013 1023px)")), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 leading-relaxed"
-  }, "\u2022 ", /*#__PURE__*/_react["default"].createElement("strong", null, "Sidebar Mantida (208px):"), " Mant\xE9m a coluna esquerda vis\xEDvel para navega\xE7\xE3o r\xE1pida com o toque."), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 leading-relaxed"
-  }, "\u2022 ", /*#__PURE__*/_react["default"].createElement("strong", null, "Cards Horizontais Empilhados:"), " \xCDcone grande (80x80px) \xE0 esquerda e t\xEDtulo + descri\xE7\xE3o + bot\xE3o \xE0 direita.")), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "p-5 rounded-2xl border space-y-2 ".concat(darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200')
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center gap-2 text-[#00D296] font-extrabold text-sm"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Smartphone, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Tela de Celular (< 768px)")), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 leading-relaxed"
-  }, "\u2022 ", /*#__PURE__*/_react["default"].createElement("strong", null, "Tab Bar Inferior Fixa:"), " Barra inferior com 3 abas:", ' ', /*#__PURE__*/_react["default"].createElement("em", null, "In\xEDcio"), ", ", /*#__PURE__*/_react["default"].createElement("em", null, "Hist\xF3rico"), " e ", /*#__PURE__*/_react["default"].createElement("em", null, "Configura\xE7\xF5es"), "."), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-xs text-slate-400 leading-relaxed"
-  }, "\u2022 ", /*#__PURE__*/_react["default"].createElement("strong", null, "Topo Compacto:"), " Logo Vetaro \xE0 esquerda, sino e avatar \xE0 direita.")))), /*#__PURE__*/_react["default"].createElement(_ReportPreviewModal["default"], {
+  })), /*#__PURE__*/_react["default"].createElement(_ReportPreviewModal["default"], {
     report: selectedReport,
     darkMode: darkMode,
     onClose: function onClose() {
@@ -2900,7 +2057,6 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.AuthProvider = AuthProvider;
-exports.DEMO_USER_PROFILE = void 0;
 exports.computeGreetingName = computeGreetingName;
 exports.computeInitials = computeInitials;
 exports.useAuth = useAuth;
@@ -2935,35 +2091,13 @@ function computeInitials() {
 function computeGreetingName() {
   var name = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
   var trimmed = String(name || '').trim();
-  if (!trimmed) return 'Dra. Mariana';
+  if (!trimmed) return 'Doutor(a)';
   var parts = trimmed.split(/\s+/);
   if (/^Dra?\.?$/i.test(parts[0]) && parts.length >= 2) {
     return "".concat(parts[0], " ").concat(parts[1]);
   }
   return parts[0];
 }
-var DEMO_USER_PROFILE = {
-  id: 'demo-vetaro-user',
-  nome: 'Mariana Duarte',
-  greetingName: 'Dra. Mariana',
-  initials: 'MD',
-  email: 'maria@clinica.com.br',
-  crmv: 'CRMV-SP 48.291',
-  specialty: 'Diagnóstico por Imagem & Ultrassonografia Veterinária',
-  nomeClinica: 'Centro Diagnóstico VetCare',
-  phone: '(11) 99812-4500',
-  plan: 'Vetaro Pro IA (Ilimitado)',
-  role: 'admin',
-  roleDescricao: 'Administrador',
-  podeGerarLaudos: true,
-  podeGerarCirurgia: true,
-  aiTone: 'tecnico',
-  autoMeasurements: true,
-  voiceDictation: true,
-  includeHeaderLogo: true,
-  isDemo: true
-};
-exports.DEMO_USER_PROFILE = DEMO_USER_PROFILE;
 function AuthProvider(_ref) {
   var children = _ref.children;
   var _useTheme = (0, _ThemeContext.useTheme)(),
@@ -2983,22 +2117,21 @@ function AuthProvider(_ref) {
     _useState6 = _slicedToArray(_useState5, 2),
     carregandoSessao = _useState6[0],
     setCarregandoSessao = _useState6[1];
-  var _useState7 = (0, _react.useState)(false),
-    _useState8 = _slicedToArray(_useState7, 2),
-    modoDemo = _useState8[0],
-    setModoDemo = _useState8[1];
   var enrichUser = (0, _react.useCallback)(function (u) {
     if (!u) return null;
-    var nome = u.nome || u.name || 'Mariana Duarte';
-    return _objectSpread(_objectSpread(_objectSpread({}, DEMO_USER_PROFILE), u), {}, {
+    var nome = u.nome || u.name || 'Veterinário(a)';
+    return _objectSpread(_objectSpread({}, u), {}, {
       nome: nome,
       name: nome,
       greetingName: computeGreetingName(nome),
       initials: computeInitials(nome),
-      crmv: u.crmv || 'CRMV/MG: 22904',
+      crmv: u.crmv || 'CRMV não informado',
       nomeClinica: u.nomeClinica || u.clinicName || 'UPA PET',
       clinicName: u.nomeClinica || u.clinicName || 'UPA PET',
-      isDemo: Boolean(u.isDemo)
+      specialty: u.specialty || 'Diagnóstico por Imagem & Cirurgia Veterinária',
+      autoMeasurements: u.autoMeasurements !== undefined ? u.autoMeasurements : true,
+      voiceDictation: u.voiceDictation !== undefined ? u.voiceDictation : true,
+      includeHeaderLogo: u.includeHeaderLogo !== undefined ? u.includeHeaderLogo : true
     });
   }, []);
   var refreshAuth = (0, _react.useCallback)( /*#__PURE__*/_asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
@@ -3019,11 +2152,8 @@ function AuthProvider(_ref) {
             setSsoConfig(cfgRes.value);
           }
           if (meRes.status === 'fulfilled' && (_meRes$value = meRes.value) !== null && _meRes$value !== void 0 && _meRes$value.usuario) {
-            userObj = enrichUser(_objectSpread(_objectSpread({}, meRes.value.usuario), {}, {
-              isDemo: false
-            }));
+            userObj = enrichUser(meRes.value.usuario);
             setUsuarioState(userObj);
-            setModoDemo(false);
             if (meRes.value.usuario.temaPreferencia) {
               syncThemeFromUser(meRes.value.usuario.temaPreferencia);
             } else {
@@ -3064,21 +2194,18 @@ function AuthProvider(_ref) {
           case 2:
             data = _context2.sent;
             if (!(data !== null && data !== void 0 && data.usuario)) {
-              _context2.next = 9;
+              _context2.next = 8;
               break;
             }
-            enriched = enrichUser(_objectSpread(_objectSpread({}, data.usuario), {}, {
-              isDemo: false
-            }));
+            enriched = enrichUser(data.usuario);
             setUsuarioState(enriched);
-            setModoDemo(false);
             if (data.usuario.temaPreferencia) {
               syncThemeFromUser(data.usuario.temaPreferencia);
             }
             return _context2.abrupt("return", enriched);
-          case 9:
+          case 8:
             throw new Error('Falha ao autenticar usuário.');
-          case 10:
+          case 9:
           case "end":
             return _context2.stop();
         }
@@ -3088,16 +2215,10 @@ function AuthProvider(_ref) {
       return _ref3.apply(this, arguments);
     };
   }(), [enrichUser, syncThemeFromUser]);
-  var entrarModoDemonstracao = (0, _react.useCallback)(function () {
-    setModoDemo(true);
-    setUsuarioState(enrichUser(_objectSpread(_objectSpread({}, DEMO_USER_PROFILE), {}, {
-      isDemo: true
-    })));
-  }, [enrichUser]);
   var atualizarUsuarioLocal = (0, _react.useCallback)(function (novosDados) {
     setUsuarioState(function (prev) {
-      var base = prev || DEMO_USER_PROFILE;
-      return enrichUser(_objectSpread(_objectSpread({}, base), novosDados));
+      if (!prev) return null;
+      return enrichUser(_objectSpread(_objectSpread({}, prev), novosDados));
     });
   }, [enrichUser]);
   var logout = (0, _react.useCallback)( /*#__PURE__*/_asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3() {
@@ -3114,24 +2235,19 @@ function AuthProvider(_ref) {
           _context3.prev = 5;
           _context3.t0 = _context3["catch"](0);
         case 7:
-          setModoDemo(false);
           setUsuarioState(null);
-        case 9:
+        case 8:
         case "end":
           return _context3.stop();
       }
     }, _callee3, null, [[0, 5]]);
   })), []);
-  var perfilAtivo = usuario || (modoDemo ? enrichUser(DEMO_USER_PROFILE) : null);
   return /*#__PURE__*/_react["default"].createElement(AuthContext.Provider, {
     value: {
-      usuario: perfilAtivo,
-      usuarioReal: usuario && !usuario.isDemo ? usuario : null,
+      usuario: usuario,
       ssoConfig: ssoConfig,
       carregandoSessao: carregandoSessao,
-      modoDemo: modoDemo,
       loginComGoogleCredential: loginComGoogleCredential,
-      entrarModoDemonstracao: entrarModoDemonstracao,
       atualizarUsuarioLocal: atualizarUsuarioLocal,
       refreshAuth: refreshAuth,
       logout: logout
@@ -3350,10 +2466,7 @@ function DashboardHome(_ref) {
     className: "mt-2 px-5 py-2.5 rounded-full text-xs font-bold inline-flex items-center gap-2 transition shadow-sm ".concat(darkMode ? 'bg-[#00D296] text-[#062E2B] hover:bg-[#00e6a4]' : 'bg-[#0D5C56] text-white hover:bg-[#094742]')
   }, "Come\xE7ar agora ", /*#__PURE__*/_react["default"].createElement(_lucideReact.ArrowRight, {
     className: "w-4 h-4"
-  }))))) :
-  /*#__PURE__*/
-  /* Layout Desktop (2 colunas) ou Mobile (1 coluna empilhada) */
-  _react["default"].createElement("div", {
+  }))))) : /*#__PURE__*/_react["default"].createElement("div", {
     className: "grid ".concat(isMobileLayout ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6')
   }, /*#__PURE__*/_react["default"].createElement("div", {
     className: "relative rounded-2xl ".concat(isMobileLayout ? 'p-5' : 'p-7', " border overflow-hidden transition ").concat(darkMode ? 'bg-gradient-to-br from-[#132530] to-[#0E3130] border-teal-500/20' : 'bg-gradient-to-br from-[#E4F8F2] to-[#D5F4EC] border-[#C5EFE3]')
@@ -3422,7 +2535,9 @@ function DashboardHome(_ref) {
     className: "w-3.5 h-3.5"
   }))), /*#__PURE__*/_react["default"].createElement("div", {
     className: "rounded-2xl border divide-y overflow-hidden ".concat(darkMode ? 'bg-[#0E1A24] border-slate-800/90 divide-slate-800/80' : 'bg-white border-slate-200 divide-slate-100')
-  }, activities.map(function (item) {
+  }, activities.length === 0 ? /*#__PURE__*/_react["default"].createElement("div", {
+    className: "p-8 text-center text-xs text-slate-400"
+  }, loadingHistory ? 'Carregando histórico do PostgreSQL...' : 'Nenhum laudo de ultrassom ou relatório cirúrgico emitido ainda.') : activities.map(function (item) {
     return /*#__PURE__*/_react["default"].createElement("div", {
       key: item.id,
       onClick: function onClick() {
@@ -3476,7 +2591,6 @@ function LoginPage(_ref) {
     setDarkMode = _ref.setDarkMode,
     ssoConfig = _ref.ssoConfig,
     onGoogleCredential = _ref.onGoogleCredential,
-    onEnterDemo = _ref.onEnterDemo,
     onToast = _ref.onToast;
   var googleBtnRef = (0, _react.useRef)(null);
   (0, _react.useEffect)(function () {
@@ -3495,7 +2609,7 @@ function LoginPage(_ref) {
                     _context.next = 3;
                     return onGoogleCredential(response.credential);
                   case 3:
-                    onToast('Autenticado com sucesso via Google SSO!');
+                    onToast('Autenticado com sucesso!');
                     _context.next = 9;
                     break;
                   case 6:
@@ -3564,26 +2678,16 @@ function LoginPage(_ref) {
     className: "w-8 h-8"
   })), /*#__PURE__*/_react["default"].createElement("h1", {
     className: "text-2xl font-extrabold tracking-tight"
-  }, "Acesso Cl\xEDnico Vetaro"), /*#__PURE__*/_react["default"].createElement("p", {
+  }, "Acesso Restrito ao Sistema"), /*#__PURE__*/_react["default"].createElement("p", {
     className: "text-xs sm:text-sm mt-2 mb-6 leading-relaxed ".concat(darkMode ? 'text-slate-300' : 'text-[#52657A]')
-  }, "Entre com sua conta Google autorizada para emitir laudos de ultrassom Mindray e relat\xF3rios cir\xFArgicos oficiais com seu timbre e CRMV."), ssoConfig !== null && ssoConfig !== void 0 && ssoConfig.googleClientId ? /*#__PURE__*/_react["default"].createElement("div", {
+  }, "Entre com sua conta Google autorizada para emitir laudos de ultrassom e relat\xF3rios cir\xFArgicos oficiais."), ssoConfig !== null && ssoConfig !== void 0 && ssoConfig.googleClientId ? /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex justify-center my-2",
     ref: googleBtnRef
   }) : /*#__PURE__*/_react["default"].createElement("div", {
-    className: "w-full p-3.5 rounded-xl border text-xs text-left mb-4 ".concat(darkMode ? 'bg-[#0A141D]/80 border-teal-500/30 text-slate-300' : 'bg-[#F0FBF7] border-teal-600/30 text-slate-700')
-  }, /*#__PURE__*/_react["default"].createElement("p", {
-    className: "font-extrabold text-[#00D296] mb-1"
-  }, "Google SSO (GOOGLE_CLIENT_ID)"), /*#__PURE__*/_react["default"].createElement("p", {
-    className: "leading-relaxed"
-  }, "Configure ", /*#__PURE__*/_react["default"].createElement("code", null, "GOOGLE_CLIENT_ID"), " no arquivo ", /*#__PURE__*/_react["default"].createElement("code", null, ".env"), " para ativar o bot\xE3o oficial do Google Identity Services, ou acesse abaixo o modo interativo.")), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: onEnterDemo,
-    className: "w-full mt-3 py-3.5 px-5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition ".concat(darkMode ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110' : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Sparkles, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, "Entrar no Painel Interativo Vetaro"))))), /*#__PURE__*/_react["default"].createElement("div", {
+    className: "w-full p-3.5 rounded-xl border text-xs text-left ".concat(darkMode ? 'bg-[#0A141D]/80 border-amber-500/30 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-900')
+  }, /*#__PURE__*/_react["default"].createElement("strong", null, "Configura\xE7\xE3o pendente:"), " Defina a vari\xE1vel", ' ', /*#__PURE__*/_react["default"].createElement("code", null, "GOOGLE_CLIENT_ID"), " no arquivo ", /*#__PURE__*/_react["default"].createElement("code", null, ".env"), " do servidor.")))), /*#__PURE__*/_react["default"].createElement("div", {
     className: "text-center text-xs text-slate-500"
-  }, "vetaro \u2022 Tecnologia que cuida \u2022 Multi-Tenant PostgreSQL"));
+  }, "vetaro \u2022 Tecnologia que cuida"));
 }
   };
   modules["./pages/SettingsPage"] = function(require, module, exports) {
@@ -4034,8 +3138,6 @@ function SurgeryGenerator(_ref) {
     _useState16 = _slicedToArray(_useState15, 2),
     reportPageTab = _useState16[0],
     setReportPageTab = _useState16[1];
-
-  // Estados da Biblioteca de Modelos Cirúrgicos
   var _useState17 = (0, _react.useState)([]),
     _useState18 = _slicedToArray(_useState17, 2),
     modelos = _useState18[0],
@@ -4043,7 +3145,7 @@ function SurgeryGenerator(_ref) {
   var _useState19 = (0, _react.useState)('todos'),
     _useState20 = _slicedToArray(_useState19, 2),
     filtroOrigem = _useState20[0],
-    setFiltroOrigem = _useState20[1]; // 'todos' | 'globais' | 'meus'
+    setFiltroOrigem = _useState20[1];
   var _useState21 = (0, _react.useState)(''),
     _useState22 = _slicedToArray(_useState21, 2),
     buscaModelo = _useState22[0],
@@ -4051,11 +3153,12 @@ function SurgeryGenerator(_ref) {
   var _useState23 = (0, _react.useState)(null),
     _useState24 = _slicedToArray(_useState23, 2),
     modalMode = _useState24[0],
-    setModalMode = _useState24[1]; // null | 'view' | 'form'
+    setModalMode = _useState24[1];
   var _useState25 = (0, _react.useState)(null),
     _useState26 = _slicedToArray(_useState25, 2),
     modeloSelecionado = _useState26[0],
     setModeloSelecionado = _useState26[1];
+  var podeEmitir = (userProfile === null || userProfile === void 0 ? void 0 : userProfile.podeGerarCirurgia) || (userProfile === null || userProfile === void 0 ? void 0 : userProfile.role) === 'admin' || (userProfile === null || userProfile === void 0 ? void 0 : userProfile.role) === 'veterinario';
   var carregarModelos = /*#__PURE__*/function () {
     var _ref2 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
       var res;
@@ -4094,9 +3197,9 @@ function SurgeryGenerator(_ref) {
     setRawDocFile(f);
     setSurgeryDocFile({
       name: f.name,
-      size: "".concat((f.size / 1024).toFixed(1), " KB \u2022 Documento/\xC1udio")
+      size: "".concat((f.size / 1024).toFixed(1), " KB")
     });
-    onToast('Arquivo da cirurgia anexado com sucesso!');
+    onToast('Arquivo da cirurgia selecionado!');
   };
   var handlePhotosSelected = function handlePhotosSelected(fileList) {
     var arr = Array.from(fileList || []).slice(0, 5);
@@ -4105,26 +3208,11 @@ function SurgeryGenerator(_ref) {
     setSurgeryPhotos(arr.map(function (f, i) {
       return {
         name: f.name,
-        label: "Foto ".concat(i + 1, " (").concat((f.size / 1024).toFixed(0), " KB)")
+        label: "Foto ".concat(i + 1, " (").concat((f.size / 1024).toFixed(0), " KB)"),
+        previewUrl: URL.createObjectURL(f)
       };
     }));
-    onToast("".concat(arr.length, " foto(s) intraoperat\xF3ria(s) anexada(s) para a P\xE1gina 2!"));
-  };
-  var handleLoadSampleSurgery = function handleLoadSampleSurgery(e) {
-    if (e) e.stopPropagation();
-    setRawDocFile(null);
-    setSurgeryDocFile({
-      name: 'audio_cirurgia_esplenectomia_thor.m4a',
-      size: '3.4 MB • Áudio de 2m18s + Notas'
-    });
-    setSurgeryPhotos([{
-      name: 'FOTO_INTRAOP_HEMOSTASIA_01.JPG',
-      label: 'Ligadura vascular'
-    }, {
-      name: 'FOTO_PECA_CIRURGICA_02.JPG',
-      label: 'Peça anatômica ressecada'
-    }]);
-    onToast('Áudio e 2 fotos intraoperatórias de exemplo carregados!');
+    onToast("".concat(arr.length, " foto(s) intraoperat\xF3ria(s) anexada(s)!"));
   };
   var handleGenerate = /*#__PURE__*/function () {
     var _ref3 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2() {
@@ -4132,6 +3220,21 @@ function SurgeryGenerator(_ref) {
       return _regeneratorRuntime().wrap(function _callee2$(_context2) {
         while (1) switch (_context2.prev = _context2.next) {
           case 0:
+            if (podeEmitir) {
+              _context2.next = 3;
+              break;
+            }
+            onToast('Sua conta não possui permissão para gerar relatórios cirúrgicos.');
+            return _context2.abrupt("return");
+          case 3:
+            if (!(!rawDocFile && rawPhotoFiles.length === 0)) {
+              _context2.next = 7;
+              break;
+            }
+            onToast('Selecione o arquivo da cirurgia (.docx, .pages, .txt ou áudio) antes de gerar.');
+            if (docInputRef.current) docInputRef.current.click();
+            return _context2.abrupt("return");
+          case 7:
             setIsGenerating(true);
             setGeneratedOutput('');
             setDownloadLinks({
@@ -4141,23 +3244,19 @@ function SurgeryGenerator(_ref) {
             setReportPageTab('p1');
             now = new Date();
             dateStr = "Gerado em ".concat(String(now.getDate()).padStart(2, '0'), "/").concat(String(now.getMonth() + 1).padStart(2, '0'), "/").concat(now.getFullYear(), " \xE0s ").concat(String(now.getHours()).padStart(2, '0'), ":").concat(String(now.getMinutes()).padStart(2, '0'));
-            if (!(rawDocFile || rawPhotoFiles.length > 0)) {
-              _context2.next = 28;
-              break;
-            }
-            _context2.prev = 7;
+            _context2.prev = 13;
             fd = new FormData();
             if (rawDocFile) fd.append('documento', rawDocFile);
             rawPhotoFiles.forEach(function (f) {
               return fd.append('fotos', f);
             });
-            _context2.next = 13;
+            _context2.next = 19;
             return _api.api.gerarCirurgia(fd);
-          case 13:
+          case 19:
             res = _context2.sent;
             pac = res.paciente || {};
             cir = res.cirurgia || {};
-            textReal = "RELAT\xD3RIO CIR\xDARGICO OFICIAL \u2014 ".concat((userProfile.clinicName || 'UPA PET').toUpperCase(), "\n") + "Cirurgi\xE3 Respons\xE1vel: ".concat(userProfile.name, " (").concat(userProfile.crmv, ")\n") + "Paciente: ".concat(pac.nome || 'Paciente', " (").concat(pac.especie || 'Canino', ") | Procedimento: ").concat(cir.procedimento || 'Procedimento Cirúrgico', "\n") + "--------------------------------------------------------------------------------\n" + "1. DIAGN\xD3STICO PR\xC9-CIR\xDARGICO:\n".concat(cir.diagnosticoPreCirurgico || 'A critério clínico.', "\n\n") + "2. DESCRI\xC7\xC3O T\xC9CNICA DO PROCEDIMENTO:\n".concat(cir.descricaoProcedimento || 'Procedimento realizado conforme protocolo institucional.', "\n\n") + "3. EVOLU\xC7\xC3O E CONSIDERA\xC7\xD5ES:\n".concat(cir.evolucaoConsideracoes || 'Paciente encaminhado para recuperação.');
+            textReal = "RELAT\xD3RIO CIR\xDARGICO OFICIAL \u2014 ".concat((userProfile.clinicName || 'UPA PET').toUpperCase(), "\n") + "Cirurgi\xE3(o) Respons\xE1vel: ".concat(userProfile.name, " (").concat(userProfile.crmv, ")\n") + "Paciente: ".concat(pac.nome || 'Paciente', " (").concat(pac.especie || 'Canina', ") | Procedimento: ").concat(cir.procedimento || 'Procedimento Cirúrgico', "\n") + "--------------------------------------------------------------------------------\n" + "1. DIAGN\xD3STICO PR\xC9-CIR\xDARGICO:\n".concat(cir.diagnosticoPreCirurgico || 'A critério clínico.', "\n\n") + "2. DESCRI\xC7\xC3O T\xC9CNICA DO PROCEDIMENTO:\n".concat(cir.descricaoProcedimento || 'Procedimento realizado conforme protocolo institucional.', "\n\n") + "3. EVOLU\xC7\xC3O E CONSIDERA\xC7\xD5ES:\n".concat(cir.evolucaoConsideracoes || 'Paciente encaminhado para recuperação.');
             setGeneratedOutput(textReal);
             setDownloadLinks({
               pdfUrl: res.pdfUrl || '',
@@ -4166,7 +3265,7 @@ function SurgeryGenerator(_ref) {
             onAddActivity({
               id: "cirurg-".concat(Date.now()),
               type: 'relatorio',
-              title: "Relat\xF3rio Cir\xFArgico Oficial \u2014 ".concat(cir.procedimento || 'Cirurgia'),
+              title: "Relat\xF3rio Cir\xFArgico \u2014 ".concat(cir.procedimento || 'Oficial'),
               patient: "".concat(pac.nome || 'Paciente', " (").concat(pac.especie || 'Canina', ")"),
               tutor: pac.tutor || '',
               date: dateStr,
@@ -4175,38 +3274,22 @@ function SurgeryGenerator(_ref) {
               pdfUrl: res.pdfUrl,
               docxUrl: res.docxUrl
             });
-            onToast('Relatório Cirúrgico Oficial compilado com sucesso!');
+            onToast('Relatório Cirúrgico Oficial concluído com sucesso!');
+            _context2.next = 32;
+            break;
+          case 29:
+            _context2.prev = 29;
+            _context2.t0 = _context2["catch"](13);
+            onToast('Erro ao processar cirurgia: ' + _context2.t0.message);
+          case 32:
+            _context2.prev = 32;
             setIsGenerating(false);
-            return _context2.abrupt("return");
-          case 25:
-            _context2.prev = 25;
-            _context2.t0 = _context2["catch"](7);
-            onToast('Aviso da API (' + _context2.t0.message + ') — exibindo simulação interativa.');
-          case 28:
-            if (!surgeryDocFile) {
-              handleLoadSampleSurgery();
-            }
-            setTimeout(function () {
-              var text = "RELAT\xD3RIO CIR\xDARGICO OFICIAL \u2014 ".concat((userProfile.clinicName || 'UPA PET').toUpperCase(), "\n") + "Cirurgi\xE3 Respons\xE1vel: ".concat(userProfile.name, " (").concat(userProfile.crmv, ")\n") + "Arquivo Base Transcrito: ".concat(surgeryDocFile ? surgeryDocFile.name : 'audio_cirurgia_esplenectomia_thor.m4a', "\n") + "--------------------------------------------------------------------------------\n" + "1. DESCRI\xC7\xC3O T\xC9CNICA DO PROCEDIMENTO:\n" + "Paciente submetido \xE0 celiotomia mediana sob anestesia geral inalat\xF3ria monitorada. Realizada inspe\xE7\xE3o da cavidade abdominal, seguida de isolamento e dupla ligadura vascular com fio absorv\xEDvel Poliglactina 910 (2-0). Hemostasia rigorosa revisada sem sangramento ativo.\n\n" + "2. S\xCDNTESE E RECUPERA\xC7\xC3O ANEST\xC9SICA:\n" + "Celiorrafia em tr\xEAs planos anat\xF4micos (linha alba em padr\xE3o simples cont\xEDnuo, subcut\xE2neo em Cushing e dermorrafia em Sultan com Nylon 3-0). Paciente extubado em normotermia e par\xE2metros vitais est\xE1veis.\n\n" + "3. ANEXO FOTOGR\xC1FICO (P\xC1GINA 2):\n" + "Constam na P\xE1gina 2 os registros fotogr\xE1ficos intraoperat\xF3rios e da pe\xE7a cir\xFArgica devidamente identificados.";
-              setGeneratedOutput(text);
-              setIsGenerating(false);
-              onAddActivity({
-                id: "act-".concat(Date.now()),
-                type: 'relatorio',
-                title: 'Relatório Cirúrgico Oficial',
-                patient: 'Thor (Golden Retriever, 6 anos)',
-                tutor: 'Carlos Eduardo Silva',
-                date: dateStr,
-                status: 'Concluído',
-                summary: text
-              });
-              onToast('Relatório Cirúrgico Oficial gerado com sucesso!');
-            }, 850);
-          case 30:
+            return _context2.finish(32);
+          case 35:
           case "end":
             return _context2.stop();
         }
-      }, _callee2, null, [[7, 25]]);
+      }, _callee2, null, [[13, 29, 32, 35]]);
     }));
     return function handleGenerate() {
       return _ref3.apply(this, arguments);
@@ -4291,17 +3374,9 @@ function SurgeryGenerator(_ref) {
     }
   }), /*#__PURE__*/_react["default"].createElement("div", {
     className: "relative z-10 mb-5"
-  }, /*#__PURE__*/_react["default"].createElement("div", {
-    className: "flex items-center justify-between mb-2"
   }, /*#__PURE__*/_react["default"].createElement("p", {
-    className: "text-[11px] sm:text-xs font-extrabold uppercase tracking-wider ".concat(darkMode ? 'text-slate-200' : 'text-[#1E2D3D]')
-  }, "1. FICHA CIR\xDARGICA OU \xC1UDIO"), /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: handleLoadSampleSurgery,
-    className: "text-[11px] font-bold text-[#00D296] hover:underline flex items-center gap-1"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Sparkles, {
-    className: "w-3 h-3"
-  }), " Carregar exemplo de cirurgia")), /*#__PURE__*/_react["default"].createElement("div", {
+    className: "text-[11px] sm:text-xs font-extrabold uppercase tracking-wider mb-2 ".concat(darkMode ? 'text-slate-200' : 'text-[#1E2D3D]')
+  }, "1. FICHA CIR\xDARGICA OU \xC1UDIO"), /*#__PURE__*/_react["default"].createElement("div", {
     onClick: function onClick() {
       return docInputRef.current && docInputRef.current.click();
     },
@@ -4362,11 +3437,13 @@ function SurgeryGenerator(_ref) {
   })))), /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: handleGenerate,
-    disabled: isGenerating,
-    className: "relative z-10 w-full py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ".concat(darkMode ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110' : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Wand2, {
+    disabled: isGenerating || !podeEmitir,
+    className: "relative z-10 w-full py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ".concat(!podeEmitir ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : darkMode ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110' : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110')
+  }, !podeEmitir ? /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_lucideReact.Lock, {
     className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, isGenerating ? 'Transcrevendo e formatando Relatório Cirúrgico Oficial...' : 'Gerar Relatório Cirúrgico Oficial'))), generatedOutput && /*#__PURE__*/_react["default"].createElement("div", {
+  }), /*#__PURE__*/_react["default"].createElement("span", null, "Gera\xE7\xE3o Cir\xFArgica Bloqueada (Sem Permiss\xE3o)")) : /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_lucideReact.Wand2, {
+    className: "w-5 h-5 ".concat(isGenerating ? 'animate-spin' : '')
+  }), /*#__PURE__*/_react["default"].createElement("span", null, isGenerating ? 'Identificando procedimento e aplicando modelos cirúrgicos...' : 'Gerar Relatório Cirúrgico Oficial')))), generatedOutput && /*#__PURE__*/_react["default"].createElement("div", {
     className: "p-5 sm:p-6 rounded-2xl border space-y-4 transition ".concat(darkMode ? 'bg-[#0F1C26] border-[#00D296]/40' : 'bg-white border-slate-200')
   }, /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-700/40"
@@ -4378,7 +3455,7 @@ function SurgeryGenerator(_ref) {
     textSize: "text-base"
   }), /*#__PURE__*/_react["default"].createElement("span", {
     className: "text-xs font-bold text-[#00D296]"
-  }, "\u2022 Documento Oficial Pronto (", layoutConfig.headerStyle, ")")), /*#__PURE__*/_react["default"].createElement("div", {
+  }, "\u2022 Relat\xF3rio Cir\xFArgico Conclu\xEDdo!")), /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex items-center gap-1.5"
   }, /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
@@ -4386,33 +3463,31 @@ function SurgeryGenerator(_ref) {
       return setReportPageTab('p1');
     },
     className: "px-3 py-1 rounded-lg text-xs font-extrabold ".concat(reportPageTab === 'p1' ? 'bg-[#00D296] text-[#062E2B]' : 'bg-slate-500/10 text-slate-400')
-  }, "P\xE1gina 1: Documento Oficial"), /*#__PURE__*/_react["default"].createElement("button", {
+  }, "P\xE1gina 1: Documento Oficial"), surgeryPhotos.length > 0 && /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: function onClick() {
       return setReportPageTab('p2');
     },
     className: "px-3 py-1 rounded-lg text-xs font-extrabold ".concat(reportPageTab === 'p2' ? 'bg-[#00D296] text-[#062E2B]' : 'bg-slate-500/10 text-slate-400')
-  }, "P\xE1gina 2: Fotos da Cirurgia"))), reportPageTab === 'p1' ? /*#__PURE__*/_react["default"].createElement("pre", {
+  }, "P\xE1gina 2: Fotos da Cirurgia (", surgeryPhotos.length, ")"))), reportPageTab === 'p1' ? /*#__PURE__*/_react["default"].createElement("pre", {
     className: "text-xs leading-relaxed whitespace-pre-wrap font-sans p-4 rounded-xl border ".concat(darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-700')
   }, generatedOutput) : /*#__PURE__*/_react["default"].createElement("div", {
     className: "grid grid-cols-2 sm:grid-cols-3 gap-3"
-  }, (surgeryPhotos.length > 0 ? surgeryPhotos : [{
-    name: 'FOTO_INTRAOP_01.JPG',
-    label: 'Hemostasia vascular'
-  }, {
-    name: 'FOTO_PECA_CIRURGICA_02.JPG',
-    label: 'Peça cirúrgica'
-  }]).map(function (img, i) {
+  }, surgeryPhotos.map(function (img, i) {
     return /*#__PURE__*/_react["default"].createElement("div", {
       key: i,
       className: "p-3 rounded-xl border text-center ".concat(darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200')
     }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "h-24 rounded-lg bg-gradient-to-br from-[#0D3131] to-[#08151E] flex flex-col items-center justify-center text-[#00D296] mb-2 border border-teal-500/20"
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
+      className: "h-24 rounded-lg bg-gradient-to-br from-[#0D3131] to-[#08151E] flex flex-col items-center justify-center text-[#00D296] mb-2 border border-teal-500/20 overflow-hidden"
+    }, img.previewUrl ? /*#__PURE__*/_react["default"].createElement("img", {
+      src: img.previewUrl,
+      alt: img.name,
+      className: "w-full h-full object-cover"
+    }) : /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
       className: "w-6 h-6 mb-1"
     }), /*#__PURE__*/_react["default"].createElement("span", {
       className: "text-[10px] font-bold"
-    }, img.label)), /*#__PURE__*/_react["default"].createElement("p", {
+    }, img.label))), /*#__PURE__*/_react["default"].createElement("p", {
       className: "text-[11px] font-bold truncate"
     }, img.name));
   })), /*#__PURE__*/_react["default"].createElement("div", {
@@ -4430,22 +3505,14 @@ function SurgeryGenerator(_ref) {
     className: "px-4 py-2 rounded-xl text-xs font-extrabold border border-[#00D296]/40 text-[#00D296] flex items-center gap-1.5"
   }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileCheck, {
     className: "w-4 h-4"
-  }), " Baixar Word (.docx)"), downloadLinks.pdfUrl ? /*#__PURE__*/_react["default"].createElement("a", {
+  }), " Baixar Relat\xF3rio em Word (.docx)"), downloadLinks.pdfUrl && /*#__PURE__*/_react["default"].createElement("a", {
     href: downloadLinks.pdfUrl,
     target: "_blank",
     rel: "noreferrer",
     className: "px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
   }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Download, {
     className: "w-4 h-4"
-  }), " Baixar PDF Oficial (P\xE1ginas 1 e 2)") : /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return onToast('PDF Oficial Timbrado baixado com sucesso!');
-    },
-    className: "px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Download, {
-    className: "w-4 h-4"
-  }), " Baixar PDF Oficial (P\xE1ginas 1 e 2)")))), /*#__PURE__*/_react["default"].createElement("div", {
+  }), " Baixar Relat\xF3rio em PDF")))), /*#__PURE__*/_react["default"].createElement("div", {
     className: "rounded-2xl p-5 sm:p-6 border space-y-4 ".concat(darkMode ? 'bg-[#0F1C26] border-[#1E3545]' : 'bg-white border-slate-200')
   }, /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex flex-col sm:flex-row sm:items-center justify-between gap-3"
@@ -4459,7 +3526,7 @@ function SurgeryGenerator(_ref) {
     className: "px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#00D296]/15 text-[#00D296]"
   }, modelos.length, " modelo(s)")), /*#__PURE__*/_react["default"].createElement("p", {
     className: "text-xs text-slate-400 mt-0.5"
-  }, "Modelos institucionais da plataforma e seus modelos personalizados para estrutura\xE7\xE3o autom\xE1tica pela IA.")), /*#__PURE__*/_react["default"].createElement("button", {
+  }, "Modelos institucionais da plataforma e seus modelos personalizados para estrutura\xE7\xE3o autom\xE1tica pela IA.")), podeEmitir && /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: function onClick() {
       setModeloSelecionado(null);
@@ -4504,7 +3571,7 @@ function SurgeryGenerator(_ref) {
     className: "w-full pl-8 pr-4 py-1.5 text-xs rounded-xl border font-semibold ".concat(darkMode ? 'bg-[#0A141D] border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-[#0A141D]')
   }))), modelosFiltrados.length === 0 ? /*#__PURE__*/_react["default"].createElement("div", {
     className: "py-8 text-center rounded-xl border border-dashed text-xs text-slate-400 ".concat(darkMode ? 'border-slate-800 bg-[#0A141D]/50' : 'border-slate-200 bg-slate-50')
-  }, "Nenhum modelo cir\xFArgico listado para este filtro.") : /*#__PURE__*/_react["default"].createElement("div", {
+  }, "Nenhum modelo cir\xFArgico encontrado para este filtro.") : /*#__PURE__*/_react["default"].createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[420px] overflow-y-auto pr-1"
   }, modelosFiltrados.map(function (m) {
     return /*#__PURE__*/_react["default"].createElement("div", {
@@ -4531,7 +3598,7 @@ function SurgeryGenerator(_ref) {
       className: "px-2.5 py-1 rounded-lg text-xs font-bold text-[#00D296] hover:bg-[#00D296]/10 flex items-center gap-1"
     }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Eye, {
       className: "w-3.5 h-3.5"
-    }), " Detalhes"), m.isGlobal && /*#__PURE__*/_react["default"].createElement("button", {
+    }), " Detalhes"), podeEmitir && m.isGlobal && /*#__PURE__*/_react["default"].createElement("button", {
       type: "button",
       onClick: function onClick() {
         return handleClonarModelo(m.id);
@@ -4539,7 +3606,7 @@ function SurgeryGenerator(_ref) {
       className: "px-2.5 py-1 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/5 flex items-center gap-1"
     }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Copy, {
       className: "w-3.5 h-3.5"
-    }), " Duplicar"), (!m.isGlobal || userProfile.role === 'admin') && /*#__PURE__*/_react["default"].createElement("button", {
+    }), " Duplicar"), podeEmitir && (!m.isGlobal || userProfile.role === 'admin') && /*#__PURE__*/_react["default"].createElement("button", {
       type: "button",
       onClick: function onClick() {
         setModeloSelecionado(m);
@@ -4551,7 +3618,7 @@ function SurgeryGenerator(_ref) {
     darkMode: darkMode,
     mode: modalMode,
     modelo: modeloSelecionado,
-    canEdit: modeloSelecionado && (!modeloSelecionado.isGlobal || userProfile.role === 'admin'),
+    canEdit: podeEmitir && modeloSelecionado && (!modeloSelecionado.isGlobal || userProfile.role === 'admin'),
     onClose: function onClose() {
       return setModalMode(null);
     },
@@ -4630,6 +3697,7 @@ function UltrasoundGenerator(_ref) {
     _useState14 = _slicedToArray(_useState13, 2),
     reportPageTab = _useState14[0],
     setReportPageTab = _useState14[1];
+  var podeEmitir = (userProfile === null || userProfile === void 0 ? void 0 : userProfile.podeGerarLaudos) || (userProfile === null || userProfile === void 0 ? void 0 : userProfile.role) === 'admin' || (userProfile === null || userProfile === void 0 ? void 0 : userProfile.role) === 'veterinario';
   var handleFilesSelected = function handleFilesSelected(fileList) {
     var arr = Array.from(fileList || []).slice(0, 25);
     if (arr.length === 0) return;
@@ -4637,35 +3705,11 @@ function UltrasoundGenerator(_ref) {
     setMindrayFiles(arr.map(function (f) {
       return {
         name: f.name,
-        measure: "".concat((f.size / 1024).toFixed(0), " KB")
+        measure: "".concat((f.size / 1024).toFixed(0), " KB"),
+        previewUrl: URL.createObjectURL(f)
       };
     }));
-    onToast("".concat(arr.length, " imagem(ns) do Mindray selecionada(s) para an\xE1lise!"));
-  };
-  var handleLoadSamplePhotos = function handleLoadSamplePhotos(e) {
-    if (e) e.stopPropagation();
-    var samplePhotos = [{
-      name: 'MINDRAY_FIGADO_VESICULA_01.JPG',
-      measure: 'Parede VB: 0,12 cm'
-    }, {
-      name: 'MINDRAY_BACO_CORPO_02.JPG',
-      measure: 'Espessura: 1,18 cm'
-    }, {
-      name: 'MINDRAY_RIM_ESQ_CORTICAL_03.JPG',
-      measure: 'Comprimento: 6,42 cm'
-    }, {
-      name: 'MINDRAY_RIM_DIR_PELVE_04.JPG',
-      measure: 'Comprimento: 6,55 cm'
-    }, {
-      name: 'MINDRAY_BEXIGA_PAREDE_05.JPG',
-      measure: 'Parede: 0,19 cm'
-    }, {
-      name: 'MINDRAY_DUODENO_ESTRAT_06.JPG',
-      measure: 'Parede: 0,36 cm'
-    }];
-    setRawFiles([]);
-    setMindrayFiles(samplePhotos);
-    onToast('6 capturas do Mindray com calipers carregadas para leitura automática!');
+    onToast("".concat(arr.length, " imagem(ns) selecionada(s) para an\xE1lise!"));
   };
   var handleGenerate = /*#__PURE__*/function () {
     var _ref2 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
@@ -4673,6 +3717,21 @@ function UltrasoundGenerator(_ref) {
       return _regeneratorRuntime().wrap(function _callee$(_context) {
         while (1) switch (_context.prev = _context.next) {
           case 0:
+            if (podeEmitir) {
+              _context.next = 3;
+              break;
+            }
+            onToast('Sua conta não possui permissão para gerar laudos.');
+            return _context.abrupt("return");
+          case 3:
+            if (!(rawFiles.length === 0)) {
+              _context.next = 7;
+              break;
+            }
+            onToast('Selecione pelo menos uma captura de ultrassom antes de gerar o laudo.');
+            if (fileInputRef.current) fileInputRef.current.click();
+            return _context.abrupt("return");
+          case 7:
             setIsGenerating(true);
             setGeneratedOutput('');
             setDownloadLinks({
@@ -4681,22 +3740,18 @@ function UltrasoundGenerator(_ref) {
             });
             setReportPageTab('p1');
             now = new Date();
-            dateStr = "Gerado em ".concat(String(now.getDate()).padStart(2, '0'), "/").concat(String(now.getMonth() + 1).padStart(2, '0'), "/").concat(now.getFullYear(), " \xE0s ").concat(String(now.getHours()).padStart(2, '0'), ":").concat(String(now.getMinutes()).padStart(2, '0')); // Se houver arquivos reais selecionados pelo usuário, envia para POST /api/ultrassom
-            if (!(rawFiles.length > 0)) {
-              _context.next = 26;
-              break;
-            }
-            _context.prev = 7;
+            dateStr = "Gerado em ".concat(String(now.getDate()).padStart(2, '0'), "/").concat(String(now.getMonth() + 1).padStart(2, '0'), "/").concat(now.getFullYear(), " \xE0s ").concat(String(now.getHours()).padStart(2, '0'), ":").concat(String(now.getMinutes()).padStart(2, '0'));
+            _context.prev = 13;
             fd = new FormData();
             rawFiles.forEach(function (f) {
               return fd.append('imagens', f);
             });
-            _context.next = 12;
+            _context.next = 18;
             return _api.api.gerarUltrassom(fd);
-          case 12:
+          case 18:
             res = _context.sent;
             pac = res.paciente || {};
-            resumoReal = "LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL (LEITURA AUTOM\xC1TICA MINDRAY)\n" + "Paciente: ".concat(pac.nome || 'Não identificado', " (").concat(pac.especie || 'Canina', ", ").concat(pac.idade || '-', ") | Tutor: ").concat(pac.tutor || 'Não informado', "\n") + "Respons\xE1vel T\xE9cnico: ".concat(userProfile.name, " (").concat(userProfile.crmv, ") \u2014 ").concat(userProfile.clinicName, "\n") + "--------------------------------------------------------------------------------\n" + "Documento oficial PDF e Word (.docx) compilado com sucesso pelo motor de IA a partir de ".concat(rawFiles.length, " captura(s) do Mindray.");
+            resumoReal = "LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL\n" + "Paciente: ".concat(pac.nome || 'Não identificado', " (").concat(pac.especie || 'Canina').concat(pac.idade ? ", ".concat(pac.idade) : '', ") | Tutor: ").concat(pac.tutor || 'Não informado', "\n") + "Respons\xE1vel T\xE9cnico: ".concat(userProfile.name, " (").concat(userProfile.crmv, ") \u2014 ").concat(userProfile.clinicName, "\n") + "--------------------------------------------------------------------------------\n" + "Laudo oficial em PDF e Word (.docx) compilado com sucesso a partir de ".concat(rawFiles.length, " captura(s) do aparelho.");
             setGeneratedOutput(resumoReal);
             setDownloadLinks({
               pdfUrl: res.pdfUrl || '',
@@ -4714,39 +3769,22 @@ function UltrasoundGenerator(_ref) {
               pdfUrl: res.pdfUrl,
               docxUrl: res.docxUrl
             });
-            onToast('Laudo Oficial de Ultrassom gerado no servidor com sucesso!');
+            onToast('Laudo Oficial de Ultrassom gerado com sucesso!');
+            _context.next = 30;
+            break;
+          case 27:
+            _context.prev = 27;
+            _context.t0 = _context["catch"](13);
+            onToast('Erro ao processar ultrassom: ' + _context.t0.message);
+          case 30:
+            _context.prev = 30;
             setIsGenerating(false);
-            return _context.abrupt("return");
-          case 23:
-            _context.prev = 23;
-            _context.t0 = _context["catch"](7);
-            onToast('Aviso da API (' + _context.t0.message + ') — exibindo simulação interativa.');
-          case 26:
-            // Fallback / Simulação interativa fiel ao protótipo Vetaro
-            if (mindrayFiles.length === 0) {
-              handleLoadSamplePhotos();
-            }
-            setTimeout(function () {
-              var text = "LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL (LEITURA AUTOM\xC1TICA MINDRAY)\n" + "Paciente: Thor (Canino, Golden Retriever, 6 anos) | Equipamento: Mindray Vetus\n" + "Respons\xE1vel T\xE9cnico: ".concat(userProfile.name, " (").concat(userProfile.crmv, ") \u2014 ").concat(userProfile.clinicName, "\n") + "--------------------------------------------------------------------------------\n" + "MEDIDAS EXTRA\xCDDAS AUTOMATICAMENTE DOS CALIPERS:\n" + "\u2022 F\xEDgado e Ves\xEDcula Biliar: Par\xEAnquima homog\xEAneo, normoecog\xEAnico. Parede vesicular mensurada em 0,12 cm (normal).\n" + "\u2022 Ba\xE7o: Espessura de 1,18 cm em regi\xE3o de corpo, ecotextura finamente granular preservada.\n" + "\u2022 Rins (Esq / Dir): Dimens\xF5es sim\xE9tricas (RE: 6,42 cm | RD: 6,55 cm), rela\xE7\xE3o corticomedular 1:1 mantida.\n" + "\u2022 Bexiga Urin\xE1ria: Reple\xE7\xE3o moderada, conte\xFAdo anecog\xEAnico, parede lisa medindo 0,19 cm.\n" + "\u2022 Trato Gastrointestinal: Al\xE7a duodenal com estratifica\xE7\xE3o preservada (espessura parietal: 0,36 cm).\n\n" + "IMPRESS\xC3O DIAGN\xD3STICA OFICIAL (IA VETARO):\n" + "Exame ultrassonogr\xE1fico abdominal dentro dos limites anat\xF4micos da normalidade para a esp\xE9cie e porte.";
-              setGeneratedOutput(text);
-              setIsGenerating(false);
-              onAddActivity({
-                id: "act-".concat(Date.now()),
-                type: 'ultrassom',
-                title: 'Laudo de Ultrassonografia Abdominal',
-                patient: 'Thor (Golden Retriever, 6 anos)',
-                tutor: 'Carlos Eduardo Silva',
-                date: dateStr,
-                status: 'Concluído',
-                summary: text
-              });
-              onToast('Laudo Oficial de Ultrassom gerado a partir das capturas do Mindray!');
-            }, 850);
-          case 28:
+            return _context.finish(30);
+          case 33:
           case "end":
             return _context.stop();
         }
-      }, _callee, null, [[7, 23]]);
+      }, _callee, null, [[13, 27, 30, 33]]);
     }));
     return function handleGenerate() {
       return _ref2.apply(this, arguments);
@@ -4769,14 +3807,14 @@ function UltrasoundGenerator(_ref) {
   }, /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: onOpenProfile,
-    className: "px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 border transition shadow-xs ".concat(darkMode ? 'bg-[#E3FAF2] text-[#0D5C56] border-[#00D296]/40 hover:bg-[#ccf5e7]' : 'bg-[#E3FAF2] text-[#0D5C56] border-[#00D296]/40 hover:bg-[#d0f4e8]')
+    className: "px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 border transition shadow-xs bg-[#E3FAF2] text-[#0D5C56] border-[#00D296]/40 hover:bg-[#ccf5e7]"
   }, /*#__PURE__*/_react["default"].createElement(_lucideReact.User, {
     className: "w-4 h-4 text-[#00A878] shrink-0"
   }), /*#__PURE__*/_react["default"].createElement("span", {
     className: "leading-tight text-left"
   }, "Meu Perfil /", /*#__PURE__*/_react["default"].createElement("br", {
     className: "hidden sm:inline"
-  }), " Marca")), /*#__PURE__*/_react["default"].createElement("button", {
+  }), " Marca")), podeEmitir && /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: function onClick() {
       return setLayoutEditorOpen(!layoutEditorOpen);
@@ -4831,18 +3869,7 @@ function UltrasoundGenerator(_ref) {
     className: "text-sm sm:text-base font-extrabold"
   }, "Clique para selecionar as fotos ou arraste at\xE9 aqui"), /*#__PURE__*/_react["default"].createElement("p", {
     className: "text-xs mt-1 font-medium ".concat(darkMode ? 'text-slate-300/80' : 'text-[#52657A]')
-  }, "Formatos aceitos: JPG, PNG, WEBP (at\xE9 25 fotos por exame)"), /*#__PURE__*/_react["default"].createElement("div", {
-    className: "mt-3",
-    onClick: function onClick(e) {
-      return e.stopPropagation();
-    }
-  }, /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: handleLoadSamplePhotos,
-    className: "px-3 py-1 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 border transition ".concat(darkMode ? 'border-[#00D296]/30 bg-[#0D3131]/60 text-[#00D296] hover:bg-[#0D3131]' : 'border-[#0D5C56]/30 bg-white/80 text-[#0D5C56] hover:bg-white')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Sparkles, {
-    className: "w-3 h-3"
-  }), " Carregar 6 capturas Mindray de exemplo")), mindrayFiles.length > 0 && /*#__PURE__*/_react["default"].createElement("div", {
+  }, "Formatos aceitos: JPG, PNG, WEBP (at\xE9 25 fotos por exame)"), mindrayFiles.length > 0 && /*#__PURE__*/_react["default"].createElement("div", {
     onClick: function onClick(e) {
       return e.stopPropagation();
     },
@@ -4861,16 +3888,19 @@ function UltrasoundGenerator(_ref) {
     onClick: function onClick() {
       setMindrayFiles([]);
       setRawFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     },
     className: "text-[11px] font-bold underline text-rose-400 ml-2"
   }, "Limpar fotos"))), /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: handleGenerate,
-    disabled: isGenerating,
-    className: "relative z-10 w-full mt-5 py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ".concat(darkMode ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110' : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110')
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Wand2, {
+    disabled: isGenerating || !podeEmitir,
+    className: "relative z-10 w-full mt-5 py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ".concat(!podeEmitir ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : darkMode ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110' : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110')
+  }, !podeEmitir ? /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_lucideReact.Lock, {
     className: "w-5 h-5"
-  }), /*#__PURE__*/_react["default"].createElement("span", null, isGenerating ? 'Lendo calipers do Mindray e gerando Laudo Oficial...' : 'Gerar Laudo Oficial com IA'))), generatedOutput && /*#__PURE__*/_react["default"].createElement("div", {
+  }), /*#__PURE__*/_react["default"].createElement("span", null, "Gera\xE7\xE3o de Laudo Bloqueada (Sem Permiss\xE3o)")) : /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_lucideReact.Wand2, {
+    className: "w-5 h-5 ".concat(isGenerating ? 'animate-spin' : '')
+  }), /*#__PURE__*/_react["default"].createElement("span", null, isGenerating ? 'Analisando capturas do Mindray com IA e compilando PDF/DOCX (15-30s)...' : 'Gerar Laudo Oficial com IA')))), generatedOutput && /*#__PURE__*/_react["default"].createElement("div", {
     className: "p-5 sm:p-6 rounded-2xl border space-y-4 transition ".concat(darkMode ? 'bg-[#0F1C26] border-[#00D296]/40' : 'bg-white border-slate-200')
   }, /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-700/40"
@@ -4882,7 +3912,7 @@ function UltrasoundGenerator(_ref) {
     textSize: "text-base"
   }), /*#__PURE__*/_react["default"].createElement("span", {
     className: "text-xs font-bold text-[#00D296]"
-  }, "\u2022 Documento Oficial Pronto (", layoutConfig.headerStyle, ")")), /*#__PURE__*/_react["default"].createElement("div", {
+  }, "\u2022 Laudo Gerado com Sucesso!")), /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex items-center gap-1.5"
   }, /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
@@ -4890,13 +3920,13 @@ function UltrasoundGenerator(_ref) {
       return setReportPageTab('p1');
     },
     className: "px-3 py-1 rounded-lg text-xs font-extrabold ".concat(reportPageTab === 'p1' ? 'bg-[#00D296] text-[#062E2B]' : 'bg-slate-500/10 text-slate-400')
-  }, "P\xE1gina 1: Documento Oficial"), /*#__PURE__*/_react["default"].createElement("button", {
+  }, "P\xE1gina 1: Resumo do Exame"), /*#__PURE__*/_react["default"].createElement("button", {
     type: "button",
     onClick: function onClick() {
       return setReportPageTab('p2');
     },
     className: "px-3 py-1 rounded-lg text-xs font-extrabold ".concat(reportPageTab === 'p2' ? 'bg-[#00D296] text-[#062E2B]' : 'bg-slate-500/10 text-slate-400')
-  }, "P\xE1gina 2: Imagens Mindray"))), reportPageTab === 'p1' ? /*#__PURE__*/_react["default"].createElement("pre", {
+  }, "P\xE1gina 2: Imagens Enviadas (", mindrayFiles.length, ")"))), reportPageTab === 'p1' ? /*#__PURE__*/_react["default"].createElement("pre", {
     className: "text-xs leading-relaxed whitespace-pre-wrap font-sans p-4 rounded-xl border ".concat(darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-700')
   }, generatedOutput) : /*#__PURE__*/_react["default"].createElement("div", {
     className: "grid grid-cols-2 sm:grid-cols-3 gap-3"
@@ -4905,12 +3935,16 @@ function UltrasoundGenerator(_ref) {
       key: i,
       className: "p-3 rounded-xl border text-center ".concat(darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200')
     }, /*#__PURE__*/_react["default"].createElement("div", {
-      className: "h-24 rounded-lg bg-gradient-to-br from-[#0D3131] to-[#08151E] flex flex-col items-center justify-center text-[#00D296] mb-2 border border-teal-500/20"
-    }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
+      className: "h-24 rounded-lg bg-gradient-to-br from-[#0D3131] to-[#08151E] flex flex-col items-center justify-center text-[#00D296] mb-2 border border-teal-500/20 overflow-hidden"
+    }, img.previewUrl ? /*#__PURE__*/_react["default"].createElement("img", {
+      src: img.previewUrl,
+      alt: img.name,
+      className: "w-full h-full object-cover"
+    }) : /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.UltrasoundIcon, {
       className: "w-6 h-6 mb-1"
     }), /*#__PURE__*/_react["default"].createElement("span", {
       className: "text-[10px] font-bold"
-    }, img.measure)), /*#__PURE__*/_react["default"].createElement("p", {
+    }, img.measure))), /*#__PURE__*/_react["default"].createElement("p", {
       className: "text-[11px] font-bold truncate"
     }, img.name));
   })), /*#__PURE__*/_react["default"].createElement("div", {
@@ -4928,22 +3962,14 @@ function UltrasoundGenerator(_ref) {
     className: "px-4 py-2 rounded-xl text-xs font-extrabold border border-[#00D296]/40 text-[#00D296] flex items-center gap-1.5"
   }, /*#__PURE__*/_react["default"].createElement(_lucideReact.FileCheck, {
     className: "w-4 h-4"
-  }), " Baixar Word (.docx)"), downloadLinks.pdfUrl ? /*#__PURE__*/_react["default"].createElement("a", {
+  }), " Baixar Laudo em Word (.docx)"), downloadLinks.pdfUrl && /*#__PURE__*/_react["default"].createElement("a", {
     href: downloadLinks.pdfUrl,
     target: "_blank",
     rel: "noreferrer",
     className: "px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
   }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Download, {
     className: "w-4 h-4"
-  }), " Baixar PDF Oficial (P\xE1ginas 1 e 2)") : /*#__PURE__*/_react["default"].createElement("button", {
-    type: "button",
-    onClick: function onClick() {
-      return onToast('PDF Oficial Timbrado baixado com sucesso!');
-    },
-    className: "px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
-  }, /*#__PURE__*/_react["default"].createElement(_lucideReact.Download, {
-    className: "w-4 h-4"
-  }), " Baixar PDF Oficial (P\xE1ginas 1 e 2)")))));
+  }), " Baixar Laudo em PDF")))));
 }
   };
   modules["./services/api"] = function(require, module, exports) {

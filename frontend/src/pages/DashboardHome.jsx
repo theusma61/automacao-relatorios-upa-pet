@@ -19,10 +19,8 @@ export default function DashboardHome({
 }) {
   return (
     <div className="space-y-7">
-      {/* No Tablet os cards são horizontais empilhados; no Desktop são 2 colunas lado a lado */}
       {isTabletLayout ? (
         <div className="space-y-4">
-          {/* Card Horizontal Tablet: Ultrassom */}
           <div
             className={`relative rounded-2xl p-6 border flex items-center gap-6 overflow-hidden transition ${
               darkMode
@@ -61,7 +59,6 @@ export default function DashboardHome({
             </div>
           </div>
 
-          {/* Card Horizontal Tablet: Relatório */}
           <div
             className={`relative rounded-2xl p-6 border flex items-center gap-6 overflow-hidden transition ${
               darkMode
@@ -101,9 +98,7 @@ export default function DashboardHome({
           </div>
         </div>
       ) : (
-        /* Layout Desktop (2 colunas) ou Mobile (1 coluna empilhada) */
         <div className={`grid ${isMobileLayout ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'}`}>
-          {/* Card 1: Ultrassom */}
           <div
             className={`relative rounded-2xl ${
               isMobileLayout ? 'p-5' : 'p-7'
@@ -144,7 +139,6 @@ export default function DashboardHome({
             </div>
           </div>
 
-          {/* Card 2: Relatório */}
           <div
             className={`relative rounded-2xl ${
               isMobileLayout ? 'p-5' : 'p-7'
@@ -187,7 +181,7 @@ export default function DashboardHome({
         </div>
       )}
 
-      {/* Tabela Atividade Recente */}
+      {/* Tabela Atividade Recente (100% PostgreSQL) */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
@@ -228,61 +222,69 @@ export default function DashboardHome({
               : 'bg-white border-slate-200 divide-slate-100'
           }`}
         >
-          {activities.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onSelectReport(item)}
-              className={`px-4 sm:px-6 py-3.5 flex items-center justify-between gap-2 cursor-pointer transition ${
-                darkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    darkMode
-                      ? 'bg-slate-800 text-slate-300'
-                      : 'bg-slate-100 text-[#0A141D]'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div className="truncate">
-                  <p className="text-xs sm:text-sm font-bold truncate">
-                    {item.title}
-                    {item.patient ? (
-                      <span className="font-normal opacity-80"> — {item.patient}</span>
-                    ) : null}
-                  </p>
-                  {isMobileLayout && (
-                    <p className="text-[10px] text-slate-400 truncate">{item.date}</p>
-                  )}
-                </div>
-              </div>
-
-              {!isMobileLayout && (
-                <span
-                  className={`text-xs font-medium shrink-0 ${
-                    darkMode ? 'text-slate-400' : 'text-[#637692]'
-                  }`}
-                >
-                  {item.date}
-                </span>
-              )}
-
-              <div className="flex items-center gap-3 shrink-0">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    darkMode
-                      ? 'bg-[#0D4A3E] text-[#2CE5B1]'
-                      : 'bg-[#D3F7E9] text-[#0D684E]'
-                  }`}
-                >
-                  {item.status}
-                </span>
-                <MoreHorizontal className="w-4 h-4 text-slate-400" />
-              </div>
+          {activities.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {loadingHistory
+                ? 'Carregando histórico do PostgreSQL...'
+                : 'Nenhum laudo de ultrassom ou relatório cirúrgico emitido ainda.'}
             </div>
-          ))}
+          ) : (
+            activities.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => onSelectReport(item)}
+                className={`px-4 sm:px-6 py-3.5 flex items-center justify-between gap-2 cursor-pointer transition ${
+                  darkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      darkMode
+                        ? 'bg-slate-800 text-slate-300'
+                        : 'bg-slate-100 text-[#0A141D]'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs sm:text-sm font-bold truncate">
+                      {item.title}
+                      {item.patient ? (
+                        <span className="font-normal opacity-80"> — {item.patient}</span>
+                      ) : null}
+                    </p>
+                    {isMobileLayout && (
+                      <p className="text-[10px] text-slate-400 truncate">{item.date}</p>
+                    )}
+                  </div>
+                </div>
+
+                {!isMobileLayout && (
+                  <span
+                    className={`text-xs font-medium shrink-0 ${
+                      darkMode ? 'text-slate-400' : 'text-[#637692]'
+                    }`}
+                  >
+                    {item.date}
+                  </span>
+                )}
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      darkMode
+                        ? 'bg-[#0D4A3E] text-[#2CE5B1]'
+                        : 'bg-[#D3F7E9] text-[#0D684E]'
+                    }`}
+                  >
+                    {item.status}
+                  </span>
+                  <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

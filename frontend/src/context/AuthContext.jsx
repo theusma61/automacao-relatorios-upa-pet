@@ -16,7 +16,7 @@ export function computeInitials(name = '') {
 
 export function computeGreetingName(name = '') {
   const trimmed = String(name || '').trim();
-  if (!trimmed) return 'Dra. Mariana';
+  if (!trimmed) return 'Doutor(a)';
   const parts = trimmed.split(/\s+/);
   if (/^Dra?\.?$/i.test(parts[0]) && parts.length >= 2) {
     return `${parts[0]} ${parts[1]}`;
@@ -24,49 +24,28 @@ export function computeGreetingName(name = '') {
   return parts[0];
 }
 
-export const DEMO_USER_PROFILE = {
-  id: 'demo-vetaro-user',
-  nome: 'Mariana Duarte',
-  greetingName: 'Dra. Mariana',
-  initials: 'MD',
-  email: 'maria@clinica.com.br',
-  crmv: 'CRMV-SP 48.291',
-  specialty: 'Diagnóstico por Imagem & Ultrassonografia Veterinária',
-  nomeClinica: 'Centro Diagnóstico VetCare',
-  phone: '(11) 99812-4500',
-  plan: 'Vetaro Pro IA (Ilimitado)',
-  role: 'admin',
-  roleDescricao: 'Administrador',
-  podeGerarLaudos: true,
-  podeGerarCirurgia: true,
-  aiTone: 'tecnico',
-  autoMeasurements: true,
-  voiceDictation: true,
-  includeHeaderLogo: true,
-  isDemo: true
-};
-
 export function AuthProvider({ children }) {
   const { syncThemeFromUser } = useTheme();
   const [usuario, setUsuarioState] = useState(null);
   const [ssoConfig, setSsoConfig] = useState({ googleClientId: '', ssoAtivo: false });
   const [carregandoSessao, setCarregandoSessao] = useState(true);
-  const [modoDemo, setModoDemo] = useState(false);
 
   const enrichUser = useCallback((u) => {
     if (!u) return null;
-    const nome = u.nome || u.name || 'Mariana Duarte';
+    const nome = u.nome || u.name || 'Veterinário(a)';
     return {
-      ...DEMO_USER_PROFILE,
       ...u,
       nome,
       name: nome,
       greetingName: computeGreetingName(nome),
       initials: computeInitials(nome),
-      crmv: u.crmv || 'CRMV/MG: 22904',
+      crmv: u.crmv || 'CRMV não informado',
       nomeClinica: u.nomeClinica || u.clinicName || 'UPA PET',
       clinicName: u.nomeClinica || u.clinicName || 'UPA PET',
-      isDemo: Boolean(u.isDemo)
+      specialty: u.specialty || 'Diagnóstico por Imagem & Cirurgia Veterinária',
+      autoMeasurements: u.autoMeasurements !== undefined ? u.autoMeasurements : true,
+      voiceDictation: u.voiceDictation !== undefined ? u.voiceDictation : true,
+      includeHeaderLogo: u.includeHeaderLogo !== undefined ? u.includeHeaderLogo : true
     };
   }, []);
 
@@ -78,13 +57,13 @@ export function AuthProvider({ children }) {
         setSsoConfig(cfgRes.value);
       }
       if (meRes.status === 'fulfilled' && meRes.value?.usuario) {
-        const userObj = enrichUser({ ...meRes.value.usuario, isDemo: false });
+        const userObj = enrichUser(meRes.value.usuario);
         setUsuarioState(userObj);
-        setModoDemo(false);
         if (meRes.value.usuario.temaPreferencia) {
           syncThemeFromUser(meRes.value.usuario.temaPreferencia);
         } else {
-          api.getTema()
+          api
+            .getTema()
             .then((t) => {
               if (t && t.tema) syncThemeFromUser(t.tema);
             })
@@ -108,9 +87,8 @@ export function AuthProvider({ children }) {
     async (credential) => {
       const data = await api.loginWithGoogle(credential);
       if (data?.usuario) {
-        const enriched = enrichUser({ ...data.usuario, isDemo: false });
+        const enriched = enrichUser(data.usuario);
         setUsuarioState(enriched);
-        setModoDemo(false);
         if (data.usuario.temaPreferencia) {
           syncThemeFromUser(data.usuario.temaPreferencia);
         }
@@ -121,16 +99,11 @@ export function AuthProvider({ children }) {
     [enrichUser, syncThemeFromUser]
   );
 
-  const entrarModoDemonstracao = useCallback(() => {
-    setModoDemo(true);
-    setUsuarioState(enrichUser({ ...DEMO_USER_PROFILE, isDemo: true }));
-  }, [enrichUser]);
-
   const atualizarUsuarioLocal = useCallback(
     (novosDados) => {
       setUsuarioState((prev) => {
-        const base = prev || DEMO_USER_PROFILE;
-        return enrichUser({ ...base, ...novosDados });
+        if (!prev) return null;
+        return enrichUser({ ...prev, ...novosDados });
       });
     },
     [enrichUser]
@@ -140,22 +113,16 @@ export function AuthProvider({ children }) {
     try {
       await api.logout();
     } catch (_) {}
-    setModoDemo(false);
     setUsuarioState(null);
   }, []);
-
-  const perfilAtivo = usuario || (modoDemo ? enrichUser(DEMO_USER_PROFILE) : null);
 
   return (
     <AuthContext.Provider
       value={{
-        usuario: perfilAtivo,
-        usuarioReal: usuario && !usuario.isDemo ? usuario : null,
+        usuario,
         ssoConfig,
         carregandoSessao,
-        modoDemo,
         loginComGoogleCredential,
-        entrarModoDemonstracao,
         atualizarUsuarioLocal,
         refreshAuth,
         logout

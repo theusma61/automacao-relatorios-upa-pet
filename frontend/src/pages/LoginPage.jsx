@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ShieldCheck, Sparkles, Sun, Moon } from 'lucide-react';
+import { ShieldCheck, Sun, Moon } from 'lucide-react';
 import { VetaroLogo, CardWaveBackground } from '../components/icons/VetaroIcons';
 
 export default function LoginPage({
@@ -7,7 +7,6 @@ export default function LoginPage({
   setDarkMode,
   ssoConfig,
   onGoogleCredential,
-  onEnterDemo,
   onToast
 }) {
   const googleBtnRef = useRef(null);
@@ -17,13 +16,18 @@ export default function LoginPage({
     let timer = null;
 
     const renderBtn = () => {
-      if (window.google && window.google.accounts && window.google.accounts.id && googleBtnRef.current) {
+      if (
+        window.google &&
+        window.google.accounts &&
+        window.google.accounts.id &&
+        googleBtnRef.current
+      ) {
         window.google.accounts.id.initialize({
           client_id: ssoConfig.googleClientId,
           callback: async (response) => {
             try {
               await onGoogleCredential(response.credential);
-              onToast('Autenticado com sucesso via Google SSO!');
+              onToast('Autenticado com sucesso!');
             } catch (err) {
               onToast('Erro no login Google: ' + err.message);
             }
@@ -54,7 +58,6 @@ export default function LoginPage({
         darkMode ? 'bg-[#0A141D] text-white' : 'bg-[#F8FAFC] text-[#0A141D]'
       }`}
     >
-      {/* Topo com Logo e Switch Claro/Escuro */}
       <div className="max-w-5xl w-full mx-auto flex items-center justify-between">
         <VetaroLogo size={34} dark={darkMode} />
         <button
@@ -71,7 +74,6 @@ export default function LoginPage({
         </button>
       </div>
 
-      {/* Card Central de Autenticação */}
       <div className="my-auto max-w-md w-full mx-auto">
         <div
           className={`relative rounded-3xl border p-8 sm:p-10 shadow-2xl overflow-hidden text-center ${
@@ -92,57 +94,37 @@ export default function LoginPage({
             </div>
 
             <h1 className="text-2xl font-extrabold tracking-tight">
-              Acesso Clínico Vetaro
+              Acesso Restrito ao Sistema
             </h1>
             <p
               className={`text-xs sm:text-sm mt-2 mb-6 leading-relaxed ${
                 darkMode ? 'text-slate-300' : 'text-[#52657A]'
               }`}
             >
-              Entre com sua conta Google autorizada para emitir laudos de ultrassom Mindray e
-              relatórios cirúrgicos oficiais com seu timbre e CRMV.
+              Entre com sua conta Google autorizada para emitir laudos de ultrassom e
+              relatórios cirúrgicos oficiais.
             </p>
 
             {ssoConfig?.googleClientId ? (
               <div className="flex justify-center my-2" ref={googleBtnRef} />
             ) : (
               <div
-                className={`w-full p-3.5 rounded-xl border text-xs text-left mb-4 ${
+                className={`w-full p-3.5 rounded-xl border text-xs text-left ${
                   darkMode
-                    ? 'bg-[#0A141D]/80 border-teal-500/30 text-slate-300'
-                    : 'bg-[#F0FBF7] border-teal-600/30 text-slate-700'
+                    ? 'bg-[#0A141D]/80 border-amber-500/30 text-amber-300'
+                    : 'bg-amber-50 border-amber-200 text-amber-900'
                 }`}
               >
-                <p className="font-extrabold text-[#00D296] mb-1">
-                  Google SSO (GOOGLE_CLIENT_ID)
-                </p>
-                <p className="leading-relaxed">
-                  Configure <code>GOOGLE_CLIENT_ID</code> no arquivo <code>.env</code> para
-                  ativar o botão oficial do Google Identity Services, ou acesse abaixo o modo
-                  interativo.
-                </p>
+                <strong>Configuração pendente:</strong> Defina a variável{' '}
+                <code>GOOGLE_CLIENT_ID</code> no arquivo <code>.env</code> do servidor.
               </div>
             )}
-
-            <button
-              type="button"
-              onClick={onEnterDemo}
-              className={`w-full mt-3 py-3.5 px-5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition ${
-                darkMode
-                  ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110'
-                  : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110'
-              }`}
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Entrar no Painel Interativo Vetaro</span>
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Rodapé */}
       <div className="text-center text-xs text-slate-500">
-        vetaro • Tecnologia que cuida • Multi-Tenant PostgreSQL
+        vetaro • Tecnologia que cuida
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ import {
   Copy,
   Plus,
   Search,
-  Sparkles
+  Lock
 } from 'lucide-react';
 import {
   VetaroLogo,
@@ -43,12 +43,16 @@ export default function SurgeryGenerator({
   const [downloadLinks, setDownloadLinks] = useState({ pdfUrl: '', docxUrl: '' });
   const [reportPageTab, setReportPageTab] = useState('p1');
 
-  // Estados da Biblioteca de Modelos Cirúrgicos
   const [modelos, setModelos] = useState([]);
-  const [filtroOrigem, setFiltroOrigem] = useState('todos'); // 'todos' | 'globais' | 'meus'
+  const [filtroOrigem, setFiltroOrigem] = useState('todos');
   const [buscaModelo, setBuscaModelo] = useState('');
-  const [modalMode, setModalMode] = useState(null); // null | 'view' | 'form'
+  const [modalMode, setModalMode] = useState(null);
   const [modeloSelecionado, setModeloSelecionado] = useState(null);
+
+  const podeEmitir =
+    userProfile?.podeGerarCirurgia ||
+    userProfile?.role === 'admin' ||
+    userProfile?.role === 'veterinario';
 
   const carregarModelos = async () => {
     try {
@@ -69,9 +73,9 @@ export default function SurgeryGenerator({
     setRawDocFile(f);
     setSurgeryDocFile({
       name: f.name,
-      size: `${(f.size / 1024).toFixed(1)} KB • Documento/Áudio`
+      size: `${(f.size / 1024).toFixed(1)} KB`
     });
-    onToast('Arquivo da cirurgia anexado com sucesso!');
+    onToast('Arquivo da cirurgia selecionado!');
   };
 
   const handlePhotosSelected = (fileList) => {
@@ -81,27 +85,24 @@ export default function SurgeryGenerator({
     setSurgeryPhotos(
       arr.map((f, i) => ({
         name: f.name,
-        label: `Foto ${i + 1} (${(f.size / 1024).toFixed(0)} KB)`
+        label: `Foto ${i + 1} (${(f.size / 1024).toFixed(0)} KB)`,
+        previewUrl: URL.createObjectURL(f)
       }))
     );
-    onToast(`${arr.length} foto(s) intraoperatória(s) anexada(s) para a Página 2!`);
-  };
-
-  const handleLoadSampleSurgery = (e) => {
-    if (e) e.stopPropagation();
-    setRawDocFile(null);
-    setSurgeryDocFile({
-      name: 'audio_cirurgia_esplenectomia_thor.m4a',
-      size: '3.4 MB • Áudio de 2m18s + Notas'
-    });
-    setSurgeryPhotos([
-      { name: 'FOTO_INTRAOP_HEMOSTASIA_01.JPG', label: 'Ligadura vascular' },
-      { name: 'FOTO_PECA_CIRURGICA_02.JPG', label: 'Peça anatômica ressecada' }
-    ]);
-    onToast('Áudio e 2 fotos intraoperatórias de exemplo carregados!');
+    onToast(`${arr.length} foto(s) intraoperatória(s) anexada(s)!`);
   };
 
   const handleGenerate = async () => {
+    if (!podeEmitir) {
+      onToast('Sua conta não possui permissão para gerar relatórios cirúrgicos.');
+      return;
+    }
+    if (!rawDocFile && rawPhotoFiles.length === 0) {
+      onToast('Selecione o arquivo da cirurgia (.docx, .pages, .txt ou áudio) antes de gerar.');
+      if (docInputRef.current) docInputRef.current.click();
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedOutput('');
     setDownloadLinks({ pdfUrl: '', docxUrl: '' });
@@ -115,85 +116,49 @@ export default function SurgeryGenerator({
       '0'
     )}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    if (rawDocFile || rawPhotoFiles.length > 0) {
-      try {
-        const fd = new FormData();
-        if (rawDocFile) fd.append('documento', rawDocFile);
-        rawPhotoFiles.forEach((f) => fd.append('fotos', f));
+    try {
+      const fd = new FormData();
+      if (rawDocFile) fd.append('documento', rawDocFile);
+      rawPhotoFiles.forEach((f) => fd.append('fotos', f));
 
-        const res = await api.gerarCirurgia(fd);
-        const pac = res.paciente || {};
-        const cir = res.cirurgia || {};
-        const textReal =
-          `RELATÓRIO CIRÚRGICO OFICIAL — ${(userProfile.clinicName || 'UPA PET').toUpperCase()}\n` +
-          `Cirurgiã Responsável: ${userProfile.name} (${userProfile.crmv})\n` +
-          `Paciente: ${pac.nome || 'Paciente'} (${pac.especie || 'Canino'}) | Procedimento: ${
-            cir.procedimento || 'Procedimento Cirúrgico'
-          }\n` +
-          `--------------------------------------------------------------------------------\n` +
-          `1. DIAGNÓSTICO PRÉ-CIRÚRGICO:\n${cir.diagnosticoPreCirurgico || 'A critério clínico.'}\n\n` +
-          `2. DESCRIÇÃO TÉCNICA DO PROCEDIMENTO:\n${
-            cir.descricaoProcedimento || 'Procedimento realizado conforme protocolo institucional.'
-          }\n\n` +
-          `3. EVOLUÇÃO E CONSIDERAÇÕES:\n${
-            cir.evolucaoConsideracoes || 'Paciente encaminhado para recuperação.'
-          }`;
-
-        setGeneratedOutput(textReal);
-        setDownloadLinks({ pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' });
-        onAddActivity({
-          id: `cirurg-${Date.now()}`,
-          type: 'relatorio',
-          title: `Relatório Cirúrgico Oficial — ${cir.procedimento || 'Cirurgia'}`,
-          patient: `${pac.nome || 'Paciente'} (${pac.especie || 'Canina'})`,
-          tutor: pac.tutor || '',
-          date: dateStr,
-          status: 'Concluído',
-          summary: textReal,
-          pdfUrl: res.pdfUrl,
-          docxUrl: res.docxUrl
-        });
-        onToast('Relatório Cirúrgico Oficial compilado com sucesso!');
-        setIsGenerating(false);
-        return;
-      } catch (err) {
-        onToast('Aviso da API (' + err.message + ') — exibindo simulação interativa.');
-      }
-    }
-
-    if (!surgeryDocFile) {
-      handleLoadSampleSurgery();
-    }
-
-    setTimeout(() => {
-      const text =
+      const res = await api.gerarCirurgia(fd);
+      const pac = res.paciente || {};
+      const cir = res.cirurgia || {};
+      const textReal =
         `RELATÓRIO CIRÚRGICO OFICIAL — ${(userProfile.clinicName || 'UPA PET').toUpperCase()}\n` +
-        `Cirurgiã Responsável: ${userProfile.name} (${userProfile.crmv})\n` +
-        `Arquivo Base Transcrito: ${
-          surgeryDocFile ? surgeryDocFile.name : 'audio_cirurgia_esplenectomia_thor.m4a'
+        `Cirurgiã(o) Responsável: ${userProfile.name} (${userProfile.crmv})\n` +
+        `Paciente: ${pac.nome || 'Paciente'} (${pac.especie || 'Canina'}) | Procedimento: ${
+          cir.procedimento || 'Procedimento Cirúrgico'
         }\n` +
         `--------------------------------------------------------------------------------\n` +
-        `1. DESCRIÇÃO TÉCNICA DO PROCEDIMENTO:\n` +
-        `Paciente submetido à celiotomia mediana sob anestesia geral inalatória monitorada. Realizada inspeção da cavidade abdominal, seguida de isolamento e dupla ligadura vascular com fio absorvível Poliglactina 910 (2-0). Hemostasia rigorosa revisada sem sangramento ativo.\n\n` +
-        `2. SÍNTESE E RECUPERAÇÃO ANESTÉSICA:\n` +
-        `Celiorrafia em três planos anatômicos (linha alba em padrão simples contínuo, subcutâneo em Cushing e dermorrafia em Sultan com Nylon 3-0). Paciente extubado em normotermia e parâmetros vitais estáveis.\n\n` +
-        `3. ANEXO FOTOGRÁFICO (PÁGINA 2):\n` +
-        `Constam na Página 2 os registros fotográficos intraoperatórios e da peça cirúrgica devidamente identificados.`;
+        `1. DIAGNÓSTICO PRÉ-CIRÚRGICO:\n${cir.diagnosticoPreCirurgico || 'A critério clínico.'}\n\n` +
+        `2. DESCRIÇÃO TÉCNICA DO PROCEDIMENTO:\n${
+          cir.descricaoProcedimento || 'Procedimento realizado conforme protocolo institucional.'
+        }\n\n` +
+        `3. EVOLUÇÃO E CONSIDERAÇÕES:\n${
+          cir.evolucaoConsideracoes || 'Paciente encaminhado para recuperação.'
+        }`;
 
-      setGeneratedOutput(text);
-      setIsGenerating(false);
+      setGeneratedOutput(textReal);
+      setDownloadLinks({ pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' });
       onAddActivity({
-        id: `act-${Date.now()}`,
+        id: `cirurg-${Date.now()}`,
         type: 'relatorio',
-        title: 'Relatório Cirúrgico Oficial',
-        patient: 'Thor (Golden Retriever, 6 anos)',
-        tutor: 'Carlos Eduardo Silva',
+        title: `Relatório Cirúrgico — ${cir.procedimento || 'Oficial'}`,
+        patient: `${pac.nome || 'Paciente'} (${pac.especie || 'Canina'})`,
+        tutor: pac.tutor || '',
         date: dateStr,
         status: 'Concluído',
-        summary: text
+        summary: textReal,
+        pdfUrl: res.pdfUrl,
+        docxUrl: res.docxUrl
       });
-      onToast('Relatório Cirúrgico Oficial gerado com sucesso!');
-    }, 850);
+      onToast('Relatório Cirúrgico Oficial concluído com sucesso!');
+    } catch (err) {
+      onToast('Erro ao processar cirurgia: ' + err.message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleClonarModelo = async (id) => {
@@ -229,7 +194,7 @@ export default function SurgeryGenerator({
       >
         <CardWaveBackground dark={darkMode} />
 
-        {/* Cabeçalho do Relatório Cirúrgico Oficial */}
+        {/* Cabeçalho */}
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
           <div>
             <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
@@ -274,22 +239,13 @@ export default function SurgeryGenerator({
 
         {/* SEÇÃO 1: 1. FICHA CIRÚRGICA OU ÁUDIO */}
         <div className="relative z-10 mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <p
-              className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-wider ${
-                darkMode ? 'text-slate-200' : 'text-[#1E2D3D]'
-              }`}
-            >
-              1. FICHA CIRÚRGICA OU ÁUDIO
-            </p>
-            <button
-              type="button"
-              onClick={handleLoadSampleSurgery}
-              className="text-[11px] font-bold text-[#00D296] hover:underline flex items-center gap-1"
-            >
-              <Sparkles className="w-3 h-3" /> Carregar exemplo de cirurgia
-            </button>
-          </div>
+          <p
+            className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-wider mb-2 ${
+              darkMode ? 'text-slate-200' : 'text-[#1E2D3D]'
+            }`}
+          >
+            1. FICHA CIRÚRGICA OU ÁUDIO
+          </p>
 
           <div
             onClick={() => docInputRef.current && docInputRef.current.click()}
@@ -340,7 +296,7 @@ export default function SurgeryGenerator({
           </div>
         </div>
 
-        {/* SEÇÃO 2: 2. FOTOS INTRAOPERATÓRIAS / PEÇA CIRÚRGICA (OPCIONAL - PÁGINA 2) */}
+        {/* SEÇÃO 2: 2. FOTOS INTRAOPERATÓRIAS / PEÇA CIRÚRGICA */}
         <div className="relative z-10 mb-5">
           <p
             className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-wider mb-2 ${
@@ -395,23 +351,34 @@ export default function SurgeryGenerator({
         <button
           type="button"
           onClick={handleGenerate}
-          disabled={isGenerating}
+          disabled={isGenerating || !podeEmitir}
           className={`relative z-10 w-full py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ${
-            darkMode
+            !podeEmitir
+              ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+              : darkMode
               ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110'
               : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110'
           }`}
         >
-          <Wand2 className="w-5 h-5" />
-          <span>
-            {isGenerating
-              ? 'Transcrevendo e formatando Relatório Cirúrgico Oficial...'
-              : 'Gerar Relatório Cirúrgico Oficial'}
-          </span>
+          {!podeEmitir ? (
+            <>
+              <Lock className="w-5 h-5" />
+              <span>Geração Cirúrgica Bloqueada (Sem Permissão)</span>
+            </>
+          ) : (
+            <>
+              <Wand2 className={`w-5 h-5 ${isGenerating ? 'animate-spin' : ''}`} />
+              <span>
+                {isGenerating
+                  ? 'Identificando procedimento e aplicando modelos cirúrgicos...'
+                  : 'Gerar Relatório Cirúrgico Oficial'}
+              </span>
+            </>
+          )}
         </button>
       </div>
 
-      {/* Resultado Gerado pela IA */}
+      {/* Resultado Real Gerado pela IA */}
       {generatedOutput && (
         <div
           className={`p-5 sm:p-6 rounded-2xl border space-y-4 transition ${
@@ -422,7 +389,7 @@ export default function SurgeryGenerator({
             <div className="flex items-center gap-2">
               <VetaroLogo size={22} dark={darkMode} textSize="text-base" />
               <span className="text-xs font-bold text-[#00D296]">
-                • Documento Oficial Pronto ({layoutConfig.headerStyle})
+                • Relatório Cirúrgico Concluído!
               </span>
             </div>
 
@@ -438,17 +405,19 @@ export default function SurgeryGenerator({
               >
                 Página 1: Documento Oficial
               </button>
-              <button
-                type="button"
-                onClick={() => setReportPageTab('p2')}
-                className={`px-3 py-1 rounded-lg text-xs font-extrabold ${
-                  reportPageTab === 'p2'
-                    ? 'bg-[#00D296] text-[#062E2B]'
-                    : 'bg-slate-500/10 text-slate-400'
-                }`}
-              >
-                Página 2: Fotos da Cirurgia
-              </button>
+              {surgeryPhotos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setReportPageTab('p2')}
+                  className={`px-3 py-1 rounded-lg text-xs font-extrabold ${
+                    reportPageTab === 'p2'
+                      ? 'bg-[#00D296] text-[#062E2B]'
+                      : 'bg-slate-500/10 text-slate-400'
+                  }`}
+                >
+                  Página 2: Fotos da Cirurgia ({surgeryPhotos.length})
+                </button>
+              )}
             </div>
           </div>
 
@@ -464,13 +433,7 @@ export default function SurgeryGenerator({
             </pre>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {(surgeryPhotos.length > 0
-                ? surgeryPhotos
-                : [
-                    { name: 'FOTO_INTRAOP_01.JPG', label: 'Hemostasia vascular' },
-                    { name: 'FOTO_PECA_CIRURGICA_02.JPG', label: 'Peça cirúrgica' }
-                  ]
-              ).map((img, i) => (
+              {surgeryPhotos.map((img, i) => (
                 <div
                   key={i}
                   className={`p-3 rounded-xl border text-center ${
@@ -479,9 +442,19 @@ export default function SurgeryGenerator({
                       : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <div className="h-24 rounded-lg bg-gradient-to-br from-[#0D3131] to-[#08151E] flex flex-col items-center justify-center text-[#00D296] mb-2 border border-teal-500/20">
-                    <UltrasoundIcon className="w-6 h-6 mb-1" />
-                    <span className="text-[10px] font-bold">{img.label}</span>
+                  <div className="h-24 rounded-lg bg-gradient-to-br from-[#0D3131] to-[#08151E] flex flex-col items-center justify-center text-[#00D296] mb-2 border border-teal-500/20 overflow-hidden">
+                    {img.previewUrl ? (
+                      <img
+                        src={img.previewUrl}
+                        alt={img.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <>
+                        <UltrasoundIcon className="w-6 h-6 mb-1" />
+                        <span className="text-[10px] font-bold">{img.label}</span>
+                      </>
+                    )}
                   </div>
                   <p className="text-[11px] font-bold truncate">{img.name}</p>
                 </div>
@@ -505,27 +478,19 @@ export default function SurgeryGenerator({
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold border border-[#00D296]/40 text-[#00D296] flex items-center gap-1.5"
                 >
-                  <FileCheck className="w-4 h-4" /> Baixar Word (.docx)
+                  <FileCheck className="w-4 h-4" /> Baixar Relatório em Word (.docx)
                 </a>
               )}
 
-              {downloadLinks.pdfUrl ? (
+              {downloadLinks.pdfUrl && (
                 <a
                   href={downloadLinks.pdfUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
                 >
-                  <Download className="w-4 h-4" /> Baixar PDF Oficial (Páginas 1 e 2)
+                  <Download className="w-4 h-4" /> Baixar Relatório em PDF
                 </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onToast('PDF Oficial Timbrado baixado com sucesso!')}
-                  className="px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
-                >
-                  <Download className="w-4 h-4" /> Baixar PDF Oficial (Páginas 1 e 2)
-                </button>
               )}
             </div>
           </div>
@@ -555,17 +520,19 @@ export default function SurgeryGenerator({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setModeloSelecionado(null);
-              setModalMode('form');
-            }}
-            className="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Modelo Cirúrgico</span>
-          </button>
+          {podeEmitir && (
+            <button
+              type="button"
+              onClick={() => {
+                setModeloSelecionado(null);
+                setModalMode('form');
+              }}
+              className="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Modelo Cirúrgico</span>
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
@@ -614,7 +581,7 @@ export default function SurgeryGenerator({
               darkMode ? 'border-slate-800 bg-[#0A141D]/50' : 'border-slate-200 bg-slate-50'
             }`}
           >
-            Nenhum modelo cirúrgico listado para este filtro.
+            Nenhum modelo cirúrgico encontrado para este filtro.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[420px] overflow-y-auto pr-1">
@@ -659,7 +626,7 @@ export default function SurgeryGenerator({
                   >
                     <Eye className="w-3.5 h-3.5" /> Detalhes
                   </button>
-                  {m.isGlobal && (
+                  {podeEmitir && m.isGlobal && (
                     <button
                       type="button"
                       onClick={() => handleClonarModelo(m.id)}
@@ -668,7 +635,7 @@ export default function SurgeryGenerator({
                       <Copy className="w-3.5 h-3.5" /> Duplicar
                     </button>
                   )}
-                  {(!m.isGlobal || userProfile.role === 'admin') && (
+                  {podeEmitir && (!m.isGlobal || userProfile.role === 'admin') && (
                     <button
                       type="button"
                       onClick={() => {
@@ -687,12 +654,12 @@ export default function SurgeryGenerator({
         )}
       </div>
 
-      {/* Modal de Visualização / Edição de Modelo Cirúrgico */}
       <ModeloCirurgicoModal
         darkMode={darkMode}
         mode={modalMode}
         modelo={modeloSelecionado}
         canEdit={
+          podeEmitir &&
           modeloSelecionado &&
           (!modeloSelecionado.isGlobal || userProfile.role === 'admin')
         }
