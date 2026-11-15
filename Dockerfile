@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install -y \
 ENV CHROME_BIN=/usr/bin/chromium \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    NODE_ENV=production \
     PORT=3000
 
 WORKDIR /app
@@ -36,11 +35,13 @@ COPY prisma ./prisma/
 RUN npm install --omit=dev && npx prisma generate
 
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install
+RUN cd frontend && npm install --include=dev
 
 COPY . .
 RUN cd frontend && npm run build
 
+ENV NODE_ENV=production
+
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node servidor_web.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node servidor_web.js"]
