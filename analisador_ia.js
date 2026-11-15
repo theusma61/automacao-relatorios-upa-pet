@@ -11,6 +11,65 @@ function fileToGenerativePart(filePath, mimeType) {
   };
 }
 
+function sanitizarDadosPaciente(paciente, nomeClinica = '') {
+  if (!paciente || typeof paciente !== 'object') {
+    return {
+      nome: 'Não identificado',
+      tutor: 'Não informado',
+      especie: 'Canina',
+      sexo: 'Não informado',
+      idade: 'Não informada',
+      data: new Date().toLocaleDateString('pt-BR')
+    };
+  }
+
+  let nome = String(paciente.nome || '').trim();
+  let tutor = String(paciente.tutor || '').trim();
+
+  const regexTermosClinica = /(upa\s*pet|cl[íi]nica|hospital|veterin[áa]ri[ao]|contagem|betim|barreiro|unidade|centro\s*vet)/i;
+  const ehClinica = (str) => {
+    if (!str) return false;
+    if (regexTermosClinica.test(str)) return true;
+    if (nomeClinica && str.toLowerCase().includes(nomeClinica.toLowerCase())) return true;
+    return false;
+  };
+
+  // Se o tutor capturado foi o nome de hospital/clínica, anula
+  if (ehClinica(tutor)) {
+    tutor = '';
+  }
+
+  // No aparelho Mindray, operadores frequentemente preenchem o campo "Name" com:
+  // "LUA, NILDA", "LUA / NILDA", "LUA - NILDA" (onde LUA é o animal e NILDA é a tutora)
+  const matchSeparador = nome.match(/^([^,/-]+)\s*[,/-]\s*(.+)$/);
+  if (matchSeparador) {
+    const parteAnimal = matchSeparador[1].trim();
+    const parteTutor = matchSeparador[2].trim();
+
+    // Evita falsos positivos se a segunda parte for apenas indicação de espécie, sexo ou raça
+    const regexNaoTutor = /^(canin[ao]|felin[ao]|macho|femea|fêmea|sr[de]|poodle|pitbull|shih\s*tzu|yorkshire)$/i;
+    if (!regexNaoTutor.test(parteTutor)) {
+      if (!tutor || tutor.toLowerCase() === 'não informado' || ehClinica(tutor)) {
+        tutor = parteTutor;
+      }
+      nome = parteAnimal;
+    }
+  }
+
+  if (!tutor || ehClinica(tutor)) {
+    tutor = 'Não informado';
+  }
+  if (!nome) {
+    nome = 'Não identificado';
+  }
+
+  return {
+    ...paciente,
+    nome,
+    tutor
+  };
+}
+
 async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosCandidatos = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
@@ -31,6 +90,13 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
 
 1. DADOS DO PACIENTE:
    - Extraia Nome, Tutor, Sexo, Data e Idade diretamente do cabeçalho na tela do Mindray.
+   - ⚠️ REGRA CRÍTICA PARA NOME DO PACIENTE E TUTOR (PADRÃO MINDRAY):
+     * O texto no topo superior da tela do ultrassom (ex: "UPA PET - CONTAGEM", "UPA PET", ou nome da clínica/hospital) é o NOME DO ESTABELECIMENTO/HOSPITAL. JAMAIS coloque o nome da clínica ou hospital no campo "tutor".
+     * No aparelho Mindray, o campo de identificação frequentemente traz o nome do animal e do tutor juntos, separados por vírgula, barra ou hífen (Exemplo clássico: "LUA, NILDA" ou "LUA / NILDA").
+     * Nesse caso, separe OBRIGATORIAMENTE:
+       - "nome": primeiro nome (apenas o animal, ex: "Lua").
+       - "tutor": segundo nome (o responsável, ex: "Nilda").
+     * Se o tutor não estiver explícito na tela (ou se o campo Owner estiver vazio), use "tutor": "Não informado".
    - Para espécie: deduza por comprimento renal e espessuras (rins de ~3,0 a 3,8 cm costumam ser felinos ou caninos de pequeno porte; rins > 4,5 cm são caninos médios/grandes).
 
 2. ORDEM ESTRITA DOS ÓRGÃOS NO LAUDO:
@@ -226,6 +292,8 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
       const jsonClean = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       const jsonParsed = JSON.parse(jsonClean);
 
+      jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
+
       jsonParsed.caminhosOrdenados = ordenarImagensCanonicamente(
         caminhoImagens,
         jsonParsed.classificacaoImagens,
@@ -323,4 +391,9 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
   return itens.map(i => i.caminho);
 }
 
-module.exports = { analisarExameComIA, ordenarImagensCanonicamente, MAPA_ORDEM_CANONICA };
+module.exports = {
+  analisarExameComIA,
+  ordenarImagensCanonicamente,
+  sanitizarDadosPaciente,
+  MAPA_ORDEM_CANONICA
+};
