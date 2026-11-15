@@ -26,19 +26,21 @@ RUN apt-get update && apt-get install -y \
 ENV CHROME_BIN=/usr/bin/chromium \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    NODE_OPTIONS="--max-old-space-size=2048" \
     PORT=3000
 
 WORKDIR /app
 
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm install --omit=dev && npx prisma generate
+RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund
+RUN npx prisma generate
 
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install --include=dev
+RUN cd frontend && npm install --include=dev --no-audit --no-fund
 
 COPY . .
-RUN cd frontend && npm run build
+RUN cd frontend && npm run build && rm -rf node_modules
 
 ENV NODE_ENV=production
 

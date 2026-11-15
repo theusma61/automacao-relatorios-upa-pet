@@ -1,10 +1,9 @@
 {
   "name": "vet-ultrasound-automation",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Plataforma SaaS Multi-Tenant de Laudos de Ultrassom e Relatórios Cirúrgicos Veterinários (Vetaro / UPA PET - PostgreSQL + Prisma + React).",
   "main": "servidor_web.js",
   "scripts": {
-    "postinstall": "npx prisma generate",
     "start": "node servidor_web.js",
     "start:monitor": "node monitor_exames.js",
     "start:web": "node servidor_web.js",
