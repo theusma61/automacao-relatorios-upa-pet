@@ -364,7 +364,9 @@ function App() {
       return showToast('Suporte Técnico Veterinário Vetaro disponível!');
     }
   }), /*#__PURE__*/_react["default"].createElement("main", {
-    className: "flex-1 ".concat(isMobile ? 'p-4 pb-24' : isTablet ? 'p-6' : 'p-8 max-w-6xl', " flex flex-col relative overflow-y-auto")
+    className: "flex-1 w-full ".concat(isMobile ? 'p-4 pb-24' : isTablet ? 'p-6' : 'py-8 px-8 lg:px-12', " relative overflow-y-auto")
+  }, /*#__PURE__*/_react["default"].createElement("div", {
+    className: "w-full max-w-5xl mx-auto flex flex-col"
   }, isMobile ? /*#__PURE__*/_react["default"].createElement(_react["default"].Fragment, null, /*#__PURE__*/_react["default"].createElement("div", {
     className: "flex items-center justify-between mb-5 relative"
   }, /*#__PURE__*/_react["default"].createElement(_VetaroIcons.VetaroLogo, {
@@ -435,7 +437,7 @@ function App() {
     className: "font-extrabold text-amber-300"
   }, "Acesso em Modo de Consulta / Aguardando Libera\xE7\xE3o"), /*#__PURE__*/_react["default"].createElement("p", {
     className: "mt-0.5 opacity-90"
-  }, "Voc\xEA est\xE1 conectado como ", /*#__PURE__*/_react["default"].createElement("strong", null, usuario.email), ", mas sua conta ainda n\xE3o possui permiss\xE3o para emitir laudos e relat\xF3rios oficiais."))), renderMainScreenContent()), isMobile && /*#__PURE__*/_react["default"].createElement("div", {
+  }, "Voc\xEA est\xE1 conectado como ", /*#__PURE__*/_react["default"].createElement("strong", null, usuario.email), ", mas sua conta ainda n\xE3o possui permiss\xE3o para emitir laudos e relat\xF3rios oficiais."))), renderMainScreenContent())), isMobile && /*#__PURE__*/_react["default"].createElement("div", {
     className: "fixed bottom-0 left-0 right-0 z-30"
   }, /*#__PURE__*/_react["default"].createElement(_MobileTabBar["default"], {
     darkMode: darkMode,

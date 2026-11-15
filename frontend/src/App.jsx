@@ -281,102 +281,104 @@ export default function App() {
         />
       )}
 
-      {/* Área Principal */}
+      {/* Área Principal Centralizada */}
       <main
-        className={`flex-1 ${
-          isMobile ? 'p-4 pb-24' : isTablet ? 'p-6' : 'p-8 max-w-6xl'
-        } flex flex-col relative overflow-y-auto`}
+        className={`flex-1 w-full ${
+          isMobile ? 'p-4 pb-24' : isTablet ? 'p-6' : 'py-8 px-8 lg:px-12'
+        } relative overflow-y-auto`}
       >
-        {isMobile ? (
-          <>
-            <div className="flex items-center justify-between mb-5 relative">
-              <VetaroLogo size={26} dark={darkMode} textSize="text-xl" />
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => showToast('Nenhuma notificação pendente.')}
-                  className="p-1.5 rounded-full relative"
-                >
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#00D296]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setProfileMenuOpen(!profileMenuOpen);
-                  }}
-                  className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center ${
-                    darkMode ? 'bg-white text-[#0A141D]' : 'bg-[#1E2D3D] text-white'
-                  }`}
-                >
-                  {usuario.initials}
-                </button>
+        <div className="w-full max-w-5xl mx-auto flex flex-col">
+          {isMobile ? (
+            <>
+              <div className="flex items-center justify-between mb-5 relative">
+                <VetaroLogo size={26} dark={darkMode} textSize="text-xl" />
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => showToast('Nenhuma notificação pendente.')}
+                    className="p-1.5 rounded-full relative"
+                  >
+                    <Bell className="w-5 h-5" />
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#00D296]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProfileMenuOpen(!profileMenuOpen);
+                    }}
+                    className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center ${
+                      darkMode ? 'bg-white text-[#0A141D]' : 'bg-[#1E2D3D] text-white'
+                    }`}
+                  >
+                    {usuario.initials}
+                  </button>
+                </div>
+                {profileMenuOpen && (
+                  <ProfileDropdown
+                    isStandalone={false}
+                    darkMode={darkMode}
+                    setDarkMode={setDarkMode}
+                    userProfile={usuario}
+                    activeNav={activeNav}
+                    settingsTab={settingsTab}
+                    onSelectTab={openFromProfileMenu}
+                    onOpenAdminModal={() => {
+                      setProfileMenuOpen(false);
+                      setAdminModalOpen(true);
+                    }}
+                    onLogout={handleLogout}
+                  />
+                )}
               </div>
-              {profileMenuOpen && (
-                <ProfileDropdown
-                  isStandalone={false}
-                  darkMode={darkMode}
-                  setDarkMode={setDarkMode}
-                  userProfile={usuario}
-                  activeNav={activeNav}
-                  settingsTab={settingsTab}
-                  onSelectTab={openFromProfileMenu}
-                  onOpenAdminModal={() => {
-                    setProfileMenuOpen(false);
-                    setAdminModalOpen(true);
-                  }}
-                  onLogout={handleLogout}
-                />
-              )}
-            </div>
 
-            <div className="mb-5">
-              <h2 className="text-2xl font-extrabold">
-                Olá, {usuario.greetingName}!
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Tudo pronto para otimizar seu trabalho hoje?
-              </p>
-            </div>
-          </>
-        ) : (
-          <TopHeader
-            darkMode={darkMode}
-            setDarkMode={setDarkMode}
-            userProfile={usuario}
-            activeNav={activeNav}
-            settingsTab={settingsTab}
-            profileMenuOpen={profileMenuOpen}
-            setProfileMenuOpen={setProfileMenuOpen}
-            onSelectTab={openFromProfileMenu}
-            onOpenAdminModal={() => {
-              setProfileMenuOpen(false);
-              setAdminModalOpen(true);
-            }}
-            onLogout={handleLogout}
-            onBellClick={() => showToast('Nenhuma notificação pendente.')}
-            compact={isTablet}
-          />
-        )}
+              <div className="mb-5">
+                <h2 className="text-2xl font-extrabold">
+                  Olá, {usuario.greetingName}!
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Tudo pronto para otimizar seu trabalho hoje?
+                </p>
+              </div>
+            </>
+          ) : (
+            <TopHeader
+              darkMode={darkMode}
+              setDarkMode={setDarkMode}
+              userProfile={usuario}
+              activeNav={activeNav}
+              settingsTab={settingsTab}
+              profileMenuOpen={profileMenuOpen}
+              setProfileMenuOpen={setProfileMenuOpen}
+              onSelectTab={openFromProfileMenu}
+              onOpenAdminModal={() => {
+                setProfileMenuOpen(false);
+                setAdminModalOpen(true);
+              }}
+              onLogout={handleLogout}
+              onBellClick={() => showToast('Nenhuma notificação pendente.')}
+              compact={isTablet}
+            />
+          )}
 
-        {/* Alerta caso a conta esteja como assistente/pendente */}
-        {!podeEmitir && (
-          <div className="mb-6 p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3 text-xs">
-            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-extrabold text-amber-300">
-                Acesso em Modo de Consulta / Aguardando Liberação
-              </p>
-              <p className="mt-0.5 opacity-90">
-                Você está conectado como <strong>{usuario.email}</strong>, mas sua conta
-                ainda não possui permissão para emitir laudos e relatórios oficiais.
-              </p>
+          {/* Alerta caso a conta esteja como assistente/pendente */}
+          {!podeEmitir && (
+            <div className="mb-6 p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3 text-xs">
+              <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-extrabold text-amber-300">
+                  Acesso em Modo de Consulta / Aguardando Liberação
+                </p>
+                <p className="mt-0.5 opacity-90">
+                  Você está conectado como <strong>{usuario.email}</strong>, mas sua conta
+                  ainda não possui permissão para emitir laudos e relatórios oficiais.
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {renderMainScreenContent()}
+          {renderMainScreenContent()}
+        </div>
       </main>
 
       {/* Tab Bar Inferior Mobile */}
