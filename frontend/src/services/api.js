@@ -98,5 +98,14 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role })
+    }),
+
+  // Controle de Gastos, Cotas e Assinatura
+  getUsoAssinatura: () => requestJson('/api/assinatura/uso'),
+  trocarPlanoAssinatura: (plano, ciclo = 'mensal') =>
+    requestJson('/api/assinatura/trocar-plano', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plano, ciclo })
     })
 };

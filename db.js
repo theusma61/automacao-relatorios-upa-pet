@@ -9,7 +9,9 @@ function criarPrismaMockMemoria() {
     layouts: new Map(),
     modelos: new Map(),
     exames: new Map(),
-    cirurgias: new Map()
+    cirurgias: new Map(),
+    assinaturas: new Map(),
+    faturas: new Map()
   };
 
   let seq = 1;
@@ -32,6 +34,7 @@ function criarPrismaMockMemoria() {
       findUnique: async ({ where }) => store.clinicas.get(where.id) || null
     },
     usuario: {
+      findFirst: async () => store.usuarios.values().next().value || null,
       findUnique: async ({ where, select }) => {
         let u = null;
         if (where.id) u = store.usuarios.get(where.id) || null;
@@ -231,6 +234,13 @@ function criarPrismaMockMemoria() {
         let arr = Array.from(store.exames.values());
         if (where?.usuarioId) arr = arr.filter(e => e.usuarioId === where.usuarioId);
         return arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(0, take);
+      },
+      count: async ({ where } = {}) => {
+        let arr = Array.from(store.exames.values());
+        if (where?.usuarioId) arr = arr.filter(e => e.usuarioId === where.usuarioId);
+        if (where?.criadoEm?.gte) arr = arr.filter(e => e.criadoEm >= where.criadoEm.gte);
+        if (where?.criadoEm?.lte) arr = arr.filter(e => e.criadoEm <= where.criadoEm.lte);
+        return arr.length;
       }
     },
     relatorioCirurgico: {
@@ -244,6 +254,73 @@ function criarPrismaMockMemoria() {
         let arr = Array.from(store.cirurgias.values());
         if (where?.usuarioId) arr = arr.filter(c => c.usuarioId === where.usuarioId);
         return arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(0, take);
+      },
+      count: async ({ where } = {}) => {
+        let arr = Array.from(store.cirurgias.values());
+        if (where?.usuarioId) arr = arr.filter(c => c.usuarioId === where.usuarioId);
+        if (where?.criadoEm?.gte) arr = arr.filter(c => c.criadoEm >= where.criadoEm.gte);
+        if (where?.criadoEm?.lte) arr = arr.filter(c => c.criadoEm <= where.criadoEm.lte);
+        return arr.length;
+      }
+    },
+    assinatura: {
+      findUnique: async ({ where, include }) => {
+        let sub = null;
+        if (where?.usuarioId) {
+          for (const s of store.assinaturas.values()) {
+            if (s.usuarioId === where.usuarioId) { sub = s; break; }
+          }
+        } else if (where?.id) {
+          sub = store.assinaturas.get(where.id) || null;
+        }
+        if (!sub) return null;
+        const res = { ...sub };
+        if (include?.faturas) {
+          res.faturas = Array.from(store.faturas.values()).filter(f => f.assinaturaId === sub.id);
+        }
+        return res;
+      },
+      create: async ({ data, include }) => {
+        const id = data.id || cuid();
+        const sub = { id, criadoEm: new Date(), atualizadoEm: new Date(), ...data };
+        store.assinaturas.set(id, sub);
+        if (data.faturas?.create) {
+          const faturasArray = Array.isArray(data.faturas.create) ? data.faturas.create : [data.faturas.create];
+          faturasArray.forEach(f => {
+            const fId = cuid();
+            store.faturas.set(fId, { id: fId, assinaturaId: id, criadoEm: new Date(), ...f });
+          });
+        }
+        const res = { ...sub };
+        if (include?.faturas) {
+          res.faturas = Array.from(store.faturas.values()).filter(f => f.assinaturaId === id);
+        }
+        return res;
+      },
+      update: async ({ where, data, include }) => {
+        const id = where.id;
+        const existente = store.assinaturas.get(id);
+        if (!existente) throw new Error('Assinatura não encontrada');
+        const atualizado = { ...existente, ...data, atualizadoEm: new Date() };
+        store.assinaturas.set(id, atualizado);
+        const res = { ...atualizado };
+        if (include?.faturas) {
+          res.faturas = Array.from(store.faturas.values()).filter(f => f.assinaturaId === id);
+        }
+        return res;
+      }
+    },
+    fatura: {
+      create: async ({ data }) => {
+        const id = data.id || cuid();
+        const f = { id, criadoEm: new Date(), ...data };
+        store.faturas.set(id, f);
+        return f;
+      },
+      findMany: async ({ where }) => {
+        let arr = Array.from(store.faturas.values());
+        if (where?.assinaturaId) arr = arr.filter(f => f.assinaturaId === where.assinaturaId);
+        return arr;
       }
     },
     $disconnect: async () => {}

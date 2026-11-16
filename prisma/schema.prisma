@@ -46,6 +46,7 @@ model Usuario {
   layoutsCriados    ConfiguracaoLayout[]
   examesEmitidos    ExameLaudo[]
   cirurgiasEmitidas RelatorioCirurgico[]
+  assinatura        Assinatura?
 
   criadoEm          DateTime             @default(now()) @map("criado_em")
   atualizadoEm      DateTime             @updatedAt @map("atualizado_em")
@@ -159,4 +160,46 @@ model RelatorioCirurgico {
   @@index([pacienteNome])
   @@index([criadoEm])
   @@map("relatorios_cirurgicos")
+}
+
+model Assinatura {
+  id             String    @id @default(cuid())
+  usuarioId      String    @unique @map("usuario_id")
+  usuario        Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  plano          String    @default("PRO") // TRIAL, SOLO, PRO, CLINICA
+  status         String    @default("ACTIVE") // ACTIVE, TRIALING, PAST_DUE, CANCELED
+  precoMensal    Decimal   @default(149.00) @map("preco_mensal") @db.Decimal(10, 2)
+  ciclo          String    @default("mensal") // mensal ou anual
+  cotaLimite     Int       @default(150) @map("cota_limite")
+  cicloInicio    DateTime  @default(now()) @map("ciclo_inicio")
+  cicloFim       DateTime  @map("ciclo_fim")
+
+  cartaoFinal    String?   @default("4821") @map("cartao_final")
+  cartaoBandeira String?   @default("Mastercard") @map("cartao_bandeira")
+
+  criadoEm       DateTime  @default(now()) @map("criado_em")
+  atualizadoEm   DateTime  @updatedAt @map("atualizado_em")
+
+  faturas        Fatura[]
+
+  @@map("assinaturas")
+}
+
+model Fatura {
+  id           String     @id @default(cuid())
+  assinaturaId String     @map("assinatura_id")
+  assinatura   Assinatura @relation(fields: [assinaturaId], references: [id], onDelete: Cascade)
+
+  valor        Decimal    @db.Decimal(10, 2)
+  status       String     @default("pago") // pago, pendente, cancelado
+  dataFatura   DateTime   @default(now()) @map("data_fatura")
+  descricao    String?
+  pdfUrl       String?    @map("pdf_url")
+
+  criadoEm     DateTime   @default(now()) @map("criado_em")
+
+  @@index([assinaturaId])
+  @@index([dataFatura])
+  @@map("faturas")
 }

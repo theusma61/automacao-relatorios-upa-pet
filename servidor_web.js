@@ -37,6 +37,10 @@ const {
   atualizarTemaUsuario,
   atualizarPerfilProfissional
 } = require('./gerenciador_usuarios');
+const {
+  obterMetricasUsoAssinatura,
+  atualizarPlanoAssinatura
+} = require('./gerenciador_assinatura');
 
 const { logger, requestLogger } = require('./logger');
 const {
@@ -438,6 +442,25 @@ app.get('/api/historico', exigirAutenticacao, async (req, res) => {
     res.json({ sucesso: true, exames, cirurgias });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar histórico: ' + err.message });
+  }
+});
+
+app.get('/api/assinatura/uso', exigirAutenticacao, async (req, res) => {
+  try {
+    const dados = await obterMetricasUsoAssinatura(req.usuario.id);
+    res.json({ sucesso: true, ...dados });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar métricas de assinatura: ' + err.message });
+  }
+});
+
+app.post('/api/assinatura/trocar-plano', exigirAutenticacao, async (req, res) => {
+  try {
+    const { plano, ciclo } = req.body || {};
+    const dados = await atualizarPlanoAssinatura(req.usuario.id, plano, ciclo);
+    res.json({ sucesso: true, ...dados });
+  } catch (err) {
+    res.status(400).json({ error: 'Erro ao atualizar plano: ' + err.message });
   }
 });
 
