@@ -11,6 +11,7 @@ import ProfileDropdown from './components/layout/ProfileDropdown';
 import Toast from './components/layout/Toast';
 import ReportPreviewModal from './components/modals/ReportPreviewModal';
 import AdminUsersModal from './components/modals/AdminUsersModal';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import DashboardHome from './pages/DashboardHome';
 import UltrasoundGenerator from './pages/UltrasoundGenerator';
@@ -44,6 +45,7 @@ export default function App() {
     logout
   } = useAuth();
 
+  const [showLanding, setShowLanding] = useState(true);
   const [activeNav, setActiveNav] = useState('inicio');
   const [settingsTab, setSettingsTab] = useState('perfil');
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -176,6 +178,23 @@ export default function App() {
   }
 
   if (!usuario) {
+    if (showLanding) {
+      return (
+        <>
+          <LandingPage
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            onStartFree={() => setShowLanding(false)}
+            onLogin={() => setShowLanding(false)}
+            onOpenSupport={() =>
+              showToast('Suporte Vetaro: contato@vetaro.com.br ou WhatsApp Oficial')
+            }
+          />
+          <Toast message={toastMessage} />
+        </>
+      );
+    }
+
     return (
       <>
         <LoginPage
@@ -183,6 +202,7 @@ export default function App() {
           setDarkMode={setDarkMode}
           ssoConfig={ssoConfig}
           onGoogleCredential={loginComGoogleCredential}
+          onBackToLanding={() => setShowLanding(true)}
           onToast={showToast}
         />
         <Toast message={toastMessage} />
