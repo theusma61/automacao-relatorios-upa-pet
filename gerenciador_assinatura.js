@@ -5,39 +5,60 @@
 const { prisma } = require('./db');
 
 const TABELA_PLANOS = {
+  GRATUITO: {
+    chave: 'GRATUITO',
+    nome: 'Degustação Gratuita',
+    cotaLimite: 10,
+    precoMensal: 0.0,
+    precoAnualMensalizado: 0.0,
+    descricao: '10 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas',
+    excedentePermitido: false
+  },
+  TRIAL: {
+    chave: 'GRATUITO',
+    nome: 'Degustação Gratuita',
+    cotaLimite: 10,
+    precoMensal: 0.0,
+    precoAnualMensalizado: 0.0,
+    descricao: '10 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas',
+    excedentePermitido: false
+  },
   SOLO: {
+    chave: 'SOLO',
     nome: 'Solo / Volante',
     cotaLimite: 40,
     precoMensal: 79.0,
     precoAnualMensalizado: 63.0,
-    descricao: 'Ideal para médicos veterinários autônomos e volantes'
+    descricao: 'Ideal para médicos veterinários autônomos e volantes (Até 40 laudos/mês)',
+    excedentePermitido: true,
+    custoExcedente: 2.50
   },
   PRO: {
+    chave: 'PRO',
     nome: 'Especialista Pro',
     cotaLimite: 150,
     precoMensal: 149.0,
     precoAnualMensalizado: 119.0,
-    descricao: 'Ideal para ultrassonografistas e especialistas em imagem'
+    descricao: 'Ideal para ultrassonografistas e especialistas em imagem (Até 150 laudos/mês)',
+    excedentePermitido: true,
+    custoExcedente: 1.50
   },
   CLINICA: {
+    chave: 'CLINICA',
     nome: 'Clínica & Hospital 24h',
     cotaLimite: 500,
     precoMensal: 297.0,
     precoAnualMensalizado: 237.0,
-    descricao: 'Ideal para clínicas com setor de imagem e hospitais 24h'
-  },
-  TRIAL: {
-    nome: 'Degustação (Free Trial)',
-    cotaLimite: 10,
-    precoMensal: 0.0,
-    precoAnualMensalizado: 0.0,
-    descricao: '10 laudos gratuitos para testar'
+    descricao: 'Ideal para clínicas com setor de imagem e hospitais 24h (Até 500 laudos/mês)',
+    excedentePermitido: true,
+    custoExcedente: 1.00
   }
 };
 
 /**
  * Obtém ou cria a assinatura do usuário no PostgreSQL.
  * Se o ciclo mensal tiver vencido, renova o ciclo automaticamente.
+ * Por padrão, novos usuários recebem o plano GRATUITO com 10 laudos de cortesia.
  */
 async function obterOuCriarAssinatura(usuarioId) {
   if (!usuarioId) throw new Error('ID do usuário é obrigatório.');
@@ -58,27 +79,27 @@ async function obterOuCriarAssinatura(usuarioId) {
     const umMesDepois = new Date(agora);
     umMesDepois.setDate(umMesDepois.getDate() + 30);
 
-    const planoDef = TABELA_PLANOS.PRO;
+    const planoDef = TABELA_PLANOS.GRATUITO;
 
     sub = await prisma.assinatura.create({
       data: {
         usuarioId,
-        plano: 'PRO',
+        plano: 'GRATUITO',
         status: 'ACTIVE',
-        precoMensal: planoDef.precoMensal,
+        precoMensal: 0.0,
         ciclo: 'mensal',
-        cotaLimite: planoDef.cotaLimite,
+        cotaLimite: planoDef.cotaLimite, // 10
         cicloInicio: agora,
         cicloFim: umMesDepois,
-        cartaoFinal: '4821',
-        cartaoBandeira: 'Mastercard',
+        cartaoFinal: null,
+        cartaoBandeira: null,
         faturas: {
           create: [
             {
-              valor: planoDef.precoMensal,
+              valor: 0.0,
               status: 'pago',
               dataFatura: agora,
-              descricao: `Vetaro ${planoDef.nome} — Mensalidade Ativa`
+              descricao: 'Vetaro Degustação — 10 Laudos Gratuitos de Cortesia'
             }
           ]
         }
@@ -217,8 +238,9 @@ async function obterMetricasUsoAssinatura(usuarioId) {
       cicloInicio: assinatura.cicloInicio,
       cicloFim: assinatura.cicloFim,
       diasRestantes,
-      cartaoFinal: assinatura.cartaoFinal || '4821',
-      cartaoBandeira: assinatura.cartaoBandeira || 'Mastercard'
+      cartaoFinal: assinatura.cartaoFinal || null,
+      cartaoBandeira: assinatura.cartaoBandeira || null,
+      descricao: planoDef.descricao
     },
     cota: {
       limite: cotaLimite,

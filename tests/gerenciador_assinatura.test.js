@@ -76,4 +76,19 @@ describe('Gerenciador de Assinaturas e Cotas (PostgreSQL Multi-Tenant)', () => {
     expect(resPro.plano.chave).toBe('PRO');
     expect(resPro.cota.limite).toBe(TABELA_PLANOS.PRO.cotaLimite);
   });
+
+  test('novo usuário registrado recebe plano GRATUITO com cota de 10 laudos por padrão', async () => {
+    const novoUsuario = await prisma.usuario.create({
+      data: {
+        email: `novo_${Date.now()}@vetaro.com`,
+        nome: 'Dra. Novata',
+        role: 'veterinario'
+      }
+    });
+    const sub = await obterOuCriarAssinatura(novoUsuario.id);
+    expect(sub.plano).toBe('GRATUITO');
+    expect(sub.cotaLimite).toBe(10);
+    expect(Number(sub.precoMensal)).toBe(0);
+    expect(sub.cartaoFinal).toBeNull();
+  });
 });

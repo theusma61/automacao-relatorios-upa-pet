@@ -61,26 +61,26 @@ export default function SettingsPage({
     }
   };
 
+  // Carrega na montagem da tela e ao alternar para a aba de assinatura
+  useEffect(() => {
+    carregarMetricasUso();
+  }, []);
+
   useEffect(() => {
     if (settingsTab === 'assinatura') {
       carregarMetricasUso();
     }
   }, [settingsTab]);
 
-  const handleTrocarPlano = async (novoPlano, ciclo = 'mensal') => {
-    setTrocandoPlano(true);
-    try {
-      const res = await api.trocarPlanoAssinatura(novoPlano, ciclo);
-      if (res && res.sucesso) {
-        setUsageData(res);
-        onToast(`Plano alterado para ${res.plano?.nome || novoPlano} com sucesso!`);
-        setModalPlanoAberto(false);
-      }
-    } catch (err) {
-      onToast('Erro ao trocar plano: ' + err.message);
-    } finally {
-      setTrocandoPlano(false);
-    }
+  const handleTrocarPlano = (novoPlano) => {
+    const nomes = {
+      SOLO: 'Solo / Volante (R$ 79/mês)',
+      PRO: 'Especialista Pro (R$ 149/mês)',
+      CLINICA: 'Clínica & Hospital 24h (R$ 297/mês)'
+    };
+    const planoEscolhido = nomes[novoPlano] || novoPlano;
+    onToast(`Integração de pagamento em homologação (Pix e Cartão). Em breve você poderá assinar o plano ${planoEscolhido} diretamente pela plataforma!`);
+    setModalPlanoAberto(false);
   };
 
   const handleSaveProfile = async () => {
@@ -367,22 +367,38 @@ export default function SettingsPage({
 
       {/* ABA 2: PLANO, COTAS E CONTROLE DE GASTOS */}
       {settingsTab === 'assinatura' && (() => {
+        if (loadingUsage && !usageData) {
+          return (
+            <div className={`p-12 text-center rounded-2xl border flex flex-col items-center justify-center gap-3 ${
+              darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
+            }`}>
+              <div className="w-8 h-8 border-2 border-[#00D296] border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm font-semibold text-slate-400">
+                Carregando detalhes da assinatura e consumo de cotas...
+              </p>
+            </div>
+          );
+        }
+
+        const isGratuito = (usageData?.plano?.chave || '').toUpperCase() === 'GRATUITO' || (usageData?.plano?.preco === 0);
+
         const p = usageData?.plano || {
-          nome: 'Especialista Pro',
-          chave: 'PRO',
-          preco: 149.0,
+          nome: 'Degustação Gratuita',
+          chave: 'GRATUITO',
+          preco: 0.0,
           ciclo: 'mensal',
-          status: 'ACTIVE',
-          diasRestantes: 14,
-          cicloFim: new Date(Date.now() + 14 * 86400000).toISOString(),
-          cartaoBandeira: 'Mastercard',
-          cartaoFinal: '4821'
+          status: 'TRIAL',
+          diasRestantes: 30,
+          cicloFim: new Date(Date.now() + 30 * 86400000).toISOString(),
+          cartaoBandeira: null,
+          cartaoFinal: null,
+          descricao: '10 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas'
         };
         const c = usageData?.cota || {
-          limite: 150,
+          limite: 10,
           consumido: activitiesCount || 0,
-          disponivel: Math.max(0, 150 - (activitiesCount || 0)),
-          porcentagem: Math.min(100, Number((((activitiesCount || 0) / 150) * 100).toFixed(1)))
+          disponivel: Math.max(0, 10 - (activitiesCount || 0)),
+          porcentagem: Math.min(100, Number((((activitiesCount || 0) / 10) * 100).toFixed(1)))
         };
         const b = usageData?.breakdown || {
           ultrassom: activitiesCount || 0,
@@ -393,22 +409,12 @@ export default function SettingsPage({
         };
         const m = usageData?.metricasValor || {
           horasEconomizadas: Number((((activitiesCount || 0) * 25) / 60).toFixed(1)),
-          custoEfetivoUnitario: activitiesCount > 0 ? (149 / activitiesCount).toFixed(2) : 149.0,
+          custoEfetivoUnitario: 0.0,
           faturamentoEstimado: (activitiesCount || 0) * 160
         };
         const historico = usageData?.historicoMeses || [];
         const maxHistoricoTotal = Math.max(1, ...historico.map((h) => h.total || 0));
-        const faturas = (usageData?.faturas && usageData.faturas.length > 0)
-          ? usageData.faturas
-          : [
-              {
-                id: 'fat-1',
-                data: new Date().toISOString(),
-                valor: p.preco,
-                status: 'pago',
-                descricao: `Vetaro ${p.nome} — Mensalidade Ativa`
-              }
-            ];
+        const faturas = usageData?.faturas || [];
 
         const progressColor =
           c.porcentagem > 90 ? 'bg-rose-500' : c.porcentagem > 75 ? 'bg-amber-400' : 'bg-[#00D296]';
@@ -430,20 +436,32 @@ export default function SettingsPage({
                       PLANO ATIVO: {p.nome.toUpperCase()}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold">
-                      • Renovação automática
+                      • {isGratuito ? 'Degustação (10 laudos cortesia)' : 'Renovação automática'}
                     </span>
                   </div>
                   <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                    R$ {Number(p.preco).toFixed(2).replace('.', ',')}
-                    <span className="text-xs sm:text-sm font-semibold opacity-80">
-                      {' '}
-                      / {p.ciclo === 'anual' ? 'mês (anual)' : 'mês'}
-                    </span>
+                    {isGratuito ? (
+                      <>
+                        R$ 0,00
+                        <span className="text-xs sm:text-sm font-semibold opacity-80">
+                          {' '}
+                          / 10 laudos gratuitos
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        R$ {Number(p.preco).toFixed(2).replace('.', ',')}
+                        <span className="text-xs sm:text-sm font-semibold opacity-80">
+                          {' '}
+                          / {p.ciclo === 'anual' ? 'mês (anual)' : 'mês'}
+                        </span>
+                      </>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-300 mt-1 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-[#00D296]" />
                     <span>
-                      Renovação em{' '}
+                      {isGratuito ? 'Período de teste válido por' : 'Renovação em'}{' '}
                       <strong>{p.diasRestantes} dias</strong> (
                       {new Date(p.cicloFim).toLocaleDateString('pt-BR')})
                     </span>
@@ -457,7 +475,7 @@ export default function SettingsPage({
                     className="px-4 py-2.5 rounded-xl text-xs font-extrabold bg-[#0D5C56] text-white hover:bg-[#094742] dark:bg-[#00D296] dark:text-[#062E2B] dark:hover:bg-[#00e6a4] transition flex items-center gap-1.5 shadow-sm"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>Mudar de Plano</span>
+                    <span>{isGratuito ? 'Fazer Upgrade de Plano' : 'Mudar de Plano'}</span>
                   </button>
                 </div>
               </div>
@@ -703,36 +721,51 @@ export default function SettingsPage({
                     Cobranças processadas com segurança e notas fiscais automáticas.
                   </p>
                 </div>
-                <div className="p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A141D] flex items-center gap-3 text-xs">
-                  <CreditCard className="w-4 h-4 text-[#00D296]" />
-                  <span className="font-bold">
-                    {p.cartaoBandeira} •••• {p.cartaoFinal}
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] font-bold">
-                    Padrão
-                  </span>
-                </div>
+                {p.cartaoFinal ? (
+                  <div className="p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A141D] flex items-center gap-3 text-xs">
+                    <CreditCard className="w-4 h-4 text-[#00D296]" />
+                    <span className="font-bold">
+                      {p.cartaoBandeira || 'Cartão'} •••• {p.cartaoFinal}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] font-bold">
+                      Padrão
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A141D] flex items-center gap-2.5 text-xs text-slate-400">
+                    <CreditCard className="w-4 h-4 text-slate-400" />
+                    <span>Nenhum cartão cadastrado ({isGratuito ? 'Plano Gratuito' : 'Sem cartão'})</span>
+                  </div>
+                )}
               </div>
 
               <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs pt-2">
-                {faturas.map((fat) => (
-                  <div key={fat.id} className="py-3 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="font-bold">
-                        {new Date(fat.data).toLocaleDateString('pt-BR')} — {fat.descricao || `Vetaro ${p.nome}`}
-                      </p>
-                      <p className="text-[10px] text-slate-400">Comprovante de pagamento emitido</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-extrabold text-[#00D296]">
-                        R$ {Number(fat.valor).toFixed(2).replace('.', ',')}
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00D296]/15 text-[#00D296]">
-                        {fat.status === 'pago' ? 'Pago' : fat.status}
-                      </span>
-                    </div>
+                {faturas.length === 0 ? (
+                  <div className="py-4 text-center text-xs text-slate-400">
+                    {isGratuito
+                      ? 'Nenhuma fatura a pagar. Você está no plano Degustação Gratuita (10 laudos de cortesia).'
+                      : 'Nenhuma fatura registrada no período.'}
                   </div>
-                ))}
+                ) : (
+                  faturas.map((fat) => (
+                    <div key={fat.id} className="py-3 flex items-center justify-between gap-2">
+                      <div>
+                        <p className="font-bold">
+                          {new Date(fat.data).toLocaleDateString('pt-BR')} — {fat.descricao || `Vetaro ${p.nome}`}
+                        </p>
+                        <p className="text-[10px] text-slate-400">Comprovante de pagamento emitido</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-extrabold text-[#00D296]">
+                          R$ {Number(fat.valor).toFixed(2).replace('.', ',')}
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00D296]/15 text-[#00D296]">
+                          {fat.status === 'pago' ? 'Pago' : fat.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -763,6 +796,10 @@ export default function SettingsPage({
                     <p className="text-xs text-slate-400 mt-1">
                       Escolha a franquia mensal que melhor se adequa ao seu volume atual de exames:
                     </p>
+                    <div className="mt-3 p-3 rounded-xl bg-[#00D296]/10 border border-[#00D296]/30 text-xs text-[#00D296] flex items-center gap-2 font-medium">
+                      <Sparkles className="w-4 h-4 shrink-0 text-[#00D296]" />
+                      <span>O módulo de checkout e pagamento seguro (Pix e Cartão) está em fase final de homologação.</span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
