@@ -75,10 +75,97 @@ async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
   const modelosCandidatos = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
   const usuario = opcoes.usuario || null;
-  const nomeClinica = usuario?.nomeClinica || 'UPA PET';
-  const identificacaoProfissional = usuario?.nome
-    ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
+  let perfilLaudo = opcoes.perfilLaudo || null;
+
+  if (!perfilLaudo && usuario?.id) {
+    try {
+      const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
+      perfilLaudo = await obterPerfilLaudo(usuario.id);
+    } catch (e) {
+      console.warn('⚠️ Não foi possível carregar PerfilLaudo do usuário:', e.message);
+    }
+  }
+
+  const nomeClinica = perfilLaudo?.clinicaDetectada || usuario?.nomeClinica || 'UPA PET';
+  const nomeMedico = perfilLaudo?.nomeDetectado || usuario?.nome;
+  const crmvMedico = perfilLaudo?.crmvDetectado || usuario?.crmv;
+  const identificacaoProfissional = nomeMedico
+    ? `${nomeMedico}${crmvMedico ? ' - ' + crmvMedico : ''}`
     : 'Dra. Camila Bastos - CRMV/MG: 22904';
+
+  const temPerfilPersonalizado = Boolean(perfilLaudo && perfilLaudo.ativo);
+  const ordemOrgaos = (temPerfilPersonalizado && Array.isArray(perfilLaudo.ordemOrgaos) && perfilLaudo.ordemOrgaos.length > 0)
+    ? perfilLaudo.ordemOrgaos
+    : [
+      'BEXIGA',
+      'RIM ESQUERDO',
+      'RIM DIREITO',
+      'BAÇO',
+      'ESTÔMAGO',
+      'FÍGADO',
+      'VESÍCULA BILIAR',
+      'ALÇAS INTESTINAIS',
+      'OVÁRIOS / ÚTERO',
+      'GLÂNDULA ADRENAL',
+      'PÂNCREAS',
+      'CAVIDADE ABDOMINAL',
+      'CONSIDERAÇÕES'
+    ];
+
+  let secaoOrdemOrgaosPrompt = '';
+  if (temPerfilPersonalizado) {
+    secaoOrdemOrgaosPrompt = `
+2. ORDEM ESTRITA DOS ÓRGÃOS NO LAUDO (ESTILO PERSONALIZADO DESTE PROFISSIONAL):
+   O laudo DEVE conter os tópicos de órgãos exatamente na seguinte sequência de seções:
+${ordemOrgaos.map(o => `   - ${o}`).join('\n')}
+`;
+  } else {
+    secaoOrdemOrgaosPrompt = `
+2. ORDEM ESTRITA DOS ÓRGÃOS NO LAUDO:
+   O laudo DEVE conter os órgãos na seguinte ordem exata:
+   - BEXIGA
+   - RIM ESQUERDO
+   - RIM DIREITO
+   - BAÇO
+   - ESTOMAGO
+   - FÍGADO
+   - VESICULA BILIAR
+   - ALÇAS INTESTINAIS
+   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia)
+   - Se Macho: TESTICULO ESQUERDO, TESTICULO DIREITO, PROSTATA (ou histórico de orquiectomia)
+   - GLANDULA ADRENAL
+   - PANCREAS
+   - CAVIDADE ABDOMINAL
+   - CONSIDERAÇÕES
+`;
+  }
+
+  let secaoDiretrizesPersonalizadas = '';
+  if (temPerfilPersonalizado) {
+    secaoDiretrizesPersonalizadas = `
+---
+### DIRETRIZES DE ESTILO DE REDAÇÃO DO MÉDICO VETERINÁRIO (${identificacaoProfissional}):
+Você DEVE adotar com rigor o padrão de redação, vocabulário e frases habituais deste veterinário:
+`;
+    if (perfilLaudo.frasesNormalidade && Object.keys(perfilLaudo.frasesNormalidade).length > 0) {
+      secaoDiretrizesPersonalizadas += `\nFRASES PREFERIDAS PARA ÓRGÃOS NORMAIS / SEM ALTERAÇÃO:\n`;
+      for (const [org, frase] of Object.entries(perfilLaudo.frasesNormalidade)) {
+        secaoDiretrizesPersonalizadas += `- ${org}: "${frase}"\n`;
+      }
+    }
+    if (perfilLaudo.vocabularioPreferido && Object.keys(perfilLaudo.vocabularioPreferido).length > 0) {
+      secaoDiretrizesPersonalizadas += `\nVOCABULÁRIO TÉCNICO PREFERIDO:\n`;
+      for (const [k, v] of Object.entries(perfilLaudo.vocabularioPreferido)) {
+        secaoDiretrizesPersonalizadas += `- "${k}" -> preferir redação: "${v}"\n`;
+      }
+    }
+    if (perfilLaudo.estiloConclusao) {
+      secaoDiretrizesPersonalizadas += `\nESTRUTURA DE CONCLUSÃO E DIAGNÓSTICOS DIFERENCIAIS:\n${perfilLaudo.estiloConclusao}\n`;
+    }
+    if (perfilLaudo.observacoesEstilo) {
+      secaoDiretrizesPersonalizadas += `\nOBSERVAÇÕES ADICIONAIS DE TOM E PONTUAÇÃO:\n${perfilLaudo.observacoesEstilo}\n`;
+    }
+  }
 
   const promptInstrucoes = `
 Você é um médico veterinário especialista em diagnóstico por imagem (ultrassonografia abdominal de cães e gatos).
@@ -99,22 +186,8 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
      * Se o tutor não estiver explícito na tela (ou se o campo Owner estiver vazio), use "tutor": "Não informado".
    - Para espécie: deduza por comprimento renal e espessuras (rins de ~3,0 a 3,8 cm costumam ser felinos ou caninos de pequeno porte; rins > 4,5 cm são caninos médios/grandes).
 
-2. ORDEM ESTRITA DOS ÓRGÃOS NO LAUDO:
-   O laudo DEVE conter os órgãos na seguinte ordem exata:
-   - BEXIGA
-   - RIM ESQUERDO
-   - RIM DIREITO
-   - BAÇO
-   - ESTOMAGO
-   - FÍGADO
-   - VESICULA BILIAR
-   - ALÇAS INTESTINAIS
-   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia)
-   - Se Macho: TESTICULO ESQUERDO, TESTICULO DIREITO, PROSTATA (ou histórico de orquiectomia)
-   - GLANDULA ADRENAL
-   - PANCREAS
-   - CAVIDADE ABDOMINAL
-   - CONSIDERAÇÕES
+${secaoOrdemOrgaosPrompt}
+${secaoDiretrizesPersonalizadas}
 
 3. CRITÉRIOS ESPECÍFICOS POR ÓRGÃO:
 
@@ -294,10 +367,13 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
 
       jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
 
+      const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
+
       jsonParsed.caminhosOrdenados = ordenarImagensCanonicamente(
         caminhoImagens,
         jsonParsed.classificacaoImagens,
-        jsonParsed.nomesArquivosOrdenados
+        jsonParsed.nomesArquivosOrdenados,
+        mapaPrioridadesEfetivo
       );
 
       return jsonParsed;
@@ -338,23 +414,44 @@ function normalizarTexto(texto) {
   return (texto || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
-function calcularPrioridadeOrgao(item) {
+function construirMapaPrioridades(ordemOrgaos = []) {
+  if (!Array.isArray(ordemOrgaos) || ordemOrgaos.length === 0) {
+    return MAPA_ORDEM_CANONICA;
+  }
+  const novoMapa = { ...MAPA_ORDEM_CANONICA };
+  ordemOrgaos.forEach((org, idx) => {
+    const prioridade = idx + 1;
+    const orgNorm = normalizarTexto(org);
+    novoMapa[orgNorm] = prioridade;
+    for (const [chave] of Object.entries(MAPA_ORDEM_CANONICA)) {
+      const k = normalizarTexto(chave);
+      if (orgNorm.includes(k) || k.includes(orgNorm)) {
+        novoMapa[chave] = prioridade;
+      }
+    }
+  });
+  return novoMapa;
+}
+
+function calcularPrioridadeOrgao(item, mapa = MAPA_ORDEM_CANONICA) {
   if (item && typeof item.prioridade === 'number' && item.prioridade >= 1 && item.prioridade <= 20) {
     return item.prioridade;
   }
   const sigla = normalizarTexto(item ? item.sigla : '');
   const orgao = normalizarTexto(item ? item.orgao : '');
-  if (MAPA_ORDEM_CANONICA[sigla]) return MAPA_ORDEM_CANONICA[sigla];
-  if (MAPA_ORDEM_CANONICA[orgao]) return MAPA_ORDEM_CANONICA[orgao];
-  for (const [chave, p] of Object.entries(MAPA_ORDEM_CANONICA)) {
+  if (mapa[sigla]) return mapa[sigla];
+  if (mapa[orgao]) return mapa[orgao];
+  for (const [chave, p] of Object.entries(mapa)) {
     const k = normalizarTexto(chave);
     if (sigla.includes(k) || orgao.includes(k)) return p;
   }
   return 99;
 }
 
-function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomesArquivosOrdenados) {
+function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomesArquivosOrdenados, mapaPrioridades = MAPA_ORDEM_CANONICA) {
   if (!Array.isArray(caminhoImagens) || caminhoImagens.length === 0) return [];
+
+  const mapa = mapaPrioridades || MAPA_ORDEM_CANONICA;
 
   const itens = caminhoImagens.map((caminho, idx) => {
     const nomeBase = path.basename(caminho).toLowerCase();
@@ -365,10 +462,10 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
                 classificacaoImagens.find(c => c.nomeArquivo && c.nomeArquivo.toLowerCase() === nomeBase);
     }
 
-    let prioridade = calcularPrioridadeOrgao(classif);
+    let prioridade = calcularPrioridadeOrgao(classif, mapa);
 
     if (prioridade === 99) {
-      prioridade = calcularPrioridadeOrgao({ orgao: path.parse(nomeBase).name });
+      prioridade = calcularPrioridadeOrgao({ orgao: path.parse(nomeBase).name }, mapa);
     }
 
     if (prioridade === 99 && Array.isArray(nomesArquivosOrdenados)) {
@@ -394,6 +491,7 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
 module.exports = {
   analisarExameComIA,
   ordenarImagensCanonicamente,
+  construirMapaPrioridades,
   sanitizarDadosPaciente,
   MAPA_ORDEM_CANONICA
 };

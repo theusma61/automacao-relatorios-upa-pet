@@ -22,6 +22,7 @@ import {
   Zap
 } from 'lucide-react';
 import { UltrasoundIcon } from '../components/icons/VetaroIcons';
+import EstiloLaudoTab from '../components/EstiloLaudoTab';
 import { api } from '../services/api';
 
 export default function SettingsPage({
@@ -117,6 +118,7 @@ export default function SettingsPage({
         <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'perfil', label: `Meu perfil (${userProfile.greetingName})`, icon: User },
+            { id: 'estilo', label: 'Estilo & Padrão de Laudo', icon: Sparkles },
             { id: 'assinatura', label: 'Plano e assinatura', icon: CreditCard },
             { id: 'preferencias', label: 'Configurações & IA', icon: Settings }
           ].map((tab) => {
@@ -363,6 +365,17 @@ export default function SettingsPage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ABA: ESTILO & PADRÃO DE LAUDO (APRENDIZADO POR IA) */}
+      {settingsTab === 'estilo' && (
+        <EstiloLaudoTab
+          darkMode={darkMode}
+          isMobileLayout={isMobileLayout}
+          onToast={onToast}
+          userProfile={userProfile}
+          setUserProfile={setUserProfile}
+        />
       )}
 
       {/* ABA 2: PLANO, COTAS E CONTROLE DE GASTOS */}

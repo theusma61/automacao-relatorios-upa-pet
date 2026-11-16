@@ -107,5 +107,23 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plano, ciclo })
+    }),
+
+  // Personalização e Aprendizado de Padrão de Laudo por IA (Multimodal)
+  aprenderPadraoLaudo: (formData) =>
+    requestJson('/api/laudos/aprender-padrao', {
+      method: 'POST',
+      body: formData
+    }),
+  getPerfilLaudo: () => requestJson('/api/laudos/meu-perfil'),
+  salvarPerfilLaudo: (payload) =>
+    requestJson('/api/laudos/meu-perfil', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  resetPerfilLaudo: () =>
+    requestJson('/api/laudos/meu-perfil', {
+      method: 'DELETE'
     })
 };

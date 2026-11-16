@@ -47,6 +47,7 @@ model Usuario {
   examesEmitidos    ExameLaudo[]
   cirurgiasEmitidas RelatorioCirurgico[]
   assinatura        Assinatura?
+  perfilLaudo       PerfilLaudo?
 
   criadoEm          DateTime             @default(now()) @map("criado_em")
   atualizadoEm      DateTime             @updatedAt @map("atualizado_em")
@@ -202,4 +203,32 @@ model Fatura {
   @@index([assinaturaId])
   @@index([dataFatura])
   @@map("faturas")
+}
+
+model PerfilLaudo {
+  id                    String    @id @default(cuid())
+  usuarioId             String    @unique @map("usuario_id")
+  usuario               Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  ativo                 Boolean   @default(true)
+  status                String    @default("aprendido") // pendente, processando, aprendido, erro
+  quantidadeAmostras    Int       @default(0) @map("quantidade_amostras")
+  arquivosAmostras      Json?     @map("arquivos_amostras")
+
+  ordemOrgaos           String[]  @default([]) @map("ordem_orgaos")
+  vocabularioPreferido  Json?     @map("vocabulario_preferido")
+  frasesNormalidade     Json?     @map("frases_normalidade")
+  estiloConclusao       String?   @db.Text @map("estilo_conclusao")
+  observacoesEstilo     String?   @db.Text @map("observacoes_estilo")
+
+  nomeDetectado         String?   @map("nome_detectado")
+  crmvDetectado         String?   @map("crmv_detectado")
+  clinicaDetectada      String?   @map("clinica_detectada")
+  layoutDetectado       Json?     @map("layout_detectado")
+
+  criadoEm              DateTime  @default(now()) @map("criado_em")
+  atualizadoEm          DateTime  @updatedAt @map("atualizado_em")
+
+  @@index([usuarioId])
+  @@map("perfis_laudo")
 }

@@ -27,6 +27,12 @@ const {
   salvarLayout,
   restaurarLayoutPadrao
 } = require('./gerenciador_layout');
+const { extrairPadraoDeLaudos } = require('./identificador_padrao_laudo');
+const {
+  obterPerfilLaudo,
+  salvarPerfilLaudo,
+  desativarPerfilLaudo
+} = require('./gerenciador_perfil_laudo');
 const {
   ROLES,
   obterPerfilUsuario,
@@ -85,11 +91,12 @@ const persistentUploadDir = process.env.UPLOAD_PERSISTENT_DIR
   : path.join(__dirname, 'uploads');
 const logosDir = path.join(persistentUploadDir, 'logos');
 const assinaturasDir = path.join(persistentUploadDir, 'assinaturas');
+const amostrasPadraoDir = path.join(persistentUploadDir, 'amostras_padrao');
 const outputDir = process.env.OUTPUT_PERSISTENT_DIR
   ? path.resolve(process.env.OUTPUT_PERSISTENT_DIR)
   : path.join(os.tmpdir(), 'upa_pet_outputs');
 
-[uploadDir, persistentUploadDir, logosDir, assinaturasDir, outputDir].forEach((dir) => {
+[uploadDir, persistentUploadDir, logosDir, assinaturasDir, amostrasPadraoDir, outputDir].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -118,6 +125,31 @@ const storagePerfil = multer.diskStorage({
 const uploadPerfil = multer({
   storage: storagePerfil,
   limits: { fileSize: 3 * 1024 * 1024 }
+});
+
+const storagePdfsPadrao = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const userSubdir = path.join(amostrasPadraoDir, (req.usuario && req.usuario.id) ? String(req.usuario.id).replace(/[^a-zA-Z0-9_-]/g, '') : 'temp');
+    if (!fs.existsSync(userSubdir)) fs.mkdirSync(userSubdir, { recursive: true });
+    cb(null, userSubdir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    cb(null, `${Date.now()}_${safeName}${ext}`);
+  }
+});
+const uploadPdfsPadrao = multer({
+  storage: storagePdfsPadrao,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB por PDF
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.pdf' || file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Formato inválido. Apenas arquivos PDF (.pdf) são aceitos para aprendizado de padrão.'));
+    }
+  }
 });
 
 async function obterUsuarioSessao(req, res, next) {
@@ -424,6 +456,102 @@ app.post('/api/layout-config/reset', exigirAutenticacao, async (req, res) => {
   }
 });
 
+// ==================== APRENDIZADO DE PADRÃO DE LAUDO (IA MULTIMODAL) ====================
+
+app.post('/api/laudos/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.array('pdfs', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Nenhum arquivo PDF foi enviado. Envie de 1 a 10 laudos em PDF.' });
+    }
+    if (req.files.length > 10) {
+      return res.status(400).json({ error: 'Limite máximo de 10 laudos em PDF excedido.' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY || config.geminiApiKey;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Chave de API do Gemini não configurada no servidor.' });
+    }
+
+    const caminhosPdfs = req.files.map(f => f.path);
+    logger.info({
+      usuario: req.usuario.email,
+      quantidadePdfs: caminhosPdfs.length
+    }, 'Iniciando extração e aprendizado de padrão de laudo por IA');
+
+    const perfilDetectado = await extrairPadraoDeLaudos(caminhosPdfs, apiKey);
+
+    res.json({
+      sucesso: true,
+      mensagem: `Padrão identificado com sucesso a partir de ${caminhosPdfs.length} laudo(s)!`,
+      perfilDetectado
+    });
+  } catch (err) {
+    logger.error('Erro ao aprender padrão de laudos', { error: err.message, stack: err.stack });
+    res.status(500).json({ error: 'Erro ao analisar PDFs de laudos: ' + err.message });
+  }
+});
+
+app.get('/api/laudos/meu-perfil', exigirAutenticacao, async (req, res) => {
+  try {
+    const [perfil, layout, usuarioDb] = await Promise.all([
+      obterPerfilLaudo(req.usuario.id),
+      obterLayout(req.usuario.id),
+      prisma.usuario.findUnique({
+        where: { id: req.usuario.id },
+        select: { id: true, nome: true, crmv: true, nomeClinica: true, email: true }
+      })
+    ]);
+
+    res.json({
+      sucesso: true,
+      temPerfilPersonalizado: Boolean(perfil && perfil.ativo),
+      perfil,
+      layout,
+      usuario: usuarioDb
+    });
+  } catch (err) {
+    logger.error('Erro ao buscar perfil de laudo', { error: err.message });
+    res.status(500).json({ error: 'Erro ao carregar perfil de laudo: ' + err.message });
+  }
+});
+
+app.put('/api/laudos/meu-perfil', exigirAutenticacao, async (req, res) => {
+  try {
+    const perfilSalvo = await salvarPerfilLaudo(req.usuario.id, req.body);
+    logger.info({
+      usuario: req.usuario.email,
+      perfilId: perfilSalvo.id
+    }, 'Perfil de laudo personalizado salvo com sucesso');
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Padrão personalizado ativado com sucesso! Seus próximos laudos seguirão este modelo.',
+      perfil: perfilSalvo
+    });
+  } catch (err) {
+    logger.error('Erro ao salvar perfil de laudo', { error: err.message });
+    res.status(400).json({ error: 'Erro ao salvar perfil de laudo: ' + err.message });
+  }
+});
+
+app.delete('/api/laudos/meu-perfil', exigirAutenticacao, async (req, res) => {
+  try {
+    await desativarPerfilLaudo(req.usuario.id);
+    await restaurarLayoutPadrao(req.usuario);
+    logger.info({
+      usuario: req.usuario.email
+    }, 'Perfil de laudo personalizado removido e layout restaurado');
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Padrão personalizado removido. Padrão institucional restabelecido.'
+    });
+  } catch (err) {
+    logger.error('Erro ao remover perfil de laudo', { error: err.message });
+    res.status(500).json({ error: 'Erro ao remover perfil de laudo: ' + err.message });
+  }
+});
+
 app.get('/api/historico', exigirAutenticacao, async (req, res) => {
   try {
     const filtroUsuario = req.usuario.role === 'admin' ? {} : { usuarioId: req.usuario.id };
@@ -480,7 +608,18 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
 
   try {
     console.log(`📡 [WEB - ULTRASSOM] [Usuário: ${req.usuario.email}] Processando ${caminhosArquivos.length} imagens...`);
-    const resultadoIA = await analisarExameComIA(caminhosArquivos, apiKey, { usuario: req.usuario });
+    const perfilDoUsuario = await obterPerfilLaudo(req.usuario.id);
+    const usuarioEfetivo = {
+      ...req.usuario,
+      nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
+      crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica
+    };
+
+    const resultadoIA = await analisarExameComIA(caminhosArquivos, apiKey, {
+      usuario: usuarioEfetivo,
+      perfilLaudo: perfilDoUsuario
+    });
 
     const imagensOrdenadas = resultadoIA.caminhosOrdenados || caminhosArquivos;
     const docs = await gerarDocumentosExame(
@@ -489,7 +628,7 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
       imagensOrdenadas,
       jobFolder,
       null,
-      { usuario: req.usuario }
+      { usuario: usuarioEfetivo }
     );
 
     const pdfNome = path.basename(docs.caminhoPdf);

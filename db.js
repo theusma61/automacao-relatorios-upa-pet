@@ -11,7 +11,8 @@ function criarPrismaMockMemoria() {
     exames: new Map(),
     cirurgias: new Map(),
     assinaturas: new Map(),
-    faturas: new Map()
+    faturas: new Map(),
+    perfisLaudo: new Map()
   };
 
   let seq = 1;
@@ -126,7 +127,13 @@ function criarPrismaMockMemoria() {
           .sort((a, b) => a.email.localeCompare(b.email))
           .map(u => ({ ...u, clinica: u.clinicaId ? store.clinicas.get(u.clinicaId) || null : null }));
       },
-      count: async () => store.usuarios.size
+      count: async () => store.usuarios.size,
+      deleteMany: async ({ where }) => {
+        if (where?.id) {
+          store.usuarios.delete(where.id);
+        }
+        return { count: 1 };
+      }
     },
     configuracaoLayout: {
       findUnique: async ({ where }) => {
@@ -321,6 +328,47 @@ function criarPrismaMockMemoria() {
         let arr = Array.from(store.faturas.values());
         if (where?.assinaturaId) arr = arr.filter(f => f.assinaturaId === where.assinaturaId);
         return arr;
+      }
+    },
+    perfilLaudo: {
+      findUnique: async ({ where }) => {
+        if (where?.usuarioId) {
+          for (const p of store.perfisLaudo.values()) {
+            if (p.usuarioId === where.usuarioId) return p;
+          }
+        }
+        if (where?.id) return store.perfisLaudo.get(where.id) || null;
+        return null;
+      },
+      upsert: async ({ where, update, create }) => {
+        let existente = null;
+        if (where?.usuarioId) {
+          for (const p of store.perfisLaudo.values()) {
+            if (p.usuarioId === where.usuarioId) { existente = p; break; }
+          }
+        }
+        if (existente) {
+          const atualizado = { ...existente, ...update, atualizadoEm: new Date() };
+          store.perfisLaudo.set(atualizado.id, atualizado);
+          return atualizado;
+        }
+        const id = create.id || cuid();
+        const novo = { id, criadoEm: new Date(), atualizadoEm: new Date(), ...create };
+        store.perfisLaudo.set(id, novo);
+        return novo;
+      },
+      delete: async ({ where }) => {
+        let removido = null;
+        if (where?.usuarioId) {
+          for (const [id, p] of store.perfisLaudo.entries()) {
+            if (p.usuarioId === where.usuarioId) {
+              removido = p;
+              store.perfisLaudo.delete(id);
+              break;
+            }
+          }
+        }
+        return removido;
       }
     },
     $disconnect: async () => {}
