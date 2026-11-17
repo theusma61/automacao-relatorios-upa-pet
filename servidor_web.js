@@ -28,12 +28,6 @@ const {
   salvarTemplateClonado,
   restaurarLayoutPadrao
 } = require('./gerenciador_layout');
-const { extrairPadraoDeLaudos } = require('./identificador_padrao_laudo');
-const {
-  obterPerfilLaudo,
-  salvarPerfilLaudo,
-  desativarPerfilLaudo
-} = require('./gerenciador_perfil_laudo');
 const {
   extrairPadraoCompletoDePdfs
 } = require('./extrator_padrao_laudo');
