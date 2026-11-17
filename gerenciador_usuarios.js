@@ -3,6 +3,7 @@
  */
 
 const { prisma } = require('./db');
+const { obterOuCriarAssinatura } = require('./gerenciador_assinatura');
 
 const ROLES = {
   admin: {
@@ -45,10 +46,11 @@ function perfilParaResposta(usuario) {
     podeGerarCirurgia: roleDef.permissoes.includes('gerar_cirurgia'),
     crmv: usuario.crmv || null,
     clinicaId: usuario.clinicaId || null,
-    nomeClinica: usuario.nomeClinica || (usuario.clinica && usuario.clinica.nome) || 'UPA PET',
+    nomeClinica: (/upa\s*pet/i.test(usuario.nomeClinica || '') ? 'Vetaro' : (usuario.nomeClinica || (usuario.clinica && usuario.clinica.nome) || 'Vetaro')),
     logoUrl: usuario.logoUrl || null,
     assinaturaUrl: usuario.assinaturaUrl || null,
-    temaPreferencia: usuario.temaPreferencia || 'system'
+    temaPreferencia: usuario.temaPreferencia || 'system',
+    plano: usuario.assinatura ? usuario.assinatura.plano : 'GRATUITO'
   };
 }
 
@@ -63,7 +65,7 @@ async function obterPerfilUsuario(email, nome, foto = null) {
 
   let usuario = await prisma.usuario.findUnique({
     where: { email: emailNorm },
-    include: { clinica: true }
+    include: { clinica: true, assinatura: true }
   });
 
   if (!usuario) {
@@ -78,10 +80,16 @@ async function obterPerfilUsuario(email, nome, foto = null) {
         role: roleInicial,
         foto: foto || null,
         crmv: emailNorm.includes('camila') ? 'CRMV/MG: 22904' : null,
-        nomeClinica: 'UPA PET'
+        nomeClinica: 'Vetaro'
       },
-      include: { clinica: true }
+      include: { clinica: true, assinatura: true }
     });
+
+    // Cria automaticamente o plano GRATUITO (10 laudos de cortesia) para o novo usuário
+    try {
+      const sub = await obterOuCriarAssinatura(usuario.id);
+      usuario.assinatura = sub;
+    } catch (_) {}
   } else {
     const dataUpdate = {};
     if (nome && usuario.nome !== nomeLimpo) dataUpdate.nome = nomeLimpo;
@@ -94,7 +102,7 @@ async function obterPerfilUsuario(email, nome, foto = null) {
       usuario = await prisma.usuario.update({
         where: { email: emailNorm },
         data: dataUpdate,
-        include: { clinica: true }
+        include: { clinica: true, assinatura: true }
       });
     }
   }

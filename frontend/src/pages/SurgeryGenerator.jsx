@@ -125,7 +125,7 @@ export default function SurgeryGenerator({
       const pac = res.paciente || {};
       const cir = res.cirurgia || {};
       const textReal =
-        `RELATÓRIO CIRÚRGICO OFICIAL — ${(userProfile.clinicName || 'UPA PET').toUpperCase()}\n` +
+        `RELATÓRIO CIRÚRGICO OFICIAL — ${(userProfile.clinicName || 'Vetaro').toUpperCase()}\n` +
         `Cirurgiã(o) Responsável: ${userProfile.name} (${userProfile.crmv})\n` +
         `Paciente: ${pac.nome || 'Paciente'} (${pac.especie || 'Canina'}) | Procedimento: ${
           cir.procedimento || 'Procedimento Cirúrgico'

@@ -75,7 +75,7 @@ describe('Integração de Motores com Layout (gerar_html.js e gerar_docx.js)', (
     await gerarDocxLaudo(pacienteTeste, laudoExemplo, caminhoDocx, null, [], customLayout, {
       nomeMedico: 'Dra. Camila Bastos',
       crmvMedico: 'CRMV/MG: 22904',
-      clinicaNome: 'UPA PET'
+      clinicaNome: 'Vetaro'
     });
 
     expect(fs.existsSync(caminhoDocx)).toBe(true);

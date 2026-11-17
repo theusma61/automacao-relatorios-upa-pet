@@ -1,5 +1,5 @@
 /**
- * Gerador de Relatório de Ultrassonografia Veterinária (Multi-Tenant / Padrão UPA PET)
+ * Gerador de Relatório de Ultrassonografia Veterinária (Multi-Tenant / Padrão Vetaro)
  */
 
 const fs = require('fs');
@@ -10,7 +10,7 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
   const usuario = opcoes.usuario || {};
   const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
   const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
-  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'UPA PET';
+  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'Vetaro';
 
   const paginasImagens = [];
   const fotosPorPagina = 8;

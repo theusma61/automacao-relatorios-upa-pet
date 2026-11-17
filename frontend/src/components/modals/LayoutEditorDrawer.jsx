@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Palette, Eye, RotateCcw, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Palette, Eye, RotateCcw, Check, FileUp, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
 
 const DEFAULT_LAYOUT = {
@@ -13,7 +13,9 @@ const DEFAULT_LAYOUT = {
   line_height: '1.4',
   paragraph_spacing: '8pt',
   cor_primaria: '#1B365D',
-  cor_secundaria: '#4A777A'
+  cor_secundaria: '#4A777A',
+  modo_template: 'padrao_upa',
+  pdfs_referencia_qtd: 0
 };
 
 export default function LayoutEditorDrawer({
@@ -28,9 +30,12 @@ export default function LayoutEditorDrawer({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [serverLayout, setServerLayout] = useState(DEFAULT_LAYOUT);
   const [saving, setSaving] = useState(false);
+  const [cloningPdfs, setCloningPdfs] = useState(false);
+  const [selectedPdfs, setSelectedPdfs] = useState([]);
+  const pdfInputRef = useRef(null);
 
   useEffect(() => {
-    if (isOpen && advancedOpen) {
+    if (isOpen) {
       api
         .getLayoutConfig()
         .then((res) => {
@@ -43,6 +48,29 @@ export default function LayoutEditorDrawer({
   }, [isOpen, advancedOpen]);
 
   if (!isOpen) return null;
+
+  const handleImportPdfs = async (filesList) => {
+    const files = Array.from(filesList || selectedPdfs).slice(0, 10);
+    if (!files.length) {
+      onToast('Selecione de 1 a 10 arquivos PDF de laudos anteriores.');
+      return;
+    }
+    setCloningPdfs(true);
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append('pdfs', f));
+      const res = await api.importarPadraoPdfs(fd);
+      if (res && res.layout) {
+        setServerLayout({ ...DEFAULT_LAYOUT, ...res.layout });
+      }
+      onToast(`Padrão visual e estilo de escrita extraídos de ${files.length} PDF(s) com sucesso!`);
+      setSelectedPdfs([]);
+    } catch (err) {
+      onToast('Erro ao clonar PDFs: ' + err.message);
+    } finally {
+      setCloningPdfs(false);
+    }
+  };
 
   const handleSaveServerLayout = async () => {
     setSaving(true);
@@ -71,10 +99,10 @@ export default function LayoutEditorDrawer({
       } else {
         setServerLayout(DEFAULT_LAYOUT);
       }
-      onToast('Padrão institucional restaurado com sucesso!');
+      onToast('Padrão Vetaro restaurado com sucesso!');
     } catch (_) {
       setServerLayout(DEFAULT_LAYOUT);
-      onToast('Padrão institucional restaurado!');
+      onToast('Padrão Vetaro restaurado!');
     }
   };
 
@@ -86,48 +114,47 @@ export default function LayoutEditorDrawer({
           : 'bg-[#F0FBF7] border-[#00D296]/40 text-[#0A141D]'
       }`}
     >
-      {/* Linha Rápida do Protótipo Vetaro */}
+      {/* Linha Rápida + Clonagem de 1 a 10 PDFs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-4 text-xs">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           <span className="font-extrabold text-[#00D296] flex items-center gap-1.5">
-            <Palette className="w-4 h-4" /> Layout do PDF:
+            <Palette className="w-4 h-4" /> Modo atual:
           </span>
-          <label className="flex items-center gap-1.5 font-semibold">
-            <span>Cabeçalho:</span>
-            <select
-              value={layoutConfig.headerStyle}
-              onChange={(e) =>
-                setLayoutConfig({ ...layoutConfig, headerStyle: e.target.value })
-              }
-              className={`px-2.5 py-1 rounded-lg border text-xs font-bold ${
-                darkMode
-                  ? 'bg-[#12222F] border-slate-700 text-white'
-                  : 'bg-white border-slate-300 text-[#0A141D]'
-              }`}
-            >
-              <option>Logotipo + CRMV Centralizado</option>
-              <option>Papel Timbrado Minimalista Vetaro</option>
-              <option>Duas Colunas (Clínica + Veterinária)</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 font-semibold">
-            <span>Grade Página 2:</span>
-            <select
-              value={layoutConfig.gridColumns}
-              onChange={(e) =>
-                setLayoutConfig({ ...layoutConfig, gridColumns: e.target.value })
-              }
-              className={`px-2.5 py-1 rounded-lg border text-xs font-bold ${
-                darkMode
-                  ? 'bg-[#12222F] border-slate-700 text-white'
-                  : 'bg-white border-slate-300 text-[#0A141D]'
-              }`}
-            >
-              <option>2 colunas (6 fotos por página)</option>
-              <option>3 colunas (9 fotos compactas)</option>
-              <option>1 coluna (Imagens ampliadas)</option>
-            </select>
-          </label>
+          <span
+            className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
+              serverLayout.modo_template === 'clonado_pdf'
+                ? 'bg-[#00D296] text-[#062E2B]'
+                : 'bg-slate-700 text-slate-200'
+            }`}
+          >
+            {serverLayout.modo_template === 'clonado_pdf'
+              ? `Padrão Clonado do Veterinário (${serverLayout.pdfs_referencia_qtd || 1} PDF)`
+              : 'Padrão Vetaro'}
+          </span>
+
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept="application/pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const list = Array.from(e.target.files || []).slice(0, 10);
+              setSelectedPdfs(list);
+              if (list.length > 0) handleImportPdfs(list);
+            }}
+          />
+          <button
+            type="button"
+            disabled={cloningPdfs}
+            onClick={() => pdfInputRef.current && pdfInputRef.current.click()}
+            className="px-3 py-1 rounded-lg text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm hover:opacity-90 transition"
+          >
+            <FileUp className="w-3.5 h-3.5" />
+            <span>
+              {cloningPdfs ? 'Extraindo Padrão (300 DPI)...' : 'Subir até 10 PDFs (Clonar Meu Padrão)'}
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -146,11 +173,11 @@ export default function LayoutEditorDrawer({
             type="button"
             onClick={() => {
               onClose();
-              onToast('Preferências do Editor de Layout salvas!');
+              onToast('Preferências do Editor de Layout aplicadas!');
             }}
             className="px-3 py-1 rounded-lg text-xs font-extrabold bg-[#00D296] text-[#062E2B]"
           >
-            Aplicar Layout
+            Fechar
           </button>
         </div>
       </div>
@@ -178,6 +205,9 @@ export default function LayoutEditorDrawer({
                   }`}
                 >
                   <option value="Calibri, sans-serif">Calibri (Padrão)</option>
+                  <option value="'Microsoft New Tai Lue', 'Segoe UI', Carlito, Calibri, sans-serif">
+                    Microsoft New Tai Lue
+                  </option>
                   <option value="Arial, sans-serif">Arial</option>
                   <option value="'Times New Roman', serif">Times New Roman</option>
                 </select>
@@ -216,6 +246,8 @@ export default function LayoutEditorDrawer({
                       : 'bg-white border-slate-300 text-[#0A141D]'
                   }`}
                 >
+                  <option value="10.5pt">10.5pt</option>
+                  <option value="11pt">11pt</option>
                   <option value="12pt">12pt</option>
                   <option value="13pt">13pt</option>
                   <option value="14pt">14pt (Padrão)</option>
@@ -250,72 +282,13 @@ export default function LayoutEditorDrawer({
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label className="block font-bold mb-1 opacity-80">Cor Primária (Títulos)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={serverLayout.cor_primaria}
-                    onChange={(e) =>
-                      setServerLayout({
-                        ...serverLayout,
-                        cor_primaria: e.target.value.toUpperCase()
-                      })
-                    }
-                    className="w-8 h-8 rounded cursor-pointer border-0"
-                  />
-                  <input
-                    type="text"
-                    value={serverLayout.cor_primaria}
-                    onChange={(e) =>
-                      setServerLayout({ ...serverLayout, cor_primaria: e.target.value })
-                    }
-                    className={`w-full px-2.5 py-1.5 rounded-lg border font-mono ${
-                      darkMode
-                        ? 'bg-[#12222F] border-slate-700 text-white'
-                        : 'bg-white border-slate-300 text-[#0A141D]'
-                    }`}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block font-bold mb-1 opacity-80">Cor Secundária</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={serverLayout.cor_secundaria}
-                    onChange={(e) =>
-                      setServerLayout({
-                        ...serverLayout,
-                        cor_secundaria: e.target.value.toUpperCase()
-                      })
-                    }
-                    className="w-8 h-8 rounded cursor-pointer border-0"
-                  />
-                  <input
-                    type="text"
-                    value={serverLayout.cor_secundaria}
-                    onChange={(e) =>
-                      setServerLayout({ ...serverLayout, cor_secundaria: e.target.value })
-                    }
-                    className={`w-full px-2.5 py-1.5 rounded-lg border font-mono ${
-                      darkMode
-                        ? 'bg-[#12222F] border-slate-700 text-white'
-                        : 'bg-white border-slate-300 text-[#0A141D]'
-                    }`}
-                  />
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
                 onClick={handleResetServerLayout}
                 className="text-xs font-bold text-slate-400 hover:text-[#00D296] flex items-center gap-1"
               >
-                <RotateCcw className="w-3.5 h-3.5" /> Restaurar Padrão
+                <RotateCcw className="w-3.5 h-3.5" /> Restaurar Padrão Vetaro
               </button>
               <button
                 type="button"
@@ -341,19 +314,20 @@ export default function LayoutEditorDrawer({
               style={{ fontFamily: serverLayout.font_family }}
               className="bg-white text-slate-800 rounded-xl p-4 shadow-md border border-slate-300 text-[10px] space-y-2"
             >
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center justify-between border-b border-slate-300 pb-2">
                 <span
                   style={{ color: serverLayout.cor_primaria }}
                   className="font-black text-sm tracking-tight"
                 >
-                  {userProfile.clinicName || 'UPA PET'}
+                  {serverLayout.modo_template === 'clonado_pdf'
+                    ? 'Template Clonado do Veterinário (Ativo)' : userProfile.clinicName || 'Vetaro'}
                 </span>
-                <div className="text-right text-[8px] text-slate-500">
+                <div className="text-right text-[8px] text-slate-600">
                   <p>
-                    <strong>Paciente:</strong> Thor • <strong>Espécie:</strong> Canina
+                    <strong>Paciente:</strong> REBECA • <strong>Espécie:</strong> CANINA
                   </p>
                   <p>
-                    <strong>Responsável:</strong> {userProfile.name} ({userProfile.crmv})
+                    <strong>Proprietário (a):</strong> LUZINETE • <strong>Raça:</strong> PINCHER
                   </p>
                 </div>
               </div>
@@ -361,17 +335,14 @@ export default function LayoutEditorDrawer({
                 <p
                   style={{
                     color: serverLayout.cor_primaria,
-                    fontSize: serverLayout.font_size_titulo
+                    fontSize: serverLayout.font_size_titulo,
+                    textDecoration: serverLayout.modo_template === 'clonado_pdf' ? 'underline' : 'none'
                   }}
                   className="font-bold"
                 >
-                  RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL
-                </p>
-                <p
-                  style={{ color: serverLayout.cor_secundaria }}
-                  className="italic text-[8px]"
-                >
-                  Exame ultrassonográfico abdominal completo em modo B
+                  {serverLayout.modo_template === 'clonado_pdf'
+                    ? 'LAUDO ULTRASSONOGRÁFICO'
+                    : 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL'}
                 </p>
               </div>
               <div
@@ -379,18 +350,16 @@ export default function LayoutEditorDrawer({
                   fontSize: serverLayout.font_size_body,
                   lineHeight: serverLayout.line_height
                 }}
-                className="space-y-1 text-justify"
+                className="space-y-1 text-left"
               >
                 <p>
-                  <strong>FÍGADO:</strong> Dimensões normais, parênquima homogêneo e
-                  ecogenicidade preservada.
+                  <strong>Bexiga:</strong> Com repleção liquida adequada. Contornos internos regulares e paredes normoespessas (0,13 cm).
                 </p>
                 <p>
-                  <strong>VESÍCULA BILIAR:</strong> Parede fina (0,12 cm), conteúdo anecogênico.
+                  <strong>Rins:</strong> Simétricos (RE=3,28 cm/ RD=3,37 cm),
                 </p>
                 <p>
-                  <strong>IMPRESSÃO DIAGNÓSTICA:</strong> Exame dentro dos padrões de
-                  normalidade.
+                  <strong>Rim esquerdo:</strong> Apresentando topografia, dimensões anatômicas normais com contorno regular, ecogenicidade mantida.
                 </p>
               </div>
             </div>

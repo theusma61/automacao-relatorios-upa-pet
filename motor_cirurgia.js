@@ -5,9 +5,7 @@ const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthT
 const { obterLayout, converterParaDocx, LAYOUT_PADRAO } = require('./gerenciador_layout');
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
-const LOGO_PATH = fs.existsSync(path.join(ASSETS_DIR, 'logo_upa_pet_oficial.png'))
-  ? path.join(ASSETS_DIR, 'logo_upa_pet_oficial.png')
-  : path.join(ASSETS_DIR, 'logo_upa_pet.jpg');
+const LOGO_PATH = null;
 const ASSINATURA_PATH = fs.existsSync(path.join(ASSETS_DIR, 'assinatura_camila.jpg'))
   ? path.join(ASSETS_DIR, 'assinatura_camila.jpg')
   : null;
@@ -58,7 +56,7 @@ function resolverContextoCirurgico(opcoes = {}) {
 
   const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
   const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
-  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'UPA PET';
+  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'Vetaro';
 
   const logoPath = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
     ? usuario.logoUrl

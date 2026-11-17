@@ -7,6 +7,7 @@ export default function LoginPage({
   setDarkMode,
   ssoConfig,
   onGoogleCredential,
+  onBackToLanding,
   onToast
 }) {
   const googleBtnRef = useRef(null);
@@ -59,7 +60,18 @@ export default function LoginPage({
       }`}
     >
       <div className="max-w-5xl w-full mx-auto flex items-center justify-between">
-        <VetaroLogo size={34} dark={darkMode} />
+        <div className="flex items-center gap-4">
+          <VetaroLogo size={34} dark={darkMode} />
+          {onBackToLanding && (
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="text-xs font-bold text-slate-500 hover:text-[#00D296] transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              ← Voltar ao site
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setDarkMode(!darkMode)}

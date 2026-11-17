@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y \
     openssl \
     ca-certificates \
     chromium \
+    poppler-utils \
     fonts-liberation \
     fonts-crosextra-carlito \
     libnss3 \
@@ -46,4 +47,4 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node servidor_web.js"]
+CMD ["sh", "-c", "node scripts/ensure-schema.js && node servidor_web.js"]

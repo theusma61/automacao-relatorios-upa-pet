@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { obterLayout } = require('./gerenciador_layout');
 
 function fileToGenerativePart(filePath, mimeType) {
   return {
@@ -11,26 +12,130 @@ function fileToGenerativePart(filePath, mimeType) {
   };
 }
 
-async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const modelosCandidatos = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+function sanitizarDadosPaciente(paciente, nomeClinica = '') {
+  if (!paciente || typeof paciente !== 'object') {
+    return {
+      nome: 'Não identificado',
+      tutor: 'Não informado',
+      especie: 'Canina',
+      sexo: 'Não informado',
+      idade: 'Não informada',
+      data: new Date().toLocaleDateString('pt-BR')
+    };
+  }
 
-  const usuario = opcoes.usuario || null;
-  const nomeClinica = usuario?.nomeClinica || 'UPA PET';
-  const identificacaoProfissional = usuario?.nome
-    ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
-    : 'Dra. Camila Bastos - CRMV/MG: 22904';
+  let nome = String(paciente.nome || '').trim();
+  let tutor = String(paciente.tutor || '').trim();
 
-  const promptInstrucoes = `
+  const regexTermosClinica = /(upa\s*pet|cl[íi]nica|hospital|veterin[áa]ri[ao]|contagem|betim|barreiro|unidade|centro\s*vet)/i;
+  const ehClinica = (str) => {
+    if (!str) return false;
+    if (regexTermosClinica.test(str)) return true;
+    if (nomeClinica && str.toLowerCase().includes(nomeClinica.toLowerCase())) return true;
+    return false;
+  };
+
+  // Se o tutor capturado foi o nome de hospital/clínica, anula
+  if (ehClinica(tutor)) {
+    tutor = '';
+  }
+
+  // No aparelho Mindray, operadores frequentemente preenchem o campo "Name" com:
+  // "LUA, NILDA", "LUA / NILDA", "LUA - NILDA" (onde LUA é o animal e NILDA é a tutora)
+  const matchSeparador = nome.match(/^([^,/-]+)\s*[,/-]\s*(.+)$/);
+  if (matchSeparador) {
+    const parteAnimal = matchSeparador[1].trim();
+    const parteTutor = matchSeparador[2].trim();
+
+    // Evita falsos positivos se a segunda parte for apenas indicação de espécie, sexo ou raça
+    const regexNaoTutor = /^(canin[ao]|felin[ao]|macho|femea|fêmea|sr[de]|poodle|pitbull|shih\s*tzu|yorkshire)$/i;
+    if (!regexNaoTutor.test(parteTutor)) {
+      if (!tutor || tutor.toLowerCase() === 'não informado' || ehClinica(tutor)) {
+        tutor = parteTutor;
+      }
+      nome = parteAnimal;
+    }
+  }
+
+  return {
+    ...paciente,
+    nome: nome || 'Não identificado',
+    tutor: tutor || 'Não informado',
+    especie: paciente.especie || 'Canina',
+    sexo: paciente.sexo || 'Não informado',
+    idade: paciente.idade || 'Não informada',
+    data: paciente.data || new Date().toLocaleDateString('pt-BR')
+  };
+}
+
+/**
+ * Constrói o prompt customizado de forma 100% agnóstica quando o médico veterinário
+ * possui um estilo clonado de PDFs, garantindo que a ordem, a capitalização,
+ * as listas com traços ("- "), observações ("Obs.:") e frases padrão sigam fielmente o médico.
+ */
+function construirPromptClonado(estiloClinico, nomeClinica, identificacaoProfissional) {
+  const orgaos = Array.isArray(estiloClinico?.sequenciaOrgaos) ? estiloClinico.sequenciaOrgaos : [];
+  const listaOrgaosInstrucao = orgaos.map((o, idx) => {
+    let linha = `${idx + 1}. "${o.orgao}": Frase padrão quando normal -> ${JSON.stringify(o.textoPadraoNormal || '')}`;
+    if (o.textoQuandoNaoVisualizada) {
+      linha += ` | Quando não visualizado -> ${JSON.stringify(o.textoQuandoNaoVisualizada)}`;
+    }
+    return linha;
+  }).join('\n   ');
+
+  const regraSubitens = estiloClinico?.usarSubitensComTraco
+    ? `- PRESERVE AS QUEBRAS DE LINHA E OS TRAÇOS ("\\n- "): nos órgãos cujo modelo padrão usa sub-itens com traço (como ADRENAIS com "\\n- Adrenal esquerda..." e "\\n- Adrenal direita...", ou INTESTINOS com "\\n- Duodeno:...", "\\n- Jejuno:...", "\\n- Íleo:...", "\\n- Cólon..."), mantenha EXATAMENTE esse formato de múltiplas linhas iniciadas por "\\n- " dentro do campo "texto" do JSON.`
+    : '';
+
+  const regraObsItalico = estiloClinico?.usarObsItalico
+    ? `- Se o texto padrão de um órgão (como ESTÔMAGO) terminar com uma linha "\\nObs.: ...", mantenha essa linha "\\nObs.: ..." ao final do texto quando aplicável.`
+    : '';
+
+  const regraDiagDif = estiloClinico?.usarDiagDifSeparado === false
+    ? `- NÃO utilize o campo "diagDif" (retorne sempre "diagDif": "").
+   - NÃO escreva "DIAG DIF.:" no texto.
+   - Quando houver achados patológicos importantes ou suspeitas diagnósticas (ex: piometra, mucometra, lama biliar, pseudociese, cistite, nefropatia), descreva o achado diretamente no órgão correspondente com a mesma linguagem clínica do médico ("compatível com...", "sugestivo de...").`
+    : `- Quando o órgão estiver alterado, preencha o campo "diagDif" com os diagnósticos diferenciais em CAIXA ALTA (sem repetir o prefixo "DIAG DIF.:" dentro de "texto").`;
+
+  const regraSexo = estiloClinico?.omitirOrgaosSexoOposto !== false
+    ? `- NUNCA inclua órgãos do sexo oposto (se o paciente for Fêmea, JAMAIS inclua "Próstata"/"PRÓSTATA" ou "Testículos"/"TESTÍCULOS", substituindo pelos órgãos reprodutivos femininos no mesmo estilo do médico; se for Macho, JAMAIS inclua "Útero" ou "Ovários").`
+    : '';
+
+  return `
 Você é um médico veterinário especialista em diagnóstico por imagem (ultrassonografia abdominal de cães e gatos).
-Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultrassom do aparelho Mindray fornecidas e estruturar os dados no padrão oficial da clínica ${nomeClinica} (${identificacaoProfissional}).
+Sua missão é realizar a análise técnica das imagens de ultrassom fornecidas e redigir o laudo reproduzindo FIELMENTE o estilo de escrita, a capitalização dos órgãos, a formatação de sub-itens e as frases padrão de ${nomeClinica} (${identificacaoProfissional}).
+
+---
+
+### REGRAS OBRIGATÓRIAS DO ESTILO EXTRAÍDO DO MÉDICO:
+
+1. DADOS DO PACIENTE (EXTRAÇÃO DO CABEÇALHO DO APARELHO):
+   - Extraia Nome, Tutor/Proprietário, Sexo, Data, Idade, Espécie e Raça (se constar na tela, ex: "pncher" -> "Pinscher", senão "SRD").
+   - Se o veterinário requisitante constar na imagem ou metadados, preencha "requisitante", senão deixe "".
+
+2. SEQUÊNCIA EXATA, CAPITALIZAÇÃO E FRASES PADRÃO DOS ÓRGÃOS:
+   Você DEVE utilizar exatamente os nomes de órgãos abaixo (respeitando maiúsculas/minúsculas exatas) e seguir estas frases base substituindo apenas as medidas lidas nos calipers ("Dist X.XX cm" / "1 L X.XX cm") e descrevendo alterações reais visíveis nas imagens:
+   ${listaOrgaosInstrucao}
+
+3. FORMATAÇÃO ESTRUTURAL, CONCLUSÃO E SEXO:
+   ${regraSubitens}
+   ${regraObsItalico}
+   ${regraDiagDif}
+   ${regraSexo}
+`;
+}
+
+function construirPromptPadraoVetaro(nomeClinica, identificacaoProfissional) {
+  return `
+Você é um médico veterinário especialista em diagnóstico por imagem (ultrassonografia abdominal de cães e gatos).
+Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultrassom fornecidas e estruturar os dados no Padrão Vetaro (${nomeClinica} - ${identificacaoProfissional}).
 
 ---
 
 ### REGRAS CLÍNICAS E CRITÉRIOS OBRIGATÓRIOS:
 
 1. DADOS DO PACIENTE:
-   - Extraia Nome, Tutor, Sexo, Data e Idade diretamente do cabeçalho na tela do Mindray.
+   - Extraia Nome, Tutor, Sexo, Data, Idade e Raça diretamente do cabeçalho na tela do aparelho.
    - Para espécie: deduza por comprimento renal e espessuras (rins de ~3,0 a 3,8 cm costumam ser felinos ou caninos de pequeno porte; rins > 4,5 cm são caninos médios/grandes).
 
 2. ORDEM ESTRITA DOS ÓRGÃOS NO LAUDO:
@@ -43,7 +148,7 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
    - FÍGADO
    - VESICULA BILIAR
    - ALÇAS INTESTINAIS
-   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia)
+   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia). JAMAIS inclua PRÓSTATA em fêmeas.
    - Se Macho: TESTICULO ESQUERDO, TESTICULO DIREITO, PROSTATA (ou histórico de orquiectomia)
    - GLANDULA ADRENAL
    - PANCREAS
@@ -51,96 +156,55 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
    - CONSIDERAÇÕES
 
 3. CRITÉRIOS ESPECÍFICOS POR ÓRGÃO:
+- BEXIGA: Começar com "Em topografia habitual com formato preservado e repleção liquida [pouca / adequada / cheia]...".
+- RIM ESQUERDO e RIM DIREITO: "Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente X,XX cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose."
+- BAÇO: "Localizado em topografia habitual, com contornos regulares, bem definidos, com dimensões preservadas..."
+- ESTOMAGO: "Localizado em topografia habitual, paredes [normoespessas / espessadas], medindo X,XX cm, mucosas com pregueamento usual..."
+- FÍGADO: "Localizado em topografia habitual, apresenta-se, na porção visível, com dimensões aparentemente preservadas e contornos regulares..."
+- VESICULA BILIAR: "Paredes normoespessas, margem interna regular, conteúdo homogêneo e anecogênico límpido."
+- ALÇAS INTESTINAIS: "Segmentos parcialmente visibilizados, paredes normoespessas em duodeno (X,XX cm), jejuno (X,XX cm) e colon descendente (X,XX cm). Preenchidas por conteúdo gasoso/mucoide e conteúdo fecal em colon. Estratificação parietal preservada e peristaltismo evolutivo, sem evidências de processo obstrutivo parcial ou total."
+- GLANDULA ADRENAL: Se visibilizadas, informar medidas de AE e AD; se não visibilizadas, "Não visualizadas."
+- PANCREAS: "Sem alteração em topografia de pâncreas."
+- CAVIDADE ABDOMINAL: "Ausência de liquido livre, sem alterações evidentes em linfonodos abdominais."
+- CONSIDERAÇÕES: "Sugere-se acompanhamento ultrassonográfico das alterações visibilizadas. Associar a exames complementares."
+- IMPORTANTE: Não escreva "DIAG DIF.:" dentro de "texto"; coloque os diagnósticos diferenciais exclusivamente na propriedade "diagDif" do objeto JSON.
+`;
+}
 
-- BEXIGA:
-  * Começar OBRIGATORIAMENTE com a frase: "Em topografia habitual" (ou "Localizada em topografia habitual").
-  * Formato e repleção: "com formato preservado e repleção liquida [pouca / adequada / cheia]".
-  * Paredes e Pontos de Corte:
-    - Felinos: normal de 0,13 cm até 0,15 cm. Acima de 0,15 cm = Cistite.
-    - Cães: normal até 0,25 cm. Acima de 0,25 cm = Cistite.
-    - Margens internas: na maioria das vezes "margens internas irregulares" quando tem cistite; se normal, "margens internas regulares".
-  * Conteúdo: "conteúdo anecogênico e homogêneo" ou indicar presença de sedimentos hiperecogênicos flutuantes, urólitos (medidos em cm) com sombra acústica.
-  * Se alterada, DIAG DIF.: CISTITE, CISTITE ASSOCIADA A SEDIMENTOS ou URÓLITOS E SEDIMENTOS URINÁRIOS.
+async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const modelosCandidatos = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
-- RINS (SEPARAR OBRIGATORIAMENTE EM TÓPICOS: "RIM ESQUERDO" e "RIM DIREITO"):
-  * Frase canônica para cada um:
-    "Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente X,XX cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose."
-  * Diagnósticos Diferenciais Renais:
-    - Se perda da relação/diferenciação córtico-medular: DIAG DIF.: DOENÇA RENAL CRÔNICA, NEFROTOXICIDADE, PROCESSOS INFLAMATÓRIOS, INFECCIOSOS OU INFILTRATIVOS.
-    - Se ecogenicidade cortical aumentada com relação mantida: DIAG DIF.: NEFROPATIA AGUDA, PROCESSOS TÓXICOS, GLOMERULONEFRITE, ALTERAÇÕES SECUNDÁRIAS A DISTÚRBIOS SISTÊMICOS.
-    - Se cisto renal (estruturas anecóicas arredondadas de paredes finas com reforço acústico posterior): DIAG DIF.: CISTO RENAL, DOENÇA POLICÍSTICA RENAL.
-    - Se hidronefrose (dilatação da pelve e divertículos com fluido anecóico ramificado): DIAG DIF.: HIDRONEFROSE, OBSTRUÇÃO URETERAL.
-    - Se urolitíase/calculose (focos altamente ecogênicos com forte sombra acústica distal limpa): DIAG DIF.: NEFROLITÍASE, UROLITÍASE.
-    - Se nefrocalcinose (focos pontiformes ou lineares no córtex ou medula): DIAG DIF.: NEFROCALCINOSE, MINERALIZAÇÃO RENAL.
+  const usuario = opcoes.usuario || null;
+  let layout = opcoes.layout || null;
+  if (!layout && usuario?.id) {
+    try {
+      layout = await obterLayout(usuario.id);
+    } catch (_) {}
+  }
 
-- BAÇO:
-  * 1°: "Localizado em topografia habitual"
-  * 2°: "com contornos regulares [ou irregulares], bem definidos"
-  * 3°: "com dimensões preservadas" OU "com dimensões aumentadas (ultrapassando o polo cranial do rim esquerdo)"
-  * 4°: sempre especificar se a ecogenicidade está "usual/preservada", "aumentada" ou "diminuída", e ecotextura "homogênea" ou "heterogênea".
-  * 5°: Incluir sempre "Arquitetura vascular preservada."
-  * Diagnósticos Diferenciais Esplênicos:
-    - Se somente aumento de tamanho (sem alteração de parênquima): DIAG DIF.: PROCESSO INFLAMATÓRIO / INFECCIOSO / HEMOPARASITOSES.
-    - Se esplenomegalia difusa com alteração textural/ecogênica: DIAG DIF.: ESPLENOMEGALIA DIFUSA, HEMATOPOIESE EXTRAMEDULAR, HIPERPLASIA LINFOIDE DIFUSA, INFILTRAÇÃO NEOPLÁSICA (LINFOMA).
-    - Se nódulos ou massas focais/multifocais: DIAG DIF.: HIPERPLASIA NODULAR ESPLÊNICA, HEMATOPOIESE EXTRAMEDULAR, PROCESSO NEOPLÁSICO (HEMANGIOSSARCOMA, LINFOMA), LIPOMA ESPLÊNICO.
+  const nomeClinica = usuario?.nomeClinica || 'Vetaro';
+  const identificacaoProfissional = usuario?.nome
+    ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
+    : 'Médico(a) Veterinário(a)';
 
-- ESTÔMAGO:
-  * 1°: "Localizado em topografia habitual"
-  * 2°: Paredes normoespessas (até 0,50 cm) ou espessadas (acima de 0,50 cm, medindo X,XX cm).
-  * 3°: "paredes [normoespessas / espessadas], medindo X,XX cm, mucosas com pregueamento usual. Apresentando repleção parcial por conteúdo predominantemente hipoecoico com presença de pequenas áreas hiperecogênicas, pouca quantidade de gás em seu lúmen."
-  * Diagnósticos Diferenciais se alterado:
-    - Espessamento parietal: DIAG DIF.: GASTRITE (AGUDA / CRÔNICA), ENTEROPATIA INFLAMATÓRIA, ULCERAÇÃO GÁSTRICA, PROCESSO NEOPLÁSICO INFILTRATIVO.
-    - Corpos estranhos: DIAG DIF.: CORPO ESTRANHO GÁSTRICO.
-    - Motilidade: DIAG DIF.: HIPOMOTILIDADE / ATONIA GÁSTRICA.
+  const ordemOrgaos = opcoes.ordemOrgaos ||
+    opcoes.perfilLaudo?.ordemOrgaos ||
+    (Array.isArray(layout?.writing_style_json?.sequenciaOrgaos) ? layout.writing_style_json.sequenciaOrgaos.map(o => o.orgao) : null) ||
+    [];
 
-- FÍGADO:
-  * 1°: "Localizado em topografia habitual"
-  * 2°: "apresenta-se, na porção visível, com dimensões aparentemente preservadas e contornos regulares."
-    (Aumentado quando: ultrapassa o gradil costal, arredondamento das margens e deslocamento de órgãos caudais).
-  * 3°: "O parênquima hepático demonstra ecogenicidade e ecotextura homogênea. Não foram observadas lesões focais, massas ou dilatação das vias biliares intra-hepáticas."
-  * Diagnósticos Diferenciais Hepáticos:
-    - Ecogenicidade aumentada: DIAG DIF.: LIPIDOSE HEPÁTICA, HEPATOPATIA VACUOLAR, INFILTRADO GORDUROSO, HEPATITE CRÔNICA, HEPATOPATIA REACIONAL.
-    - Ecogenicidade diminuída: DIAG DIF.: HEPATITE AGUDA, CONGESTÃO HEPÁTICA.
-    - Ecotextura heterogênea / nódulos: DIAG DIF.: HEPATOPATIA CRÔNICA AVANÇADA (CIRROSE, FIBROSE SEVERA), HIPERPLASIA NODULAR REGENERATIVA, NEOPLASIA PRIMÁRIA (CARCINOMA HEPATOCELULAR) OU METASTÁTICA, PROCESSO INFLAMATÓRIO CRÔNICO / GRANULOMATOSO.
+  const usarEstiloClonado = Boolean(
+    layout &&
+    layout.modo_template === 'clonado_pdf' &&
+    layout.writing_style_json &&
+    Array.isArray(layout.writing_style_json.sequenciaOrgaos)
+  );
 
-- VESÍCULA BILIAR:
-  * 1°: Paredes normoespessas (até 0,10 cm) ou espessas (> 0,10 cm).
-  * 2°: Margem interna regular ou irregular.
-  * 3°: Conteúdo homogêneo e anecogênico límpido.
-  * Diagnósticos Diferenciais:
-    - Lama biliar (sedimento biliar móvel): DIAG DIF.: LAMA BILIAR, ESTASE BILIAR, COLANGITE.
-    - Mucocele biliar (padrão em roda de carroça / estriado / septado): DIAG DIF.: MUCOCELE BILIAR.
-    - Colelitíase (cálculos com sombra acústica): DIAG DIF.: COLELITÍASE, COLECISTITE.
-    - Debris celulares / exsudato: DIAG DIF.: COLECISTITE, COLANGIO-HEPATITE.
+  const blocoRegras = usarEstiloClonado
+    ? construirPromptClonado(layout.writing_style_json, nomeClinica, identificacaoProfissional)
+    : construirPromptPadraoVetaro(nomeClinica, identificacaoProfissional);
 
-- ALÇAS INTESTINAIS:
-  * FRASE OBRIGATÓRIA EXATA:
-    "Segmentos parcialmente visibilizados, paredes normoespessas em duodeno (X,XX cm), jejuno (X,XX cm) e colon descendente (X,XX cm). Preenchidas por conteúdo gasoso/mucoide e conteúdo fecal em colon. Estratificação parietal preservada e peristaltismo evolutivo, sem evidências de processo obstrutivo parcial ou total."
-
-- APARELHO REPRODUTOR:
-  * Fêmea inteira:
-    - OVÁRIOS (Unificado em tópico único): "OVÁRIOS: Em topografia habitual e dimensões preservadas (OE: X,XX cm x X,XX cm , OD: X,XX cm x X,XX cm) apresenta formato ovalado, contornos regulares e definidos. Não há evidências de formações císticas, massas sólidas ou alterações estruturais." (Se cisto/folículo presente: descrever e adicionar DIAG DIF.: FOLÍCULO OVARIANO, CISTO OVARIANO).
-    - ÚTERO: "ÚTERO: Localizado em topografia habitual. Corpo e cornos uterinos com dimensões preservadas..." (se piometra: dilatação tubular, paredes irregulares, conteúdo com pontos hipoecogênicos com DIAG DIF.: PIOMETRA, MUCOMETRA).
-  * Fêmea castrada: "ÚTERO / OVÁRIOS: Não visualizados, histórico de ovariosalpingohisterectomia."
-  * Macho inteiro: Descrever TESTICULO ESQUERDO, TESTICULO DIREITO e PROSTATA (se cistos/aumento: DIAG DIF. HIPERPLASIA PROSTATICA).
-  * Macho castrado: "TESTICULOS: Não visualizados, histórico de orquiectomia."
-
-- GLÂNDULA ADRENAL:
-  * Quando visibilizadas e normais, usar OBRIGATORIAMENTE este padrão com quebras de linha exatas:
-    "Apresenta dimensões e formato anatômicos preservados, contornos regulares, parênquima homogêneo e normoecogenico.
-AE: 0,XX cm em polo cranial, 0,XX cm em polo caudal, e X,XX cm de comprimento.
-AD: 0,XX cm em polo cranial, 0,XX cm em polo caudal, e X,XX cm de comprimento."
-  * Quando não visibilizadas: "Não visualizadas."
-  * Se alteradas (nódulos, aumento de polos cranial/caudal, assimetria): descrever as alterações e adicionar DIAG DIF.: HIPERADRENOCORTICISMO, NEOPLASIA ADRENAL.
-
-- PÂNCREAS:
-  * "PANCREAS: Sem alteração em topografia de pâncreas." (ou medidas do ramo).
-
-- CAVIDADE ABDOMINAL:
-  * "Ausência de liquido livre, sem alterações evidentes em linfonodos abominais."
-
-- CONSIDERAÇÕES:
-  * "Sugere-se acompanhamento ultrassonográfico das alterações visibilizadas. Associar a exames complementares."
+  const promptInstrucoes = `${blocoRegras}
 
 ---
 
@@ -179,16 +243,18 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
   "paciente": {
     "nome": "string",
     "especie": "Canina ou Felina",
+    "raca": "string ou 'SRD'",
     "idade": "string ou 'Não informada'",
     "tutor": "string",
+    "requisitante": "string",
     "sexo": "Macho ou Fêmea",
     "data": "DD/MM/AAAA"
   },
   "laudo": [
     {
-      "orgao": "NOME DO ÓRGÃO",
-      "texto": "Descrição técnica canônica...",
-      "diagDif": "DIAGNÓSTICOS DIFERENCIAIS EM CAIXA ALTA (ou vazio se normal)"
+      "orgao": "Nome do Órgão",
+      "texto": "Descrição técnica...",
+      "diagDif": "DIAGNÓSTICOS DIFERENCIAIS EM CAIXA ALTA (ou vazio se normal ou se o médico não usar DIAG DIF.)"
     }
   ],
   "classificacaoImagens": [
@@ -226,10 +292,15 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
       const jsonClean = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       const jsonParsed = JSON.parse(jsonClean);
 
+      jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
+
+      const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
+
       jsonParsed.caminhosOrdenados = ordenarImagensCanonicamente(
         caminhoImagens,
         jsonParsed.classificacaoImagens,
-        jsonParsed.nomesArquivosOrdenados
+        jsonParsed.nomesArquivosOrdenados,
+        mapaPrioridadesEfetivo
       );
 
       return jsonParsed;
@@ -270,23 +341,44 @@ function normalizarTexto(texto) {
   return (texto || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
-function calcularPrioridadeOrgao(item) {
+function construirMapaPrioridades(ordemOrgaos = []) {
+  if (!Array.isArray(ordemOrgaos) || ordemOrgaos.length === 0) {
+    return MAPA_ORDEM_CANONICA;
+  }
+  const novoMapa = { ...MAPA_ORDEM_CANONICA };
+  ordemOrgaos.forEach((org, idx) => {
+    const prioridade = idx + 1;
+    const orgNorm = normalizarTexto(org);
+    novoMapa[orgNorm] = prioridade;
+    for (const [chave] of Object.entries(MAPA_ORDEM_CANONICA)) {
+      const k = normalizarTexto(chave);
+      if (orgNorm.includes(k) || k.includes(orgNorm)) {
+        novoMapa[chave] = prioridade;
+      }
+    }
+  });
+  return novoMapa;
+}
+
+function calcularPrioridadeOrgao(item, mapa = MAPA_ORDEM_CANONICA) {
   if (item && typeof item.prioridade === 'number' && item.prioridade >= 1 && item.prioridade <= 20) {
     return item.prioridade;
   }
   const sigla = normalizarTexto(item ? item.sigla : '');
   const orgao = normalizarTexto(item ? item.orgao : '');
-  if (MAPA_ORDEM_CANONICA[sigla]) return MAPA_ORDEM_CANONICA[sigla];
-  if (MAPA_ORDEM_CANONICA[orgao]) return MAPA_ORDEM_CANONICA[orgao];
-  for (const [chave, p] of Object.entries(MAPA_ORDEM_CANONICA)) {
+  if (mapa[sigla]) return mapa[sigla];
+  if (mapa[orgao]) return mapa[orgao];
+  for (const [chave, p] of Object.entries(mapa)) {
     const k = normalizarTexto(chave);
     if (sigla.includes(k) || orgao.includes(k)) return p;
   }
   return 99;
 }
 
-function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomesArquivosOrdenados) {
+function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomesArquivosOrdenados, mapaPrioridades = MAPA_ORDEM_CANONICA) {
   if (!Array.isArray(caminhoImagens) || caminhoImagens.length === 0) return [];
+
+  const mapa = mapaPrioridades || MAPA_ORDEM_CANONICA;
 
   const itens = caminhoImagens.map((caminho, idx) => {
     const nomeBase = path.basename(caminho).toLowerCase();
@@ -297,10 +389,10 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
                 classificacaoImagens.find(c => c.nomeArquivo && c.nomeArquivo.toLowerCase() === nomeBase);
     }
 
-    let prioridade = calcularPrioridadeOrgao(classif);
+    let prioridade = calcularPrioridadeOrgao(classif, mapa);
 
     if (prioridade === 99) {
-      prioridade = calcularPrioridadeOrgao({ orgao: path.parse(nomeBase).name });
+      prioridade = calcularPrioridadeOrgao({ orgao: path.parse(nomeBase).name }, mapa);
     }
 
     if (prioridade === 99 && Array.isArray(nomesArquivosOrdenados)) {
@@ -323,4 +415,12 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
   return itens.map(i => i.caminho);
 }
 
-module.exports = { analisarExameComIA, ordenarImagensCanonicamente, MAPA_ORDEM_CANONICA };
+module.exports = {
+  analisarExameComIA,
+  construirPromptClonado,
+  construirPromptPadraoVetaro,
+  ordenarImagensCanonicamente,
+  construirMapaPrioridades,
+  sanitizarDadosPaciente,
+  MAPA_ORDEM_CANONICA
+};

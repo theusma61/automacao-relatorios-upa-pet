@@ -46,6 +46,8 @@ model Usuario {
   layoutsCriados    ConfiguracaoLayout[]
   examesEmitidos    ExameLaudo[]
   cirurgiasEmitidas RelatorioCirurgico[]
+  assinatura        Assinatura?
+  perfilLaudo       PerfilLaudo?
 
   criadoEm          DateTime             @default(now()) @map("criado_em")
   atualizadoEm      DateTime             @updatedAt @map("atualizado_em")
@@ -56,31 +58,40 @@ model Usuario {
 }
 
 model ConfiguracaoLayout {
-  id                String   @id @default(cuid())
-  nome              String   @default("Padrão Oficial")
-  isPadrao          Boolean  @default(false) @map("is_padrao")
+  id                    String   @id @default(cuid())
+  nome                  String   @default("Padrão Oficial")
+  isPadrao              Boolean  @default(false) @map("is_padrao")
 
-  usuarioId         String?  @unique @map("usuario_id")
-  usuario           Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId             String?  @unique @map("usuario_id")
+  usuario               Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  clinicaId         String?  @map("clinica_id")
-  clinica           Clinica? @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  clinicaId             String?  @map("clinica_id")
+  clinica               Clinica? @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
 
-  fontFamily        String   @default("Calibri, sans-serif") @map("font_family")
-  fontSizeBody      String   @default("11pt") @map("font_size_body")
-  fontSizeTitulo    String   @default("14pt") @map("font_size_titulo")
-  marginTop         String   @default("20mm") @map("margin_top")
-  marginBottom      String   @default("20mm") @map("margin_bottom")
-  marginLeft        String   @default("15mm") @map("margin_left")
-  marginRight       String   @default("15mm") @map("margin_right")
-  lineHeight        String   @default("1.4") @map("line_height")
-  paragraphSpacing  String   @default("8pt") @map("paragraph_spacing")
+  fontFamily            String   @default("Calibri, sans-serif") @map("font_family")
+  fontSizeBody          String   @default("11pt") @map("font_size_body")
+  fontSizeTitulo        String   @default("14pt") @map("font_size_titulo")
+  marginTop             String   @default("20mm") @map("margin_top")
+  marginBottom          String   @default("20mm") @map("margin_bottom")
+  marginLeft            String   @default("15mm") @map("margin_left")
+  marginRight           String   @default("15mm") @map("margin_right")
+  lineHeight            String   @default("1.4") @map("line_height")
+  paragraphSpacing      String   @default("8pt") @map("paragraph_spacing")
 
-  corPrimaria       String   @default("#1B365D") @map("cor_primaria")
-  corSecundaria     String   @default("#4A777A") @map("cor_secundaria")
+  corPrimaria           String   @default("#1B365D") @map("cor_primaria")
+  corSecundaria         String   @default("#4A777A") @map("cor_secundaria")
 
-  criadoEm          DateTime @default(now()) @map("criado_em")
-  atualizadoEm      DateTime @updatedAt @map("atualizado_em")
+  // Clonagem Visual e Textual a partir de 1 a 10 PDFs do Médico Veterinário
+  modoTemplate          String   @default("padrao_upa") @map("modo_template")
+  headerBannerUrl       String?  @map("header_banner_url")
+  footerLogoUrl         String?  @map("footer_logo_url")
+  assinaturaExtraidaUrl String?  @map("assinatura_extraida_url")
+  visualConfigJson      Json?    @map("visual_config_json")
+  writingStyleJson      Json?    @map("writing_style_json")
+  pdfsReferenciaQtd     Int      @default(0) @map("pdfs_referencia_qtd")
+
+  criadoEm              DateTime @default(now()) @map("criado_em")
+  atualizadoEm          DateTime @updatedAt @map("atualizado_em")
 
   @@index([usuarioId])
   @@index([isPadrao])
@@ -159,4 +170,75 @@ model RelatorioCirurgico {
   @@index([pacienteNome])
   @@index([criadoEm])
   @@map("relatorios_cirurgicos")
+}
+
+model Assinatura {
+  id             String    @id @default(cuid())
+  usuarioId      String    @unique @map("usuario_id")
+  usuario        Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  plano          String    @default("PRO") // GRATUITO, TRIAL, SOLO, PRO, CLINICA
+  status         String    @default("ACTIVE") // ACTIVE, TRIALING, PAST_DUE, CANCELED
+  precoMensal    Decimal   @default(149.00) @map("preco_mensal") @db.Decimal(10, 2)
+  ciclo          String    @default("mensal") // mensal ou anual
+  cotaLimite     Int       @default(150) @map("cota_limite")
+  cicloInicio    DateTime  @default(now()) @map("ciclo_inicio")
+  cicloFim       DateTime  @map("ciclo_fim")
+
+  cartaoFinal    String?   @default("4821") @map("cartao_final")
+  cartaoBandeira String?   @default("Mastercard") @map("cartao_bandeira")
+
+  criadoEm       DateTime  @default(now()) @map("criado_em")
+  atualizadoEm   DateTime  @updatedAt @map("atualizado_em")
+
+  faturas        Fatura[]
+
+  @@map("assinaturas")
+}
+
+model Fatura {
+  id           String     @id @default(cuid())
+  assinaturaId String     @map("assinatura_id")
+  assinatura   Assinatura @relation(fields: [assinaturaId], references: [id], onDelete: Cascade)
+
+  valor        Decimal    @db.Decimal(10, 2)
+  status       String     @default("pago") // pago, pendente, cancelado
+  dataFatura   DateTime   @default(now()) @map("data_fatura")
+  descricao    String?
+  pdfUrl       String?    @map("pdf_url")
+
+  criadoEm     DateTime   @default(now()) @map("criado_em")
+
+  @@index([assinaturaId])
+  @@index([dataFatura])
+  @@map("faturas")
+}
+
+model PerfilLaudo {
+  id                    String    @id @default(cuid())
+  usuarioId             String    @unique @map("usuario_id")
+  usuario               Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  ativo                 Boolean   @default(true)
+  status                String    @default("aprendido") // pendente, processando, aprendido, erro
+  quantidadeAmostras    Int       @default(0) @map("quantidade_amostras")
+  arquivosAmostras      Json?     @map("arquivos_amostras")
+
+  ordemOrgaos           String[]  @default([]) @map("ordem_orgaos")
+  vocabularioPreferido  Json?     @map("vocabulario_preferido")
+  frasesNormalidade     Json?     @map("frases_normalidade")
+  estiloConclusao       String?   @db.Text @map("estilo_conclusao")
+  observacoesEstilo     String?   @db.Text @map("observacoes_estilo")
+
+  nomeDetectado         String?   @map("nome_detectado")
+  crmvDetectado         String?   @map("crmv_detectado")
+  clinicaDetectada      String?   @map("clinica_detectada")
+  layoutDetectado       Json?     @map("layout_detectado")
+  templateVisual        Json?     @map("template_visual")
+
+  criadoEm              DateTime  @default(now()) @map("criado_em")
+  atualizadoEm          DateTime  @updatedAt @map("atualizado_em")
+
+  @@index([usuarioId])
+  @@map("perfis_laudo")
 }

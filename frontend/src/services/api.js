@@ -78,13 +78,18 @@ export const api = {
       method: 'DELETE'
     }),
 
-  // Editor de Layout Tipográfico (PDF e DOCX)
+  // Editor de Layout Tipográfico & Clonagem de 1 a 10 PDFs
   getLayoutConfig: () => requestJson('/api/layout-config'),
   saveLayoutConfig: (payload) =>
     requestJson('/api/layout-config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
+    }),
+  importarPadraoPdfs: (formData) =>
+    requestJson('/api/layout-config/importar-pdfs', {
+      method: 'POST',
+      body: formData
     }),
   resetLayoutConfig: () =>
     requestJson('/api/layout-config/reset', {
@@ -98,5 +103,32 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role })
+    }),
+
+  // Controle de Gastos, Cotas e Assinatura
+  getUsoAssinatura: () => requestJson('/api/assinatura/uso'),
+  trocarPlanoAssinatura: (plano, ciclo = 'mensal') =>
+    requestJson('/api/assinatura/trocar-plano', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plano, ciclo })
+    }),
+
+  // Personalização e Aprendizado de Padrão de Laudo por IA (Multimodal)
+  aprenderPadraoLaudo: (formData) =>
+    requestJson('/api/laudos/aprender-padrao', {
+      method: 'POST',
+      body: formData
+    }),
+  getPerfilLaudo: () => requestJson('/api/laudos/meu-perfil'),
+  salvarPerfilLaudo: (payload) =>
+    requestJson('/api/laudos/meu-perfil', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  resetPerfilLaudo: () =>
+    requestJson('/api/laudos/meu-perfil', {
+      method: 'DELETE'
     })
 };

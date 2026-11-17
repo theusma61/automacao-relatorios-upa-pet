@@ -43,7 +43,7 @@ async function analisarCirurgiaComIA(arquivos, apiKey, opcoes = {}) {
   const modelosBiblioteca = await obterTextoModelosParaPrompt(usuario?.id || null);
   const dataHoje = formatarDataHoje();
 
-  const nomeClinica = usuario?.nomeClinica || 'UPA PET';
+  const nomeClinica = usuario?.nomeClinica || 'Vetaro';
   const identificacaoMedico = usuario?.nome
     ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
     : 'Dra. Camila Bastos - CRMV/MG: 22904';

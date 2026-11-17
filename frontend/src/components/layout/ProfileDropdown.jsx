@@ -42,8 +42,13 @@ export default function ProfileDropdown({
             {userProfile.initials || 'MD'}
           </div>
         )}
-        <div className="min-w-0 text-left">
-          <p className="font-bold text-base leading-tight truncate">{userProfile.name}</p>
+        <div className="min-w-0 text-left flex-1">
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-base leading-tight truncate">{userProfile.name}</p>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#00D296]/20 text-[#00D296] shrink-0">
+              {userProfile.plano === 'CLINICA' ? 'Clínica' : userProfile.plano === 'PRO' ? 'Pro' : userProfile.plano === 'SOLO' ? 'Solo' : 'Degustação (10)'}
+            </span>
+          </div>
           <p
             className={`text-xs mt-0.5 truncate ${
               darkMode ? 'text-slate-300/80' : 'text-slate-500'

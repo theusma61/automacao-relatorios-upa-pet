@@ -23,7 +23,7 @@ describe('Plataforma Multi-Tenant PostgreSQL / Prisma (Usuários e Modelos Cirú
     const draCamila = await obterPerfilUsuario('camilabastos@upapet.com.br', 'Dra. Camila Bastos');
     expect(draCamila.id).toBeDefined();
     expect(draCamila.crmv).toBe('CRMV/MG: 22904');
-    expect(draCamila.nomeClinica).toBe('UPA PET');
+    expect(draCamila.nomeClinica).toBe('Vetaro');
     expect(draCamila.temaPreferencia).toBe('system');
   });
 

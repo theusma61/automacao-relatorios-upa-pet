@@ -10,14 +10,14 @@ const USUARIOS_PADRAO = [
     nome: 'Dra. Camila Bastos',
     role: 'admin',
     crmv: 'CRMV/MG: 22904',
-    nomeClinica: 'UPA PET'
+    nomeClinica: 'Vetaro'
   },
   {
     email: 'matheusteteu00123@gmail.com',
     nome: 'Matheus Augusto',
     role: 'admin',
     crmv: null,
-    nomeClinica: 'UPA PET'
+    nomeClinica: 'Vetaro'
   }
 ];
 
@@ -27,7 +27,7 @@ async function seedClinicaPadrao() {
     update: {},
     create: {
       id: 'clinica_upa_pet',
-      nome: 'UPA PET - Clínica Veterinária',
+      nome: 'Vetaro - Clínica Veterinária',
       cidade: 'Belo Horizonte',
       estado: 'MG'
     }
@@ -44,7 +44,7 @@ async function seedUsuarios(clinicaId = 'clinica_upa_pet') {
         nome: u.nome,
         role: u.role,
         crmv: u.crmv || null,
-        nomeClinica: u.nomeClinica || 'UPA PET',
+        nomeClinica: u.nomeClinica || 'Vetaro',
         clinicaId
       }
     });

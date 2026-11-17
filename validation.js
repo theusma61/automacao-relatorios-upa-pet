@@ -142,7 +142,7 @@ const healthSchemas = {
 
 const layoutSchemas = {
   updateLayout: z.object({
-    font_family: z.string().min(2).max(100).trim().optional(),
+    font_family: z.string().min(2).max(160).trim().optional(),
     font_size_body: z.string().trim().regex(/^([8-9]|1[0-4])(\.[0-9]+)?pt$/, 'Tamanho do corpo deve ser entre 8pt e 14pt (ex: 11pt)').optional(),
     font_size_titulo: z.string().trim().regex(/^(1[0-9]|2[0-4])(\.[0-9]+)?pt$/, 'Tamanho do título deve ser entre 10pt e 24pt (ex: 14pt)').optional(),
     margin_top: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)mm$/, 'Margem superior deve ser entre 0mm e 50mm (ex: 20mm)').optional(),
@@ -155,7 +155,14 @@ const layoutSchemas = {
     ]).optional(),
     paragraph_spacing: z.string().trim().regex(/^([0-9]|1[0-9]|2[0-4])(\.[0-9]+)?pt$/, 'Espaçamento entre parágrafos deve ser entre 0pt e 24pt (ex: 8pt)').optional(),
     cor_primaria: z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Cor primária deve ser um hexadecimal válido (ex: #1B365D)').optional(),
-    cor_secundaria: z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Cor secundária deve ser um hexadecimal válido (ex: #4A777A)').optional()
+    cor_secundaria: z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Cor secundária deve ser um hexadecimal válido (ex: #4A777A)').optional(),
+    modo_template: z.enum(['padrao_upa', 'clonado_pdf']).optional(),
+    header_banner_url: z.string().nullable().optional(),
+    footer_logo_url: z.string().nullable().optional(),
+    assinatura_extraida_url: z.string().nullable().optional(),
+    visual_config_json: z.any().optional(),
+    writing_style_json: z.any().optional(),
+    pdfs_referencia_qtd: z.number().int().min(0).max(20).optional()
   }).refine(data => Object.keys(data).length > 0, {
     message: 'Pelo menos um campo de layout deve ser fornecido'
   })
