@@ -66,7 +66,7 @@ export default function ProfileDropdown({
         <button
           type="button"
           onClick={() => onSelectTab('perfil')}
-          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+          className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
             activeNav === 'configuracoes' && settingsTab === 'perfil'
               ? 'bg-[#00D296]/15 text-[#00D296]'
               : darkMode
@@ -74,19 +74,14 @@ export default function ProfileDropdown({
               : 'text-slate-700 hover:bg-slate-100'
           }`}
         >
-          <span className="flex items-center gap-3.5">
-            <User className="w-5 h-5 stroke-[1.9]" />
-            <span>Meu perfil</span>
-          </span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] font-bold">
-            Abrir
-          </span>
+          <User className="w-5 h-5 stroke-[1.9]" />
+          <span>Meu perfil</span>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectTab('assinatura')}
-          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+          className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
             activeNav === 'configuracoes' && settingsTab === 'assinatura'
               ? 'bg-[#00D296]/15 text-[#00D296]'
               : darkMode
@@ -94,19 +89,14 @@ export default function ProfileDropdown({
               : 'text-slate-700 hover:bg-slate-100'
           }`}
         >
-          <span className="flex items-center gap-3.5">
-            <PlanBoxIcon className="w-5 h-5" />
-            <span>Plano e assinatura</span>
-          </span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] font-bold">
-            Abrir
-          </span>
+          <PlanBoxIcon className="w-5 h-5" />
+          <span>Plano e assinatura</span>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectTab('preferencias')}
-          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+          className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
             activeNav === 'configuracoes' && settingsTab === 'preferencias'
               ? 'bg-[#00D296]/15 text-[#00D296]'
               : darkMode
@@ -114,39 +104,29 @@ export default function ProfileDropdown({
               : 'text-slate-700 hover:bg-slate-100'
           }`}
         >
-          <span className="flex items-center gap-3.5">
-            <Settings className="w-5 h-5 stroke-[1.9]" />
-            <span>Configurações</span>
-          </span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] font-bold">
-            Abrir
-          </span>
+          <Settings className="w-5 h-5 stroke-[1.9]" />
+          <span>Configurações</span>
         </button>
 
         {userProfile.role === 'admin' && onOpenAdminModal && (
           <button
             type="button"
             onClick={onOpenAdminModal}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+            className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
               darkMode
                 ? 'text-slate-100 hover:bg-white/5'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <span className="flex items-center gap-3.5">
-              <ShieldCheck className="w-5 h-5 stroke-[1.9] text-[#00D296]" />
-              <span>Acessos (Admin)</span>
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] font-bold">
-              RBAC
-            </span>
+            <ShieldCheck className="w-5 h-5 stroke-[1.9] text-[#00D296]" />
+            <span>Acessos (Admin)</span>
           </button>
         )}
       </div>
 
       <div className={`h-px mx-4 ${darkMode ? 'bg-slate-700/60' : 'bg-slate-200'}`} />
 
-      {/* Modo Claro Toggle + Sair */}
+      {/* Modo Escuro Toggle + Sair */}
       <div className="p-2.5 space-y-1">
         <div
           onClick={() => setDarkMode(!darkMode)}
@@ -156,12 +136,12 @@ export default function ProfileDropdown({
         >
           <div className="flex items-center gap-3.5">
             <MoonStarIcon className="w-5 h-5" />
-            <span>Modo claro</span>
+            <span>Modo escuro</span>
           </div>
 
           <div
-            className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-200 flex items-center ${
-              !darkMode ? 'bg-[#00D296]' : 'bg-[#00A878]'
+            className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-200 flex items-center shrink-0 ${
+              darkMode ? 'bg-[#00D296]' : 'bg-slate-300 dark:bg-slate-600'
             }`}
           >
             <span

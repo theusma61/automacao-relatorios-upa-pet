@@ -106,9 +106,14 @@ export const UltrasoundIcon = ({ className = 'w-6 h-6', strokeWidth = 2 }) => (
     strokeLinejoin="round"
     className={className}
   >
-    <path d="M4 15.5C6.5 13 9 13 12 15.5C15 18 17.5 18 20 15.5" />
-    <path d="M6.5 12C8 9.2 10 8 12 8C14 8 16 9.2 17.5 12" />
-    <path d="M3 18.5H21" />
+    {/* Cabeça e corpo anatômico do transdutor de ultrassom (probe) */}
+    <path d="M10.5 5L13.2 2.6C13.8 2.1 14.8 2.2 15.4 2.8L21.2 8.6C21.8 9.2 21.9 10.2 21.4 10.8L19.5 13.5C18.6 14.7 18.2 16.2 18.7 17.6C19.1 18.8 18.2 20 16.9 20.6C14.6 21.6 11.6 21.3 9.4 19.7C7.5 18.3 6.6 16.1 7 14.1C7.4 12.6 6.8 11.3 5.7 10.2L10.5 5Z" />
+    {/* Face acústica do transdutor */}
+    <path d="M10.5 5L19.5 13.5" />
+    {/* Marcador central de orientação do probe */}
+    <path d="M11.5 10.5L14.5 13.5" />
+    {/* Cabo flexível do transdutor */}
+    <path d="M5.5 18.5L2 22" />
   </svg>
 );
 

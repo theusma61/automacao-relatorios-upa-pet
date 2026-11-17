@@ -254,21 +254,8 @@ export default function DashboardHome({
                         <span className="font-normal opacity-80"> — {item.patient}</span>
                       ) : null}
                     </p>
-                    {isMobileLayout && (
-                      <p className="text-[10px] text-slate-400 truncate">{item.date}</p>
-                    )}
                   </div>
                 </div>
-
-                {!isMobileLayout && (
-                  <span
-                    className={`text-xs font-medium shrink-0 ${
-                      darkMode ? 'text-slate-400' : 'text-[#637692]'
-                    }`}
-                  >
-                    {item.date}
-                  </span>
-                )}
 
                 <div className="flex items-center gap-3 shrink-0">
                   <span

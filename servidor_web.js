@@ -28,6 +28,12 @@ const {
   salvarTemplateClonado,
   restaurarLayoutPadrao
 } = require('./gerenciador_layout');
+const { extrairPadraoDeLaudos } = require('./identificador_padrao_laudo');
+const {
+  obterPerfilLaudo,
+  salvarPerfilLaudo,
+  desativarPerfilLaudo
+} = require('./gerenciador_perfil_laudo');
 const {
   extrairPadraoCompletoDePdfs
 } = require('./extrator_padrao_laudo');
@@ -528,7 +534,7 @@ app.post('/api/laudos/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.arr
       return res.status(400).json({ error: 'Limite máximo de 10 laudos em PDF excedido.' });
     }
 
-    const key = process.env.GEMINI_API_KEY || apiKey;
+    const key = process.env.GEMINI_API_KEY || apiKey || config.geminiApiKey;
     if (!key) {
       return res.status(500).json({ error: 'Chave de API do Gemini não configurada no servidor.' });
     }
@@ -670,9 +676,18 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
   try {
     console.log(`📡 [WEB - ULTRASSOM] [Usuário: ${req.usuario.email}] Processando ${caminhosArquivos.length} imagens...`);
     const layoutUsuario = await obterLayout(req.usuario?.id || null);
+    const perfilDoUsuario = await obterPerfilLaudo(req.usuario?.id || null);
+    const usuarioEfetivo = {
+      ...req.usuario,
+      nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
+      crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica
+    };
+
     const resultadoIA = await analisarExameComIA(caminhosArquivos, apiKey, {
-      usuario: req.usuario,
-      layout: layoutUsuario
+      usuario: usuarioEfetivo,
+      layout: layoutUsuario,
+      perfilLaudo: perfilDoUsuario
     });
 
     const imagensOrdenadas = resultadoIA.caminhosOrdenados || caminhosArquivos;
@@ -682,7 +697,10 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
       imagensOrdenadas,
       jobFolder,
       layoutUsuario,
-      { usuario: req.usuario }
+      {
+        usuario: usuarioEfetivo,
+        perfilLaudo: perfilDoUsuario
+      }
     );
 
     const pdfNome = path.basename(docs.caminhoPdf);

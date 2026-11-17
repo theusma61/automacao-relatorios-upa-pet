@@ -217,9 +217,16 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
   const children = [];
   const szCorpo = cfgDocx.szCorpo || 22;
 
-  const usarModoClonado = Boolean(layout.modo_template === 'clonado_pdf' || layout.visual_config_json);
-  const visual = layout.visual_config_json || {};
-  const escrita = layout.writing_style_json || {};
+  const usarModoClonado = Boolean(layout?.modo_template === 'clonado_pdf' || layout?.visual_config_json);
+  const visual = layout?.visual_config_json || {};
+  const escrita = layout?.writing_style_json || {};
+  const templateVisual = opcoes.templateVisual || opcoes.perfilLaudo?.templateVisual || {};
+
+  const tituloDocx = templateVisual.tituloDocumento || 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL';
+  const subtituloDocx = templateVisual.subtituloDocumento !== undefined
+    ? templateVisual.subtituloDocumento
+    : 'Exame ultrassonográfico realizado em modo B, realizado em decúbito lateral (esquerdo e direito) e dorsal, utilizando transdutores linear e microconvexo';
+  const textoAvisoLegal = templateVisual.textoAvisoLegal || 'O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.';
 
   const sCfg = visual.signatureConfig || {};
   const nomeExtraido = sCfg.textLines?.[0]?.text || '';
@@ -228,10 +235,10 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
   const nomeMedico = opcoes.nomeMedico || nomeExtraido || usuario.nome || 'Médico(a) Veterinário(a)';
   const crmvMedico = opcoes.crmvMedico || crmvExtraido || usuario.crmv || '';
   const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'Vetaro';
-  const assinaturaPath = opcoes.assinaturaPath || layout.assinatura_extraida_url || usuario.assinaturaUrl || null;
+  const assinaturaPath = opcoes.assinaturaPath || layout?.assinatura_extraida_url || usuario.assinaturaUrl || null;
 
   if (usarModoClonado) {
-    const headerBannerPath = layout.header_banner_url || null;
+    const headerBannerPath = layout?.header_banner_url || null;
     children.push(...criarCabecalhoClonadoDocx(dados, headerBannerPath, visual, fonte));
     children.push(new Paragraph({ text: '', spacing: { after: 120 } }));
 
@@ -263,7 +270,7 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
         alignment: AlignmentType.CENTER,
         children: [
           new TextRun({
-            text: 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL',
+            text: tituloDocx,
             bold: true,
             size: cfgDocx.szTitulo || 24,
             font: fonte,
@@ -272,21 +279,24 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
         ]
       })
     );
-    children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 120 },
-        children: [
-          new TextRun({
-            text: 'Exame ultrassonográfico realizado em modo B, realizado em decúbito lateral (esquerdo e direito) e dorsal, utilizando transdutores linear e microconvexo',
-            italics: true,
-            size: 16,
-            font: fonte,
-            color: cfgDocx.corSecundariaHex || '4A777A'
-          })
-        ]
-      })
-    );
+
+    if (subtituloDocx) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 120 },
+          children: [
+            new TextRun({
+              text: subtituloDocx,
+              italics: true,
+              size: 15.5,
+              font: fonte,
+              color: cfgDocx.corSecundariaHex || '4A777A'
+            })
+          ]
+        })
+      );
+    }
   }
 
   const usarDiagDif = usarModoClonado ? (escrita?.usarDiagDifSeparado !== false) : true;
@@ -474,11 +484,11 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
         spacing: { before: 80, after: 40 },
         children: [
           new TextRun({
-            text: textoDisclaimerRodape,
+            text: textoAvisoLegal || textoDisclaimerRodape,
             italics: !usarModoClonado,
             size: 15,
             color: '555555',
-            font: fonte
+            font: fonte || 'Arial'
           })
         ]
       })

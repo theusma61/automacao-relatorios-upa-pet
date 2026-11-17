@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { compilarPDF } = require('./compilador_pdf');
+const { obterLayout } = require('./gerenciador_layout');
+const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
+const { construirHtmlLaudo } = require('./renderizador_layout_laudo');
 
 function lerImagemDataUri(caminhoImg) {
   if (!caminhoImg || !fs.existsSync(caminhoImg)) return '';
@@ -668,16 +671,24 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   const { gerarDocxLaudo } = require('./gerar_docx');
 
   const usuario = opcoes.usuario || {};
+
+  let perfilLaudo = opcoes.perfilLaudo || null;
+  if (!perfilLaudo && usuario?.id) {
+    try {
+      perfilLaudo = await obterPerfilLaudo(usuario.id);
+    } catch (_) {}
+  }
+
   const layout = customLayout || await obterLayout(usuario.id || null);
   const nomeSanitizado = (dadosPaciente.nome || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-  const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Médico(a) Veterinário(a)';
-  const crmvMedico = opcoes.crmvMedico || usuario.crmv || '';
-  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'Vetaro';
+  const nomeMedico = opcoes.nomeMedico || perfilLaudo?.nomeDetectado || usuario.nome || 'Médico(a) Veterinário(a)';
+  const crmvMedico = opcoes.crmvMedico || perfilLaudo?.crmvDetectado || usuario.crmv || '';
+  const clinicaNome = opcoes.clinicaNome || perfilLaudo?.clinicaDetectada || usuario.nomeClinica || 'Vetaro';
 
   const usarModoClonado = Boolean(
-    layout.modo_template === 'clonado_pdf' ||
-    layout.visual_config_json ||
+    layout?.modo_template === 'clonado_pdf' ||
+    layout?.visual_config_json ||
     opcoes.forcarTemplateClonado
   );
 
@@ -686,6 +697,15 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   if (usarModoClonado) {
     html = gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layout, {
       usuario,
+      nomeMedico,
+      crmvMedico,
+      clinicaNome
+    });
+  } else if (perfilLaudo && perfilLaudo.ativo && perfilLaudo.templateVisual) {
+    html = construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths, {
+      usuario,
+      perfilLaudo,
+      customLayout: layout,
       nomeMedico,
       crmvMedico,
       clinicaNome
@@ -873,13 +893,16 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   const caminhoLogoEfetivo = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
     ? usuario.logoUrl
     : null;
+  const templateVisual = perfilLaudo?.templateVisual || layout?.visual_config_json || {};
 
   await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layout, {
     usuario,
     nomeMedico,
     crmvMedico,
     clinicaNome,
-    assinaturaPath: layout.assinatura_extraida_url || usuario.assinaturaUrl || null
+    perfilLaudo,
+    templateVisual,
+    assinaturaPath: layout?.assinatura_extraida_url || usuario.assinaturaUrl || null
   });
 
   return { caminhoPdf, caminhoDocx };
