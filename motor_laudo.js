@@ -4,6 +4,8 @@ const os = require('os');
 const { gerarDocxLaudo } = require('./gerar_docx');
 const { compilarPDF } = require('./compilador_pdf');
 const { obterLayout } = require('./gerenciador_layout');
+const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
+const { construirHtmlLaudo } = require('./renderizador_layout_laudo');
 
 const assetsDir = path.join(__dirname, 'assets');
 const logoPadraoPath = fs.existsSync(path.join(assetsDir, 'logo_upa_pet_oficial.png'))
@@ -12,175 +14,39 @@ const logoPadraoPath = fs.existsSync(path.join(assetsDir, 'logo_upa_pet_oficial.
 
 async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pastaSaida, customLayout = null, opcoes = {}) {
   const usuario = opcoes.usuario || {};
+
+  let perfilLaudo = opcoes.perfilLaudo || null;
+  if (!perfilLaudo && usuario?.id) {
+    try {
+      perfilLaudo = await obterPerfilLaudo(usuario.id);
+    } catch (_) {}
+  }
+
   const layout = customLayout || await obterLayout(usuario.id || null);
   const nomeSanitizado = (dadosPaciente.nome || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-  const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
-  const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
-  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'UPA PET';
+  const nomeMedico = opcoes.nomeMedico || perfilLaudo?.nomeDetectado || usuario.nome || 'Camila Bastos';
+  const crmvMedico = opcoes.crmvMedico || perfilLaudo?.crmvDetectado || usuario.crmv || 'CRMV/MG: 22904';
+  const clinicaNome = opcoes.clinicaNome || perfilLaudo?.clinicaDetectada || usuario.nomeClinica || 'UPA PET';
 
-  const caminhoLogoEfetivo = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
-    ? usuario.logoUrl
-    : logoPadraoPath;
-
-  const logoBase64 = fs.existsSync(caminhoLogoEfetivo) ? fs.readFileSync(caminhoLogoEfetivo).toString('base64') : '';
-  const logoMime = path.extname(caminhoLogoEfetivo).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-
-  let assinaturaImgHtml = '';
-  if (usuario.assinaturaUrl && fs.existsSync(usuario.assinaturaUrl)) {
-    const assExt = path.extname(usuario.assinaturaUrl).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-    const assBase64 = fs.readFileSync(usuario.assinaturaUrl).toString('base64');
-    assinaturaImgHtml = `<img src="data:${assExt};base64,${assBase64}" style="max-height:42px; display:inline-block; margin-bottom:2px;" alt="Assinatura"><br>`;
+  // Se o usuário tem logotipo próprio configurado, usa-o.
+  // Se NÃO tem logo mas possui um PerfilLaudo customizado ativo, NÃO usa o logotipo da UPA PET!
+  // Apenas se for usuário padrão (sem perfil customizado) usa o logo padrão UPA PET.
+  let caminhoLogoEfetivo = null;
+  if (usuario.logoUrl && fs.existsSync(usuario.logoUrl)) {
+    caminhoLogoEfetivo = usuario.logoUrl;
+  } else if (!perfilLaudo || !perfilLaudo.ativo) {
+    caminhoLogoEfetivo = logoPadraoPath;
   }
 
-  const paginasImagens = [];
-  for (let i = 0; i < imagensPaths.length; i += 8) {
-    paginasImagens.push(imagensPaths.slice(i, i + 8));
-  }
-
-  const cabecalho = `
-    <div class="header">
-      <div class="logo-box">
-        ${logoBase64
-          ? `<img src="data:${logoMime};base64,${logoBase64}" class="logo-img" alt="${clinicaNome}">`
-          : `<div style="font-weight:900;font-size:18pt;color:${layout.cor_primaria};">${clinicaNome}</div>`}
-      </div>
-      <div class="patient-info">
-        <div class="col">
-          <p><strong>Nome:</strong> <span contenteditable="true">${dadosPaciente.nome || ''}</span></p>
-          <p><strong>Espécie:</strong> <span contenteditable="true">${dadosPaciente.especie || ''}</span></p>
-          <p><strong>Idade:</strong> <span contenteditable="true">${dadosPaciente.idade || 'Não informada'}</span></p>
-        </div>
-        <div class="col">
-          <p><strong>Tutor:</strong> <span contenteditable="true">${dadosPaciente.tutor || ''}</span></p>
-          <p><strong>Sexo:</strong> <span contenteditable="true">${dadosPaciente.sexo || ''}</span></p>
-          <p><strong>Data:</strong> <span contenteditable="true">${dadosPaciente.data || ''}</span></p>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const rodape = `
-    <div class="footer">
-      O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.
-    </div>
-  `;
-
-  const laudoTextoHTML = laudoArray.map(item => {
-    const regexOrgao = new RegExp(`^${item.orgao}[:\\s-]*`, 'i');
-    const textoLimpo = (item.texto || '').replace(regexOrgao, '').trim();
-    const textoFormatado = textoLimpo.replace(/\r?\n/g, '<br>');
-
-    let p = `<p><strong>${item.orgao}:</strong> ${textoFormatado}`;
-    if (item.diagDif && item.diagDif.trim() !== '') {
-      p += ` <em>DIAG DIF.: ${item.diagDif}</em>`;
-    }
-    p += `</p>`;
-    return p;
-  }).join('\n');
-
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Laudo Ultrassonografia - ${dadosPaciente.nome}</title>
-  <style>
-    @page { size: A4 portrait; margin: 0; }
-    * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
-    body {
-      font-family: ${layout.font_family};
-      font-size: ${layout.font_size_body};
-      line-height: ${layout.line_height};
-      color: #111;
-      margin: 0;
-      padding: 0;
-      background-color: #f0f2f5;
-    }
-    .page-container {
-      width: 210mm;
-      height: 297mm;
-      margin: 20px auto;
-      background: white;
-      padding: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left};
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      position: relative;
-    }
-    @media print {
-      body { background: transparent; }
-      .page-container {
-        width: 210mm !important;
-        height: 297mm !important;
-        max-height: 297mm !important;
-        margin: 0 !important;
-        padding: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left} !important;
-        box-shadow: none !important;
-        page-break-after: always !important;
-        break-after: page !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-    }
-    .header { display: flex; align-items: center; margin-bottom: 2px; }
-    .logo-box { width: 140px; display: flex; align-items: center; }
-    .logo-img { max-width: 130px; max-height: 52px; object-fit: contain; }
-    .patient-info { flex: 1; display: flex; justify-content: space-around; margin-left: 15px; font-size: 10pt; }
-    .patient-info .col p { margin: 1.5px 0; }
-    .title-box { text-align: center; margin-top: 8px; margin-bottom: 8px; }
-    .title-box h1 { font-size: ${layout.font_size_titulo}; font-weight: bold; margin: 0; letter-spacing: 0.3px; color: ${layout.cor_primaria}; }
-    .title-box p { font-size: 8pt; font-style: italic; margin: 2px 0 0 0; color: ${layout.cor_secundaria}; }
-    .content { flex: 1; text-align: justify; font-size: ${layout.font_size_body}; line-height: ${layout.line_height}; outline: none; }
-    .content p { margin: 0 0 ${layout.paragraph_spacing} 0; }
-    .content p:last-child { margin-bottom: 0; }
-    .signature { text-align: right; margin-top: 4px; padding-right: 15px; }
-    .signature p { margin: 1px 0; font-size: 9.5pt; }
-    .footer { font-size: 7.2pt; font-style: italic; color: #555; text-align: center; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 4px; }
-    .image-grid { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 6px; flex: 1; margin-top: 6px; align-content: start; }
-    .img-card { border: 1px solid #222; background: #000; display: flex; align-items: center; justify-content: center; height: 52mm; overflow: hidden; }
-    .img-card img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  </style>
-</head>
-<body>
-  <div class="page-container">
-    <div>
-      ${cabecalho}
-      <div class="title-box">
-        <h1>RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL</h1>
-        <p>Exame ultrassonográfico realizado em modo B, realizado em decúbito lateral (esquerdo e direito) e dorsal, utilizando transdutores linear e microconvexo</p>
-      </div>
-      <div class="content" contenteditable="true" spellcheck="false">
-        ${laudoTextoHTML}
-      </div>
-    </div>
-    <div>
-      <div class="signature">
-        ${assinaturaImgHtml}
-        <p><strong>${nomeMedico}</strong></p>
-        <p>${crmvMedico}</p>
-      </div>
-      ${rodape}
-    </div>
-  </div>
-
-  ${paginasImagens.map((fotos) => `
-    <div class="page-container">
-      <div>
-        ${cabecalho}
-        <div class="image-grid">
-          ${fotos.map(foto => `
-            <div class="img-card">
-              <img src="${foto}" alt="Captura Ultrassom">
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      ${rodape}
-    </div>
-  `).join('')}
-</body>
-</html>`;
+  const html = construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths, {
+    usuario,
+    perfilLaudo,
+    customLayout: layout,
+    nomeMedico,
+    crmvMedico,
+    clinicaNome
+  });
 
   const caminhoHtmlTemp = path.join(os.tmpdir(), `laudo_temp_${Date.now()}_${nomeSanitizado}.html`);
   const caminhoPdf = path.join(pastaSaida, `Laudo_${nomeSanitizado}.pdf`);
@@ -200,11 +66,15 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     } catch (e) {}
   }
 
+  const templateVisual = perfilLaudo?.templateVisual || {};
+
   await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layout, {
     usuario,
     nomeMedico,
     crmvMedico,
     clinicaNome,
+    perfilLaudo,
+    templateVisual,
     assinaturaPath: usuario.assinaturaUrl || null
   });
 

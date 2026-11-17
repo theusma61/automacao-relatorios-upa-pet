@@ -57,7 +57,8 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
       nomeDetectado: dados.nomeDetectado || null,
       crmvDetectado: dados.crmvDetectado || null,
       clinicaDetectada: dados.clinicaDetectada || null,
-      layoutDetectado: layout
+      layoutDetectado: layout,
+      templateVisual: dados.templateVisual || dados.layoutDetectado || null
     },
     create: {
       usuarioId: String(usuarioId),
@@ -73,7 +74,8 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
       nomeDetectado: dados.nomeDetectado || null,
       crmvDetectado: dados.crmvDetectado || null,
       clinicaDetectada: dados.clinicaDetectada || null,
-      layoutDetectado: layout
+      layoutDetectado: layout,
+      templateVisual: dados.templateVisual || dados.layoutDetectado || null
     }
   });
 

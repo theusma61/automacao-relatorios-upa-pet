@@ -91,6 +91,13 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
   const children = [];
   const szCorpo = cfgDocx.szCorpo || 20;
 
+  const templateVisual = opcoes.templateVisual || opcoes.perfilLaudo?.templateVisual || {};
+  const tituloDocx = templateVisual.tituloDocumento || 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL';
+  const subtituloDocx = templateVisual.subtituloDocumento !== undefined
+    ? templateVisual.subtituloDocumento
+    : 'Exame ultrassonográfico realizado em modo B, realizado em decúbito lateral (esquerdo e direito) e dorsal, utilizando transdutores linear e microconvexo';
+  const textoAvisoLegal = templateVisual.textoAvisoLegal || 'O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.';
+
   const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
   const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
   const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'UPA PET';
@@ -104,7 +111,7 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
       alignment: AlignmentType.CENTER,
       children: [
         new TextRun({
-          text: 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL',
+          text: tituloDocx,
           bold: true,
           size: cfgDocx.szTitulo || 24,
           font: fonte,
@@ -113,21 +120,24 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
       ]
     })
   );
-  children.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 120 },
-      children: [
-        new TextRun({
-          text: 'Exame ultrassonográfico realizado em modo B, realizado em decúbito lateral (esquerdo e direito) e dorsal, utilizando transdutores linear e microconvexo',
-          italics: true,
-          size: 15.5,
-          font: fonte,
-          color: cfgDocx.corSecundariaHex || '4A777A'
-        })
-      ]
-    })
-  );
+
+  if (subtituloDocx) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [
+          new TextRun({
+            text: subtituloDocx,
+            italics: true,
+            size: 15.5,
+            font: fonte,
+            color: cfgDocx.corSecundariaHex || '4A777A'
+          })
+        ]
+      })
+    );
+  }
 
   laudo.forEach(item => {
     const regexOrgao = new RegExp(`^${item.orgao}[:\\s-]*`, 'i');
@@ -291,11 +301,11 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
         spacing: { before: 80, after: 40 },
         children: [
           new TextRun({
-            text: 'O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.',
+            text: textoAvisoLegal,
             italics: true,
             size: 15,
             color: '555555',
-            font: 'Arial'
+            font: fonte || 'Arial'
           })
         ]
       })

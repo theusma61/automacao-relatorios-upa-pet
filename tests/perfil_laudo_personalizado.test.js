@@ -1,6 +1,7 @@
 const { sanitizarPerfilExtraido, extrairPadraoDeLaudos } = require('../identificador_padrao_laudo');
 const { construirMapaPrioridades, ordenarImagensCanonicamente, MAPA_ORDEM_CANONICA } = require('../analisador_ia');
 const { salvarPerfilLaudo, obterPerfilLaudo, desativarPerfilLaudo } = require('../gerenciador_perfil_laudo');
+const { construirHtmlLaudo } = require('../renderizador_layout_laudo');
 const { prisma } = require('../db');
 
 describe('Identificação e Personalização de Padrão de Laudo', () => {
@@ -72,6 +73,9 @@ describe('Identificação e Personalização de Padrão de Laudo', () => {
       expect(resultado.ordemOrgaos).toEqual(['FÍGADO', 'VESÍCULA BILIAR', 'BAÇO', 'BEXIGA']);
       expect(resultado.frasesNormalidade.FÍGADO).toContain('Parênquima hepático');
       expect(resultado.estiloConclusao).toBe('Conclusão em tópicos numerados.');
+      expect(resultado.templateVisual).toBeDefined();
+      expect(resultado.templateVisual.tipoCabecalho).toBe('logo-esquerda-texto-direita');
+      expect(resultado.templateVisual.tipoDadosPaciente).toBe('tabela-zebrada');
     });
 
     test('extrairPadraoDeLaudos rejeita lista vazia de PDFs', async () => {
@@ -183,6 +187,82 @@ describe('Identificação e Personalização de Padrão de Laudo', () => {
 
       const aposRemover = await obterPerfilLaudo(usuarioTeste.id);
       expect(aposRemover).toBeNull();
+    });
+  });
+
+  describe('renderizador_layout_laudo.js (Renderizador Polimórfico e Isolamento Visual)', () => {
+    test('construirHtmlLaudo renderiza layout customizado sem vazamento de UPA PET', () => {
+      const dadosPaciente = {
+        nome: 'Thor',
+        especie: 'Canina',
+        raca: 'Golden Retriever',
+        sexo: 'Macho',
+        idade: '5 anos',
+        solicitante: 'Dr. Roberto Alves'
+      };
+
+      const laudoArray = [
+        {
+          secao: 'FÍGADO',
+          texto: 'Dimensões normais, bordas afiladas e ecotextura homogênea.'
+        },
+        {
+          secao: 'BEXIGA',
+          texto: 'Adequada repleção urinária, paredes finas e conteúdo anecogênico sem sedimentos.'
+        },
+        {
+          secao: 'CONCLUSÃO',
+          texto: 'Exame ultrassonográfico abdominal dentro dos limites da normalidade.'
+        }
+      ];
+
+      const perfilLaudoCustom = {
+        ativo: true,
+        clinicaDetectada: 'Centro Veterinário Alpha',
+        nomeDetectado: 'Dra. Luiza Martins',
+        crmvDetectado: 'CRMV/SP: 45678',
+        templateVisual: {
+          tipoCabecalho: 'banner-superior',
+          tipoDadosPaciente: 'tabela-zebrada',
+          tituloDocumento: 'LAUDO DE DIAGNÓSTICO POR IMAGEM ULTRASSONOGRÁFICA',
+          subtituloDocumento: 'Varredura ultrassonográfica de alta resolução em tempo real',
+          estiloOrgaos: 'tarja-colorida',
+          estiloConclusao: 'caixa-destaque',
+          tituloConclusao: 'CONCLUSÃO DIAGNÓSTICA',
+          posicaoAssinatura: 'centro',
+          textoAvisoLegal: 'Exame realizado por Dra. Luiza Martins. Interpretação correlacionada com clínica.',
+          corPrimaria: '#2A4365',
+          corSecundaria: '#319795'
+        }
+      };
+
+      const html = construirHtmlLaudo(dadosPaciente, laudoArray, [], {
+        usuario: { id: 'user-alpha-99' },
+        perfilLaudo: perfilLaudoCustom,
+        nomeMedico: perfilLaudoCustom.nomeDetectado,
+        crmvMedico: perfilLaudoCustom.crmvDetectado,
+        clinicaNome: perfilLaudoCustom.clinicaDetectada
+      });
+
+      // 1. Deve conter os títulos e estruturas do template customizado
+      expect(html).toContain('LAUDO DE DIAGNÓSTICO POR IMAGEM ULTRASSONOGRÁFICA');
+      expect(html).toContain('Varredura ultrassonográfica de alta resolução em tempo real');
+      expect(html).toContain('Centro Veterinário Alpha');
+      expect(html).toContain('Dra. Luiza Martins');
+      expect(html).toContain('CRMV/SP: 45678');
+      expect(html).toContain('CONCLUSÃO DIAGNÓSTICA');
+      expect(html).toContain('Exame realizado por Dra. Luiza Martins');
+
+      // 2. Deve usar as classes visuais do estilo selecionado
+      expect(html).toContain('header-banner');
+      expect(html).toContain('paciente-tabela-zebrada');
+      expect(html).toContain('orgao-badge'); // Estilo tarja-colorida
+
+      // 3. NUNCA deve vazar textos ou logo padrão da UPA PET
+      expect(html).not.toContain('logo_upa_pet_oficial.png');
+      expect(html).not.toContain('Dra. Camila Bastos');
+      expect(html).not.toContain('CRMV/MG: 22904');
+      expect(html).not.toContain('UPA PET');
     });
   });
 });
