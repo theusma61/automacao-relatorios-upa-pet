@@ -1,10 +1,15 @@
 /**
- * Extrator Agnóstico de Ativos Gráficos de PDFs (300 DPI + pdfimages + Processamento PNG Nativo Node.js)
- * - Detecta automaticamente se o PDF usa um Papel Timbrado de Página Inteira (Full-Page A4 Stationery
- *   contendo cabeçalho + marca d'água central + rodapé, como no Word da Dra. Carolina Cardoso)
- *   ou Faixas de Cabeçalho/Rodapé recortadas (como em templates do Canva/Word sem fundo A4 único).
- * - Extrai a assinatura manuscrita isolada (via objeto de imagem embutido ou recorte geométrico acima/abaixo do CRMV)
- *   e converte o fundo branco para transparente (canal Alpha).
+ * Extrator 100% Agnóstico de Ativos Gráficos de PDFs (300 DPI + pdfimages + Processamento PNG Nativo Node.js)
+ * - Detecta automaticamente o tipo de composição do cabeçalho/papel timbrado:
+ *   1. Papel Timbrado A4 de Página Inteira (`full_page_background`: cabeçalho + marca d'água + rodapé em imagem A4 única)
+ *   2. Logo lateral ao lado dos dados do paciente (`inline_logo_beside_patient`: logo à esquerda ou direita na mesma faixa do cabeçalho)
+ *   3. Faixa/Banner/Logo superior acima dos dados do paciente (`cropped_bands`: full-bleed ou centralizado/alinhado)
+ *   4. Cabeçalho puramente tipográfico (`text_only`)
+ * - Extrai logo recortada e aparada (trim) diretamente da renderização 300 DPI (lidando com coordenadas negativas,
+ *   logos vetoriais, transparências/smask e margens brancas excessivas).
+ * - Extrai assinatura manuscrita isolada (qualquer proporção, com fundo transparente) e detecta sua ordem (acima/abaixo do texto).
+ * - Detecta geometricamente linhas divisórias horizontais (cabeçalho, título sublinhado, assinatura, rodapé) e bordas de tabela.
+ * - Mede geometricamente a grade real de imagens de ultrassom (colunas, linhas, largura/altura dos cards, gaps e centralização da última foto).
  */
 
 const fs = require('fs');
@@ -182,7 +187,7 @@ function recortarImagemRgba(img, box, opcoes = {}) {
   const h = y1 - y0;
   const out = new Uint8Array(w * h * 4);
   const removerFundoBranco = Boolean(opcoes.removerFundoBranco);
-  const limiarBranco = opcoes.limiarBranco || 240;
+  const limiarBranco = opcoes.limiarBranco || 242;
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -195,7 +200,7 @@ function recortarImagemRgba(img, box, opcoes = {}) {
 
       if (removerFundoBranco) {
         const media = (r + g + b) / 3;
-        if (media >= limiarBranco) {
+        if (media >= limiarBranco && Math.abs(r - g) < 12 && Math.abs(g - b) < 12) {
           a = 0;
         }
       }
@@ -208,6 +213,112 @@ function recortarImagemRgba(img, box, opcoes = {}) {
   }
 
   return { width: w, height: h, data: out };
+}
+
+/**
+ * Encontra o retângulo exato de conteúdo não-branco/não-transparente dentro de uma região da imagem.
+ */
+function encontrarLimitesConteudo(img, box = null, opcoes = {}) {
+  const xStart = box ? Math.max(0, Math.floor(box.x0)) : 0;
+  const yStart = box ? Math.max(0, Math.floor(box.y0)) : 0;
+  const xEnd = box ? Math.min(img.width, Math.ceil(box.x1)) : img.width;
+  const yEnd = box ? Math.min(img.height, Math.ceil(box.y1)) : img.height;
+  const limiarBranco = opcoes.limiarBranco || 244;
+  const passo = opcoes.passo || 1;
+
+  let minX = xEnd;
+  let minY = yEnd;
+  let maxX = xStart - 1;
+  let maxY = yStart - 1;
+  let count = 0;
+
+  for (let y = yStart; y < yEnd; y += passo) {
+    for (let x = xStart; x < xEnd; x += passo) {
+      const idx = (y * img.width + x) * 4;
+      const a = img.data[idx + 3];
+      if (a < 20) continue;
+      const r = img.data[idx];
+      const g = img.data[idx + 1];
+      const b = img.data[idx + 2];
+      if (r < limiarBranco || g < limiarBranco || b < limiarBranco) {
+        count++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (count === 0 || maxX < minX || maxY < minY) {
+    return { vazio: true, count: 0, x0: xStart, y0: yStart, x1: xStart, y1: yStart };
+  }
+
+  return { vazio: false, count, x0: minX, y0: minY, x1: maxX + 1, y1: maxY + 1 };
+}
+
+/**
+ * Apara bordas brancas/transparentes de uma imagem RGBA com padding opcional.
+ */
+function trimImagemRgba(img, opcoes = {}) {
+  const padding = opcoes.padding !== undefined ? opcoes.padding : 4;
+  const lim = encontrarLimitesConteudo(img, null, { limiarBranco: opcoes.limiarBranco || 244 });
+  if (lim.vazio) {
+    return { ...img, offsetX: 0, offsetY: 0, nonWhitePixels: 0 };
+  }
+
+  const box = {
+    x0: Math.max(0, lim.x0 - padding),
+    y0: Math.max(0, lim.y0 - padding),
+    x1: Math.min(img.width, lim.x1 + padding),
+    y1: Math.min(img.height, lim.y1 + padding)
+  };
+  const trimmed = recortarImagemRgba(img, box, {
+    removerFundoBranco: Boolean(opcoes.removerFundoBranco),
+    limiarBranco: opcoes.limiarBranco || 242
+  });
+
+  return {
+    ...trimmed,
+    offsetX: box.x0,
+    offsetY: box.y0,
+    nonWhitePixels: lim.count
+  };
+}
+
+/**
+ * Detecta se existe uma linha horizontal contínua (divisor, sublinhado, borda superior/inferior)
+ * dentro de uma faixa vertical [yTopPt..yBotPt] e horizontal [xLeftPt..xRightPt].
+ */
+function detectarLinhaHorizontal(img, yTopPt, yBotPt, xLeftPt, xRightPt, pageWidthPt, pageHeightPt, opcoes = {}) {
+  if (!img || !img.data) return false;
+  const scaleX = img.width / pageWidthPt;
+  const scaleY = img.height / pageHeightPt;
+
+  const y0 = Math.max(0, Math.floor(yTopPt * scaleY));
+  const y1 = Math.min(img.height - 1, Math.ceil(yBotPt * scaleY));
+  const x0 = Math.max(0, Math.floor(xLeftPt * scaleX));
+  const x1 = Math.min(img.width - 1, Math.ceil(xRightPt * scaleX));
+  const span = Math.max(1, x1 - x0);
+  const minCoverage = opcoes.minCoverage || 0.72;
+  const limiarLum = opcoes.limiarLum || 230;
+
+  if (y1 < y0 || span < 20) return false;
+
+  for (let y = y0; y <= y1; y++) {
+    let naoBrancos = 0;
+    let total = 0;
+    for (let x = x0; x <= x1; x += 2) {
+      total++;
+      const idx = (y * img.width + x) * 4;
+      const lum = (img.data[idx] + img.data[idx + 1] + img.data[idx + 2]) / 3;
+      if (lum < limiarLum) naoBrancos++;
+    }
+    if (total > 0 && (naoBrancos / total) >= minCoverage) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function paginaEstaEmBrancoNoCorpo(img) {
@@ -232,8 +343,8 @@ function paginaEstaEmBrancoNoCorpo(img) {
 function paginaEhMosaicoUltrassom(img) {
   const passo = 6;
   for (let faixa = 0; faixa < 4; faixa++) {
-    const yStart = Math.floor(img.height * (0.04 + faixa * 0.20));
-    const yEnd = Math.floor(img.height * (0.24 + faixa * 0.20));
+    const yStart = Math.floor(img.height * (0.08 + faixa * 0.20));
+    const yEnd = Math.floor(img.height * (0.28 + faixa * 0.20));
     let escuros = 0;
     let total = 0;
 
@@ -246,7 +357,7 @@ function paginaEhMosaicoUltrassom(img) {
       }
     }
 
-    if (total > 0 && (escuros / total) > 0.28) {
+    if (total > 0 && (escuros / total) > 0.24) {
       return true;
     }
   }
@@ -255,7 +366,6 @@ function paginaEhMosaicoUltrassom(img) {
 
 /**
  * Detecta se a região de dados do paciente na Página 1 possui bordas de tabela ("separado com traços").
- * Verifica a existência de linha vertical contínua na borda esquerda/direita da tabela ou linhas horizontais internas.
  */
 function detectarBordasTabelaPaciente(imgPag1, yMinPt, yMaxPt, xMinPt, xMaxPt, pageWidthPt, pageHeightPt) {
   const scaleX = imgPag1.width / pageWidthPt;
@@ -291,6 +401,173 @@ function detectarBordasTabelaPaciente(imgPag1, yMinPt, yMaxPt, xMinPt, xMaxPt, p
 }
 
 /**
+ * Mede geometricamente os blocos retangulares escuros (imagens de ultrassom) em uma página de mosaico.
+ * Retorna colunas, linhas, dimensões dos cards, espaçamentos e alinhamento da última imagem isolada.
+ */
+function detectarGradeImagensMosaico(imgMosaico, opcoes = {}) {
+  if (!imgMosaico || !imgMosaico.data) return null;
+
+  const pageWidthMm = opcoes.pageWidthMm || 210;
+  const pageHeightMm = opcoes.pageHeightMm || 297;
+  const headerCutoffRatio = opcoes.headerCutoffRatio !== undefined ? opcoes.headerCutoffRatio : 0.085;
+  const footerCutoffRatio = opcoes.footerCutoffRatio !== undefined ? opcoes.footerCutoffRatio : 0.915;
+
+  const yStart = Math.floor(imgMosaico.height * headerCutoffRatio);
+  const yEnd = Math.floor(imgMosaico.height * footerCutoffRatio);
+  const passoX = 4;
+  const passoY = 3;
+
+  // 1. Projeta densidade de pixels escuros por linha (Y) para detectar faixas horizontais de imagens
+  const rowDarkFrac = new Float32Array(imgMosaico.height);
+  for (let y = yStart; y < yEnd; y += passoY) {
+    let escuros = 0;
+    let total = 0;
+    for (let x = 0; x < imgMosaico.width; x += passoX) {
+      total++;
+      const idx = (y * imgMosaico.width + x) * 4;
+      const lum = (imgMosaico.data[idx] + imgMosaico.data[idx + 1] + imgMosaico.data[idx + 2]) / 3;
+      if (lum < 90) escuros++;
+    }
+    const frac = total > 0 ? escuros / total : 0;
+    for (let dy = 0; dy < passoY && (y + dy) < yEnd; dy++) {
+      rowDarkFrac[y + dy] = frac;
+    }
+  }
+
+  const rowBands = [];
+  let inBand = false;
+  let bandStart = 0;
+  const minBandHeightPx = Math.floor(imgMosaico.height * 0.10); // >= ~30mm
+
+  for (let y = yStart; y < yEnd; y++) {
+    if (rowDarkFrac[y] >= 0.15) {
+      if (!inBand) {
+        inBand = true;
+        bandStart = y;
+      }
+    } else if (inBand) {
+      if ((y - bandStart) >= minBandHeightPx) {
+        rowBands.push({ y0: bandStart, y1: y });
+      }
+      inBand = false;
+    }
+  }
+  if (inBand && (yEnd - bandStart) >= minBandHeightPx) {
+    rowBands.push({ y0: bandStart, y1: yEnd });
+  }
+
+  if (rowBands.length === 0) return null;
+
+  // 2. Para cada faixa horizontal, projeta densidade por coluna (X) para detectar os cards
+  const boxes = [];
+  const minCardWidthPx = Math.floor(imgMosaico.width * 0.18); // >= ~38mm
+
+  for (const rb of rowBands) {
+    const colDarkFrac = new Float32Array(imgMosaico.width);
+    for (let x = 0; x < imgMosaico.width; x += passoX) {
+      let escuros = 0;
+      let total = 0;
+      for (let y = rb.y0; y < rb.y1; y += passoY) {
+        total++;
+        const idx = (y * imgMosaico.width + x) * 4;
+        const lum = (imgMosaico.data[idx] + imgMosaico.data[idx + 1] + imgMosaico.data[idx + 2]) / 3;
+        if (lum < 95) escuros++;
+      }
+      const frac = total > 0 ? escuros / total : 0;
+      for (let dx = 0; dx < passoX && (x + dx) < imgMosaico.width; dx++) {
+        colDarkFrac[x + dx] = frac;
+      }
+    }
+
+    let inCol = false;
+    let colStart = 0;
+    const rowCols = [];
+    for (let x = 0; x < imgMosaico.width; x++) {
+      if (colDarkFrac[x] >= 0.35) {
+        if (!inCol) {
+          inCol = true;
+          colStart = x;
+        }
+      } else if (inCol) {
+        if ((x - colStart) >= minCardWidthPx) {
+          rowCols.push({ x0: colStart, x1: x });
+        }
+        inCol = false;
+      }
+    }
+    if (inCol && (imgMosaico.width - colStart) >= minCardWidthPx) {
+      rowCols.push({ x0: colStart, x1: imgMosaico.width });
+    }
+
+    for (const cb of rowCols) {
+      boxes.push({
+        x0Mm: (cb.x0 / imgMosaico.width) * pageWidthMm,
+        x1Mm: (cb.x1 / imgMosaico.width) * pageWidthMm,
+        y0Mm: (rb.y0 / imgMosaico.height) * pageHeightMm,
+        y1Mm: (rb.y1 / imgMosaico.height) * pageHeightMm,
+        widthMm: ((cb.x1 - cb.x0) / imgMosaico.width) * pageWidthMm,
+        heightMm: ((rb.y1 - rb.y0) / imgMosaico.height) * pageHeightMm,
+        rowIdx: rowBands.indexOf(rb)
+      });
+    }
+  }
+
+  if (boxes.length === 0) return null;
+
+  const pxToMmX = pageWidthMm / imgMosaico.width;
+  const pxToMmY = pageHeightMm / imgMosaico.height;
+
+  // Quantidade de colunas na primeira linha completa
+  const colsPorLinha = rowBands.map((_, ri) => boxes.filter(b => b.rowIdx === ri));
+  const maxCols = Math.max(...colsPorLinha.map(c => c.length));
+
+  const widths = boxes.map(b => b.widthMm).sort((a, b) => a - b);
+  const heights = boxes.map(b => b.heightMm).sort((a, b) => a - b);
+  const medianW = widths[Math.floor(widths.length / 2)];
+  const medianH = heights[Math.floor(heights.length / 2)];
+
+  const colGaps = [];
+  for (const rowBoxes of colsPorLinha) {
+    if (rowBoxes.length >= 2) {
+      rowBoxes.sort((a, b) => a.x0Mm - b.x0Mm);
+      for (let i = 1; i < rowBoxes.length; i++) {
+        colGaps.push(Math.max(0, rowBoxes[i].x0Mm - rowBoxes[i - 1].x1Mm));
+      }
+    }
+  }
+
+  const rowGaps = [];
+  for (let i = 1; i < rowBands.length; i++) {
+    rowGaps.push(Math.max(0, (rowBands[i].y0 - rowBands[i - 1].y1) * pxToMmY));
+  }
+
+  const leftEdgeMm = Math.min(...boxes.map(b => b.x0Mm));
+  const rightEdgeMm = pageWidthMm - Math.max(...boxes.map(b => b.x1Mm));
+  const topEdgeMm = Math.min(...boxes.map(b => b.y0Mm));
+
+  const colGapMm = colGaps.length > 0 ? colGaps[Math.floor(colGaps.length / 2)] : 8;
+  const rowGapMm = rowGaps.length > 0 ? rowGaps[Math.floor(rowGaps.length / 2)] : 4;
+
+  // Verifica se há uma única foto centralizada na página (útil para última página de mosaico)
+  const unicaFotoCentralizada = boxes.length === 1 &&
+    Math.abs(((boxes[0].x0Mm + boxes[0].x1Mm) / 2) - (pageWidthMm / 2)) <= 12;
+
+  return {
+    boxesCount: boxes.length,
+    columns: Math.max(1, Math.min(3, maxCols)),
+    rowsPerPage: rowBands.length,
+    cardWidthMm: Number(medianW.toFixed(1)),
+    cardHeightMm: Number(medianH.toFixed(1)),
+    colGapMm: Number(colGapMm.toFixed(1)),
+    rowGapMm: Number(rowGapMm.toFixed(1)),
+    pagePaddingTopMm: Number(topEdgeMm.toFixed(1)),
+    pagePaddingLeftMm: Number(Math.max(4, leftEdgeMm).toFixed(1)),
+    pagePaddingRightMm: Number(Math.max(4, rightEdgeMm).toFixed(1)),
+    unicaFotoCentralizada
+  };
+}
+
+/**
  * Lista todos os objetos de imagem embutidos no PDF via `pdfimages -list`.
  */
 function listarMetadadosImagensPdf(caminhoPdf) {
@@ -311,7 +588,7 @@ function listarMetadadosImagensPdf(caminhoPdf) {
           width: parseInt(parts[3], 10),
           height: parseInt(parts[4], 10),
           color: parts[5],
-          objectId: parseInt(parts[8], 10)
+          objectId: parseInt(parts[10], 10)
         });
       }
     }
@@ -394,11 +671,14 @@ function bannerEhFullBleed(imgBanner) {
 }
 
 /**
- * Pipeline Agnóstico de Extração de Ativos:
- * 1. Verifica se o PDF possui um Papel Timbrado A4 de página inteira embutido (ex: `page_background.png`).
- * 2. Caso contrário, recorta `header_banner.png` (acima do primeiro texto da Pág. 1) e `footer_logo.png` (abaixo do último texto).
- * 3. Extrai a rubrica/assinatura isolada (`signature.png`) com fundo transparente, seja via objeto de imagem embutido
- *    na página de assinatura ou via recorte geométrico acima/abaixo do CRMV.
+ * Pipeline 100% Agnóstico de Extração de Ativos:
+ * 1. Identifica objectIds recorrentes em múltiplas páginas (logos/timbrados) para separá-los de fotos de ultrassom e assinatura.
+ * 2. Verifica se o PDF possui Papel Timbrado A4 de página inteira (`page_background.png`).
+ * 3. Caso contrário, verifica se há logo posicionada LADO A LADO com os dados do paciente (`header_logo.png`, à esquerda ou direita),
+ *    ou um banner/logo ACIMA do primeiro texto (`header_banner.png`).
+ * 4. Extrai mini-logo de rodapé apenas se houver conteúdo gráfico abaixo da última linha de texto do rodapé.
+ * 5. Extrai a assinatura manuscrita isolada (`signature.png`) com fundo transparente (qualquer proporção) e mede sua altura real.
+ * 6. Mede geometricamente a grade real das fotos de ultrassom nas páginas de mosaico.
  */
 function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, opcoes = {}) {
   if (!fs.existsSync(pastaSaidaAtivos)) {
@@ -414,19 +694,32 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
   const caminhoPdf = opcoes.caminhoPdf || null;
   const pastaTemp = opcoes.pastaTemp || path.dirname(pag1.caminhoPng);
   const firstTextYMinPt = opcoes.firstTextYMinPt || 150;
-  const pageHeightPt = opcoes.pageHeightPt || 842;
-  const crmvBlock = opcoes.crmvBlock || null; // { page, yMin, yMax, xMin, xMax }
+  const pageWidthPt = opcoes.pageWidthPt || 595.32;
+  const pageHeightPt = opcoes.pageHeightPt || 841.92;
+  const patientHeaderBoxPt = opcoes.patientHeaderBoxPt || null; // { xMin, xMax, yMin, yMax }
+  const footerTextYMaxPt = opcoes.footerTextYMaxPt || null;
+  const crmvBlock = opcoes.crmvBlock || null; // { page, yMin, yMax, xMin, xMax, minYAbovePt }
+
+  const scaleX = pag1.width / pageWidthPt;
+  const scaleY = pag1.height / pageHeightPt;
+  const pxToMmX = 210 / pag1.width;
+  const pxToMmY = 297 / pag1.height;
 
   const resultado = {
-    stationeryMode: 'cropped_bands', // 'full_page_background' | 'cropped_bands'
+    stationeryMode: 'cropped_bands', // 'full_page_background' | 'inline_logo_header' | 'cropped_bands' | 'text_only'
     pageBackgroundPath: null,
     headerBannerPath: null,
+    headerBannerHeightMm: null,
+    headerLogoPath: null,
+    headerLogoBoxMm: null, // { side: 'left'|'right', xMm, yMm, widthMm, heightMm }
     signaturePath: null,
+    signatureImageHeightMm: null,
     footerLogoPath: null,
     headerEhFullBleed: false,
-    signaturePositionOrder: 'text_above_image',
+    signaturePositionOrder: 'image_above_text',
     paginasTextoQtd: paginasTexto.length,
-    fotosPorPaginaDetectadas: 8
+    fotosPorPaginaDetectadas: 8,
+    mosaicGridMetrics: null
   };
 
   let listaMetaImgs = [];
@@ -436,18 +729,16 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
     arquivosEmb = extrairObjetosImagemPdf(caminhoPdf, pastaTemp);
   }
 
-  // Detecta quantidade de fotos por página na primeira página de mosaico
-  const primeiraPagMosaico = paginasRenderizadas.find(p => p.ehMosaico);
-  if (primeiraPagMosaico && listaMetaImgs.length > 0) {
-    const imgsPagMosaico = listaMetaImgs.filter(
-      im => im.page === primeiraPagMosaico.numeroPagina &&
-            im.type === 'image' &&
-            im.height < 950 &&
-            im.width > 180
-    );
-    if (imgsPagMosaico.length >= 2 && imgsPagMosaico.length <= 12) {
-      resultado.fotosPorPaginaDetectadas = imgsPagMosaico.length;
-    }
+  // Identifica objectIds que se repetem em >= 2 páginas (logos/timbrados recorrentes)
+  const pagesByObjectId = new Map();
+  for (const im of listaMetaImgs) {
+    if (im.type !== 'image' || !im.objectId) continue;
+    if (!pagesByObjectId.has(im.objectId)) pagesByObjectId.set(im.objectId, new Set());
+    pagesByObjectId.get(im.objectId).add(im.page);
+  }
+  const repeatingObjectIds = new Set();
+  for (const [objId, pSet] of pagesByObjectId.entries()) {
+    if (pSet.size >= 2) repeatingObjectIds.add(objId);
   }
 
   // 1. Verifica se existe Papel Timbrado A4 de Página Inteira (ex: 1414x2000 em todas as páginas)
@@ -463,137 +754,297 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
     resultado.pageBackgroundPath = destinoBg;
   }
 
-  // 2. Recorta também o header_banner.png do topo da Página 1 (acima do primeiro texto)
-  const yMaxHeaderPx = Math.max(
-    60,
-    Math.floor(((firstTextYMinPt - 6) / pageHeightPt) * pag1.height)
-  );
-  const imgHeader = recortarImagemRgba(pag1.decoded, {
-    x0: 0,
-    y0: 0,
-    x1: pag1.width,
-    y1: yMaxHeaderPx
-  });
-  resultado.headerEhFullBleed = bannerEhFullBleed(imgHeader);
-  const caminhoHeader = path.join(pastaSaidaAtivos, 'header_banner.png');
-  fs.writeFileSync(caminhoHeader, codificarPng(imgHeader));
-  resultado.headerBannerPath = caminhoHeader;
-
-  // 3. Se não for papel timbrado de página inteira, verifica se há mini-logo de rodapé na Página 1
+  // 2. Caso não seja papel timbrado A4, detecta se há LOGO LADO A LADO com o cabeçalho do paciente
+  //    ou BANNER/LOGO ACIMA do primeiro texto.
   if (resultado.stationeryMode !== 'full_page_background') {
-    const yStartFooter = Math.floor(pag1.height * 0.955);
-    let minX = pag1.width;
-    let maxX = 0;
-    let minY = pag1.height;
-    let maxY = 0;
-    let count = 0;
+    let logoInlineExtraida = false;
 
-    for (let y = yStartFooter; y < pag1.height; y++) {
-      for (let x = 0; x < pag1.width; x++) {
-        const idx = (y * pag1.width + x) * 4;
-        if (pag1.decoded.data[idx] < 242 || pag1.decoded.data[idx + 1] < 242 || pag1.decoded.data[idx + 2] < 242) {
-          count++;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
+    if (patientHeaderBoxPt && patientHeaderBoxPt.yMin < 115) {
+      const bandTopPx = Math.max(0, Math.floor((patientHeaderBoxPt.yMin - 22) * scaleY));
+      const bandBotPx = Math.min(
+        Math.floor(pag1.height * 0.24),
+        Math.ceil(Math.max(patientHeaderBoxPt.yMax + 14, 72) * scaleY)
+      );
+
+      // Candidato à ESQUERDA dos dados do paciente (ex: logo à esquerda, metadados ao centro/direita)
+      const leftMarginSpacePt = patientHeaderBoxPt.xMin;
+      const rightMarginSpacePt = pageWidthPt - patientHeaderBoxPt.xMax;
+
+      const candidatosLaterais = [];
+      if (leftMarginSpacePt >= 75) {
+        const boxEsq = {
+          x0: 0,
+          y0: bandTopPx,
+          x1: Math.max(10, Math.floor((patientHeaderBoxPt.xMin - 4) * scaleX)),
+          y1: bandBotPx
+        };
+        const limEsq = encontrarLimitesConteudo(pag1.decoded, boxEsq, { limiarBranco: 242, passo: 2 });
+        if (!limEsq.vazio && limEsq.count >= 150) {
+          candidatosLaterais.push({ side: 'left', box: boxEsq, lim: limEsq });
+        }
+      }
+      if (rightMarginSpacePt >= 75) {
+        const boxDir = {
+          x0: Math.min(pag1.width - 10, Math.ceil((patientHeaderBoxPt.xMax + 4) * scaleX)),
+          y0: bandTopPx,
+          x1: pag1.width,
+          y1: bandBotPx
+        };
+        const limDir = encontrarLimitesConteudo(pag1.decoded, boxDir, { limiarBranco: 242, passo: 2 });
+        if (!limDir.vazio && limDir.count >= 150) {
+          candidatosLaterais.push({ side: 'right', box: boxDir, lim: limDir });
+        }
+      }
+
+      if (candidatosLaterais.length > 0) {
+        // Escolhe o lado com maior densidade gráfica (a logo principal)
+        candidatosLaterais.sort((a, b) => b.lim.count - a.lim.count);
+        const escolhido = candidatosLaterais[0];
+        const rawLogo = recortarImagemRgba(pag1.decoded, escolhido.box);
+        const trimmedLogo = trimImagemRgba(rawLogo, {
+          padding: 4,
+          removerFundoBranco: true,
+          limiarBranco: 244
+        });
+
+        if (trimmedLogo.width >= 20 && trimmedLogo.height >= 20) {
+          const caminhoLogo = path.join(pastaSaidaAtivos, 'header_logo.png');
+          fs.writeFileSync(caminhoLogo, codificarPng(trimmedLogo));
+          resultado.stationeryMode = 'inline_logo_header';
+          resultado.headerLogoPath = caminhoLogo;
+          resultado.headerLogoBoxMm = {
+            side: escolhido.side,
+            xMm: Number(((escolhido.box.x0 + trimmedLogo.offsetX) * pxToMmX).toFixed(1)),
+            yMm: Number(((escolhido.box.y0 + trimmedLogo.offsetY) * pxToMmY).toFixed(1)),
+            widthMm: Number((trimmedLogo.width * pxToMmX).toFixed(1)),
+            heightMm: Number((trimmedLogo.height * pxToMmY).toFixed(1))
+          };
+          logoInlineExtraida = true;
         }
       }
     }
 
-    if (count >= 150) {
-      const imgFooter = recortarImagemRgba(pag1.decoded, {
-        x0: Math.max(0, minX - 20),
-        y0: Math.max(yStartFooter, minY - 10),
-        x1: Math.min(pag1.width, maxX + 20),
-        y1: Math.min(pag1.height, maxY + 10)
-      });
-      const caminhoFooter = path.join(pastaSaidaAtivos, 'footer_logo.png');
-      fs.writeFileSync(caminhoFooter, codificarPng(imgFooter));
-      resultado.footerLogoPath = caminhoFooter;
+    // Se não há logo inline ao lado dos dados do paciente, verifica banner/logo ACIMA do primeiro texto
+    if (!logoInlineExtraida) {
+      const yMaxHeaderPx = Math.floor(((firstTextYMinPt - 4) / pageHeightPt) * pag1.height);
+      if (yMaxHeaderPx >= 50) {
+        const limBanner = encontrarLimitesConteudo(pag1.decoded, {
+          x0: 0,
+          y0: 0,
+          x1: pag1.width,
+          y1: yMaxHeaderPx
+        }, { limiarBranco: 244, passo: 2 });
+
+        if (!limBanner.vazio && limBanner.count >= 150) {
+          const imgHeader = recortarImagemRgba(pag1.decoded, {
+            x0: 0,
+            y0: 0,
+            x1: pag1.width,
+            y1: yMaxHeaderPx
+          });
+          resultado.headerEhFullBleed = bannerEhFullBleed(imgHeader);
+          const caminhoHeader = path.join(pastaSaidaAtivos, 'header_banner.png');
+          fs.writeFileSync(caminhoHeader, codificarPng(imgHeader));
+          resultado.headerBannerPath = caminhoHeader;
+          resultado.headerBannerHeightMm = Number((yMaxHeaderPx * pxToMmY).toFixed(1));
+          resultado.stationeryMode = 'cropped_bands';
+        } else {
+          resultado.stationeryMode = 'text_only';
+        }
+      } else {
+        resultado.stationeryMode = 'text_only';
+      }
     }
   }
 
-  // 4. Extrai Assinatura Manuscrita isolada (com fundo transparente)
+  // 3. Mini-logo de rodapé: somente se houver conteúdo gráfico ABAIXO do texto de rodapé (evita recortar texto!)
+  if (resultado.stationeryMode !== 'full_page_background') {
+    const yStartMinPx = Math.floor(pag1.height * 0.955);
+    const yStartFooter = footerTextYMaxPt
+      ? Math.max(yStartMinPx, Math.ceil((footerTextYMaxPt + 6) * scaleY))
+      : yStartMinPx;
+
+    if (yStartFooter < pag1.height - 15) {
+      const limFooter = encontrarLimitesConteudo(pag1.decoded, {
+        x0: 0,
+        y0: yStartFooter,
+        x1: pag1.width,
+        y1: pag1.height
+      }, { limiarBranco: 242, passo: 1 });
+
+      if (!limFooter.vazio && limFooter.count >= 150) {
+        const imgFooter = recortarImagemRgba(pag1.decoded, {
+          x0: Math.max(0, limFooter.x0 - 16),
+          y0: Math.max(yStartFooter, limFooter.y0 - 8),
+          x1: Math.min(pag1.width, limFooter.x1 + 16),
+          y1: Math.min(pag1.height, limFooter.y1 + 8)
+        });
+        const caminhoFooter = path.join(pastaSaidaAtivos, 'footer_logo.png');
+        fs.writeFileSync(caminhoFooter, codificarPng(imgFooter));
+        resultado.footerLogoPath = caminhoFooter;
+      }
+    }
+  }
+
+  // 4. Extrai Assinatura Manuscrita isolada (com fundo transparente, aceitando qualquer proporção)
   const ultimaPagTexto = paginasTexto[paginasTexto.length - 1] || pag1;
   const numUltimaPagTexto = crmvBlock?.page || ultimaPagTexto.numeroPagina;
   const pagAssinatura = paginasRenderizadas.find(p => p.numeroPagina === numUltimaPagTexto) || ultimaPagTexto;
 
-  // Tenta primeiro localizar o objeto de imagem da assinatura embutido na página de assinatura (sem smask separado)
-  const candidatosSigEmb = listaMetaImgs.filter(im =>
-    im.page === numUltimaPagTexto &&
-    im.type === 'image' &&
-    im.width >= 70 && im.width <= 700 &&
-    im.height >= 25 && im.height <= 280 &&
-    (im.width / Math.max(1, im.height)) >= 1.3
-  );
+  const candidatosSigEmb = listaMetaImgs.filter(im => {
+    const ratio = im.width / Math.max(1, im.height);
+    return im.page === numUltimaPagTexto &&
+      im.type === 'image' &&
+      !repeatingObjectIds.has(im.objectId) &&
+      im.width >= 50 && im.width <= 1200 &&
+      im.height >= 25 && im.height <= 500 &&
+      ratio >= 0.35 && ratio <= 8.0;
+  });
 
-  // Verifica se o candidato não possui uma máscara smask separada (quando há smask no PDF como no Word 2010, o recorte 300 DPI preserva melhor a composição)
   const temSmaskSeparada = listaMetaImgs.some(im => im.page === numUltimaPagTexto && im.type === 'smask');
 
-  if (candidatosSigEmb.length === 1 && !temSmaskSeparada && arquivosEmb[candidatosSigEmb[0].num]) {
-    const rawSigBuf = fs.readFileSync(arquivosEmb[candidatosSigEmb[0].num]);
-    const sigDecoded = decodificarPng(rawSigBuf);
-    const sigTransparente = recortarImagemRgba(sigDecoded, {
-      x0: 0,
-      y0: 0,
-      x1: sigDecoded.width,
-      y1: sigDecoded.height
-    }, { removerFundoBranco: true, limiarBranco: 238 });
+  // Sempre tenta determinar a posição relativa (acima vs abaixo do CRMV) na página rasterizada
+  let ordemAssinaturaDetectada = 'image_above_text';
+  let alturaAssinaturaMedidaMm = null;
 
-    const caminhoSig = path.join(pastaSaidaAtivos, 'signature.png');
-    fs.writeFileSync(caminhoSig, codificarPng(sigTransparente));
-    resultado.signaturePath = caminhoSig;
-    resultado.signaturePositionOrder = 'image_above_text';
-  } else if (crmvBlock) {
-    // Recorta geometricamente em torno do bloco do CRMV (testando acima e abaixo para ver onde há traços de caneta/rubrica)
-    const scaleX = pagAssinatura.width / (opcoes.pageWidthPt || 595.3);
-    const scaleY = pagAssinatura.height / pageHeightPt;
-
-    const xCenterPx = ((crmvBlock.xMin + crmvBlock.xMax) / 2) * scaleX;
-    const halfW = Math.floor(pagAssinatura.width * 0.20);
+  if (crmvBlock && pagAssinatura?.decoded) {
+    const sigScaleX = pagAssinatura.width / pageWidthPt;
+    const sigScaleY = pagAssinatura.height / pageHeightPt;
+    const xCenterPx = ((crmvBlock.xMin + crmvBlock.xMax) / 2) * sigScaleX;
+    const halfW = Math.floor(pagAssinatura.width * 0.22);
     const x0 = Math.max(0, Math.floor(xCenterPx - halfW));
     const x1 = Math.min(pagAssinatura.width, Math.ceil(xCenterPx + halfW));
 
     const boxAcima = {
       x0,
       x1,
-      y0: Math.max(0, Math.floor(Math.max(crmvBlock.minYAbovePt || 0, crmvBlock.yMin - 55) * scaleY)),
-      y1: Math.max(10, Math.floor((crmvBlock.yMin - 3) * scaleY))
+      y0: Math.max(0, Math.floor(Math.max(crmvBlock.minYAbovePt || 0, crmvBlock.yMin - 70) * sigScaleY)),
+      y1: Math.max(10, Math.floor((crmvBlock.yMin - 2) * sigScaleY))
     };
     const boxAbaixo = {
       x0,
       x1,
-      y0: Math.min(pagAssinatura.height - 20, Math.ceil((crmvBlock.yMax + 4) * scaleY)),
-      y1: Math.min(pagAssinatura.height, Math.ceil((crmvBlock.yMax + 72) * scaleY))
+      y0: Math.min(pagAssinatura.height - 20, Math.ceil((crmvBlock.yMax + 4) * sigScaleY)),
+      y1: Math.min(pagAssinatura.height, Math.ceil((crmvBlock.yMax + 72) * sigScaleY))
     };
 
-    const contarPixelsEscuros = (box) => {
-      let c = 0;
-      for (let y = box.y0; y < box.y1; y += 2) {
-        for (let x = box.x0; x < box.x1; x += 2) {
-          const idx = (y * pagAssinatura.width + x) * 4;
-          const lum = (pagAssinatura.decoded.data[idx] + pagAssinatura.decoded.data[idx + 1] + pagAssinatura.decoded.data[idx + 2]) / 3;
-          if (lum < 190) c++;
-        }
-      }
-      return c;
-    };
+    const limAcima = encontrarLimitesConteudo(pagAssinatura.decoded, boxAcima, { limiarBranco: 215, passo: 2 });
+    const limAbaixo = encontrarLimitesConteudo(pagAssinatura.decoded, boxAbaixo, { limiarBranco: 215, passo: 2 });
 
-    const escurosAcima = contarPixelsEscuros(boxAcima);
-    const escurosAbaixo = contarPixelsEscuros(boxAbaixo);
+    ordemAssinaturaDetectada = limAbaixo.count > limAcima.count ? 'text_above_image' : 'image_above_text';
+    const limEscolhida = limAbaixo.count > limAcima.count ? limAbaixo : limAcima;
 
-    const boxEscolhida = escurosAbaixo >= escurosAcima ? boxAbaixo : boxAcima;
-    resultado.signaturePositionOrder = escurosAbaixo >= escurosAcima ? 'text_above_image' : 'image_above_text';
+    if (!limEscolhida.vazio && limEscolhida.count > 20) {
+      alturaAssinaturaMedidaMm = Math.max(14, Math.min(26, Number((((limEscolhida.y1 - limEscolhida.y0) / pagAssinatura.height) * 297).toFixed(1))));
+    }
 
-    if (Math.max(escurosAcima, escurosAbaixo) > 25) {
-      const imgSig = recortarImagemRgba(pagAssinatura.decoded, boxEscolhida, {
+    // Se há exatamente 1 imagem embutida não-recorrente (sem smask), usa ela diretamente (com trim + fundo transparente)
+    if (candidatosSigEmb.length === 1 && !temSmaskSeparada && arquivosEmb[candidatosSigEmb[0].num] && fs.existsSync(arquivosEmb[candidatosSigEmb[0].num])) {
+      const rawSigBuf = fs.readFileSync(arquivosEmb[candidatosSigEmb[0].num]);
+      const sigDecoded = decodificarPng(rawSigBuf);
+      const sigTransparente = trimImagemRgba(sigDecoded, {
+        padding: 4,
+        removerFundoBranco: true,
+        limiarBranco: 238
+      });
+      const caminhoSig = path.join(pastaSaidaAtivos, 'signature.png');
+      fs.writeFileSync(caminhoSig, codificarPng(sigTransparente));
+      resultado.signaturePath = caminhoSig;
+      resultado.signaturePositionOrder = ordemAssinaturaDetectada;
+      resultado.signatureImageHeightMm = alturaAssinaturaMedidaMm || 16;
+    } else if (!limEscolhida.vazio && limEscolhida.count > 20) {
+      const boxCrop = limAbaixo.count > limAcima.count ? boxAbaixo : boxAcima;
+      const rawSig = recortarImagemRgba(pagAssinatura.decoded, boxCrop);
+      const imgSig = trimImagemRgba(rawSig, {
+        padding: 4,
         removerFundoBranco: true,
         limiarBranco: 238
       });
       const caminhoSig = path.join(pastaSaidaAtivos, 'signature.png');
       fs.writeFileSync(caminhoSig, codificarPng(imgSig));
       resultado.signaturePath = caminhoSig;
+      resultado.signaturePositionOrder = ordemAssinaturaDetectada;
+      resultado.signatureImageHeightMm = alturaAssinaturaMedidaMm || 15;
+    }
+  } else if (candidatosSigEmb.length === 1 && !temSmaskSeparada && arquivosEmb[candidatosSigEmb[0].num] && fs.existsSync(arquivosEmb[candidatosSigEmb[0].num])) {
+    const rawSigBuf = fs.readFileSync(arquivosEmb[candidatosSigEmb[0].num]);
+    const sigDecoded = decodificarPng(rawSigBuf);
+    const sigTransparente = trimImagemRgba(sigDecoded, {
+      padding: 4,
+      removerFundoBranco: true,
+      limiarBranco: 238
+    });
+    const caminhoSig = path.join(pastaSaidaAtivos, 'signature.png');
+    fs.writeFileSync(caminhoSig, codificarPng(sigTransparente));
+    resultado.signaturePath = caminhoSig;
+    resultado.signaturePositionOrder = 'image_above_text';
+    resultado.signatureImageHeightMm = 16;
+  }
+
+  // 5. Mede a grade real de fotos de ultrassom na primeira página de mosaico (excluindo logos recorrentes!)
+  const paginasMosaico = paginasRenderizadas.filter(p => p.ehMosaico);
+  const primeiraPagMosaico = paginasMosaico[0];
+  if (primeiraPagMosaico) {
+    if (listaMetaImgs.length > 0) {
+      const imgsPagMosaico = listaMetaImgs.filter(
+        im => im.page === primeiraPagMosaico.numeroPagina &&
+              im.type === 'image' &&
+              !repeatingObjectIds.has(im.objectId) &&
+              im.height < 1100 &&
+              im.width > 180
+      );
+      if (imgsPagMosaico.length >= 2 && imgsPagMosaico.length <= 12) {
+        resultado.fotosPorPaginaDetectadas = imgsPagMosaico.length;
+      }
+    }
+
+    const headerCutoff = (opcoes.repeatPatientHeaderOnImagePages && patientHeaderBoxPt)
+      ? Math.min(0.22, Math.max(0.08, (patientHeaderBoxPt.yMax + 10) / pageHeightPt))
+      : 0.02;
+    const metrics = detectarGradeImagensMosaico(primeiraPagMosaico.decoded, {
+      headerCutoffRatio: headerCutoff,
+      footerCutoffRatio: 0.915
+    });
+
+    if (metrics) {
+      // Se as fotos estiverem coladas sem espaço branco (ex: mosaico 2x4 sem borda),
+      // o scanner de pixels enxerga um único bloco escuro. Usa a contagem real de pdfimages + bbox externo!
+      let metricsAjustadas = { ...metrics };
+      if (metrics.boxesCount < resultado.fotosPorPaginaDetectadas && resultado.fotosPorPaginaDetectadas >= 2) {
+        const cols = 2;
+        const rows = Math.max(1, Math.ceil(resultado.fotosPorPaginaDetectadas / cols));
+        const totalH = metrics.cardHeightMm * Math.max(1, metrics.rowsPerPage);
+        metricsAjustadas = {
+          ...metrics,
+          boxesCount: resultado.fotosPorPaginaDetectadas,
+          columns: cols,
+          rowsPerPage: rows,
+          colGapMm: 0.5,
+          rowGapMm: 0.5,
+          cardWidthMm: Number(((metrics.cardWidthMm * Math.max(1, metrics.columns)) / cols).toFixed(1)),
+          cardHeightMm: Number(Math.max(42, Math.min(72, totalH / rows)).toFixed(1))
+        };
+      }
+
+      // Verifica também a última página de mosaico para saber se uma foto isolada é centralizada
+      const ultimaPagMosaico = paginasMosaico[paginasMosaico.length - 1];
+      let centerLastOddImage = false;
+      if (ultimaPagMosaico && ultimaPagMosaico !== primeiraPagMosaico) {
+        const lastMetrics = detectarGradeImagensMosaico(ultimaPagMosaico.decoded, {
+          headerCutoffRatio: headerCutoff,
+          footerCutoffRatio: 0.915
+        });
+        if (lastMetrics && lastMetrics.unicaFotoCentralizada) {
+          centerLastOddImage = true;
+        }
+      }
+      resultado.mosaicGridMetrics = {
+        ...metricsAjustadas,
+        centerLastOddImage
+      };
+      if (metricsAjustadas.boxesCount >= 2 && metricsAjustadas.boxesCount <= 12) {
+        resultado.fotosPorPaginaDetectadas = metricsAjustadas.boxesCount;
+      }
     }
   }
 
@@ -604,9 +1055,13 @@ module.exports = {
   decodificarPng,
   codificarPng,
   recortarImagemRgba,
+  encontrarLimitesConteudo,
+  trimImagemRgba,
+  detectarLinhaHorizontal,
   paginaEstaEmBrancoNoCorpo,
   paginaEhMosaicoUltrassom,
   detectarBordasTabelaPaciente,
+  detectarGradeImagensMosaico,
   listarMetadadosImagensPdf,
   extrairObjetosImagemPdf,
   rasterizarPdfEmPngs,

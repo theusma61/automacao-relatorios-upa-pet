@@ -282,6 +282,48 @@ export default function LayoutEditorDrawer({
               ))}
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="block font-bold mb-1 opacity-80">Espaço entre Categorias (Órgãos)</label>
+                <select
+                  value={serverLayout.paragraph_spacing}
+                  onChange={(e) =>
+                    setServerLayout({ ...serverLayout, paragraph_spacing: e.target.value })
+                  }
+                  className={`w-full px-2.5 py-1.5 rounded-lg border font-semibold ${
+                    darkMode
+                      ? 'bg-[#12222F] border-slate-700 text-white'
+                      : 'bg-white border-slate-300 text-[#0A141D]'
+                  }`}
+                >
+                  {['4pt', '6pt', '8pt', '10pt', '12pt', '14pt', '16pt', '18pt', '20pt'].map((sp) => (
+                    <option key={sp} value={sp}>{sp}</option>
+                  ))}
+                  {serverLayout.paragraph_spacing && !['4pt', '6pt', '8pt', '10pt', '12pt', '14pt', '16pt', '18pt', '20pt'].includes(serverLayout.paragraph_spacing) && (
+                    <option value={serverLayout.paragraph_spacing}>{serverLayout.paragraph_spacing}</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold mb-1 opacity-80">Entrelinha</label>
+                <select
+                  value={serverLayout.line_height}
+                  onChange={(e) =>
+                    setServerLayout({ ...serverLayout, line_height: e.target.value })
+                  }
+                  className={`w-full px-2.5 py-1.5 rounded-lg border font-semibold ${
+                    darkMode
+                      ? 'bg-[#12222F] border-slate-700 text-white'
+                      : 'bg-white border-slate-300 text-[#0A141D]'
+                  }`}
+                >
+                  {['1.15', '1.2', '1.25', '1.3', '1.35', '1.4', '1.5', '1.6'].map((lh) => (
+                    <option key={lh} value={lh}>{lh}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"

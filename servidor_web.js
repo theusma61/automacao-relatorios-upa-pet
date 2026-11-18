@@ -544,7 +544,95 @@ app.post('/api/laudos/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.arr
       quantidadePdfs: caminhosPdfs.length
     }, 'Iniciando extração e aprendizado de padrão de laudo por IA');
 
-    const perfilDetectado = await extrairPadraoDeLaudos(caminhosPdfs, key);
+    const userIdSafe = String(req.usuario?.id || 'default').replace(/[^a-zA-Z0-9_-]/g, '');
+    const pastaAtivosUsuario = path.join(templatesDir, userIdSafe);
+
+    // Executa em paralelo a extração geométrica/visual real (300 DPI + bbox + ativos) e a síntese clínica por IA
+    const [perfilGeoRes, perfilIaRes] = await Promise.allSettled([
+      extrairPadraoCompletoDePdfs(caminhosPdfs, key, req.usuario, pastaAtivosUsuario),
+      extrairPadraoDeLaudos(caminhosPdfs, key)
+    ]);
+
+    const perfilGeo = perfilGeoRes.status === 'fulfilled' ? perfilGeoRes.value : null;
+    const perfilIa = perfilIaRes.status === 'fulfilled' ? perfilIaRes.value : null;
+
+    if (!perfilGeo && !perfilIa) {
+      throw new Error(perfilIaRes.reason?.message || perfilGeoRes.reason?.message || 'Falha ao extrair padrão dos PDFs.');
+    }
+
+    const basePerfil = perfilIa || {
+      sucesso: true,
+      nomeDetectado: perfilGeo?.identidadeProfissional?.nomeMedico || '',
+      crmvDetectado: perfilGeo?.identidadeProfissional?.crmv || '',
+      clinicaDetectada: perfilGeo?.identidadeProfissional?.nomeClinica || '',
+      layoutDetectado: {},
+      templateVisual: {},
+      ordemOrgaos: (perfilGeo?.estiloEscritaClinica?.sequenciaOrgaos || []).map(o => o.orgao.toUpperCase()),
+      frasesNormalidade: {},
+      vocabularioPreferido: {},
+      estiloConclusao: 'texto-simples',
+      observacoesEstilo: 'Padrão extraído geometricamente dos PDFs de referência.',
+      amostras: caminhosPdfs.map(f => ({ nome: path.basename(f), enviadoEm: new Date().toISOString() })),
+      quantidadeAmostras: caminhosPdfs.length
+    };
+
+    const lv = perfilGeo?.layoutVisual || null;
+    const ativos = perfilGeo?.ativosVisuais || null;
+    const layoutMedido = lv ? {
+      ...(basePerfil.layoutDetectado || {}),
+      fontFamily: lv.bodyTypography?.fontFamily || basePerfil.layoutDetectado?.fontFamily,
+      fontSizeBody: lv.bodyTypography?.fontSize || basePerfil.layoutDetectado?.fontSizeBody,
+      fontSizeTitulo: lv.titleConfig?.fontSize || basePerfil.layoutDetectado?.fontSizeTitulo,
+      marginTop: lv.margins?.topFirstPage || basePerfil.layoutDetectado?.marginTop,
+      marginBottom: lv.margins?.bottom || basePerfil.layoutDetectado?.marginBottom,
+      marginLeft: lv.margins?.left || basePerfil.layoutDetectado?.marginLeft,
+      marginRight: lv.margins?.right || basePerfil.layoutDetectado?.marginRight,
+      lineHeight: lv.bodyTypography?.lineHeight || basePerfil.layoutDetectado?.lineHeight,
+      paragraphSpacing: lv.bodyTypography?.paragraphSpacing || basePerfil.layoutDetectado?.paragraphSpacing
+    } : (basePerfil.layoutDetectado || {});
+
+    const perfilDetectado = {
+      ...basePerfil,
+      nomeDetectado: basePerfil.nomeDetectado || perfilGeo?.identidadeProfissional?.nomeMedico || '',
+      crmvDetectado: basePerfil.crmvDetectado || perfilGeo?.identidadeProfissional?.crmv || '',
+      layoutDetectado: layoutMedido,
+      templateVisual: {
+        ...(basePerfil.templateVisual || {}),
+        ...layoutMedido,
+        ...(lv?.titleConfig?.text ? { tituloDocumento: lv.titleConfig.text } : {}),
+        ...(lv?.titleConfig?.subtitle !== undefined && lv?.titleConfig?.subtitle !== null ? { subtituloDocumento: lv.titleConfig.subtitle } : {}),
+        ...(lv?.footerConfig?.disclaimerText ? { textoAvisoLegal: lv.footerConfig.disclaimerText } : {}),
+        ...(lv?.signatureConfig ? {
+          posicaoAssinatura: lv.signatureConfig.alignment === 'center' ? 'centro' : (lv.signatureConfig.alignment === 'left' ? 'esquerda' : 'direita'),
+          linhaAssinatura: Boolean(lv.signatureConfig.hasTopLine)
+        } : {}),
+        ...(lv ? {
+          visualConfigClonado: lv,
+          writingStyleClonado: perfilGeo?.estiloEscritaClinica || null,
+          ativosVisuais: ativos || null
+        } : {})
+      },
+      ...(perfilGeo ? { perfilClonado: perfilGeo } : {})
+    };
+
+    // Persiste imediatamente o template visual/geométrico clonado no ConfiguracaoLayout do usuário
+    // (garante funcionamento mesmo se o bundle do frontend não reenviar visualConfigClonado no PUT /meu-perfil)
+    if (perfilGeo && req.usuario) {
+      await salvarTemplateClonado(perfilGeo, req.usuario).catch(errSave =>
+        logger.warn('Aviso ao pré-salvar template clonado', { error: errSave.message })
+      );
+      const idProfGeo = perfilGeo.identidadeProfissional || {};
+      const ativosGeo = perfilGeo.ativosVisuais || {};
+      if (req.usuario.id && (ativosGeo.headerLogoUrl || ativosGeo.assinaturaUrl)) {
+        await atualizarPerfilProfissional(req.usuario.id, {
+          nome: perfilDetectado.nomeDetectado || idProfGeo.nomeMedico || req.usuario.nome,
+          crmv: perfilDetectado.crmvDetectado || idProfGeo.crmv || req.usuario.crmv,
+          nomeClinica: perfilDetectado.clinicaDetectada || idProfGeo.nomeClinica || req.usuario.nomeClinica,
+          ...(ativosGeo.headerLogoUrl ? { logoUrl: ativosGeo.headerLogoUrl } : {}),
+          ...(ativosGeo.assinaturaUrl ? { assinaturaUrl: ativosGeo.assinaturaUrl } : {})
+        }).catch(() => {});
+      }
+    }
 
     res.json({
       sucesso: true,

@@ -133,7 +133,7 @@ function renderizarDadosPaciente(template, dadosPaciente) {
             <tr>
               <th style="width: 15%; background: ${template.corFundoBlocos}; color: ${template.corPrimaria}; padding: 4px 6px; text-align: left; border: 1px solid ${template.corBordaTabelas};">Paciente:</th>
               <td style="width: 35%; padding: 4px 6px; border: 1px solid ${template.corBordaTabelas}; font-weight: bold;">${nome}</td>
-              <th style="width: 15%; background: ${template.corFundoBlocos}; color: ${template.corPrimaria}; padding: 4px 6px; text-align: left; border: 1px solid ${template.corBordaTabelas};">Tutor:</th>
+              <th style="width: 15%; background: ${template.corFundoBlocos}; color: ${template.corPrimaria}; padding: 4px 6px; text-align: left; border: 1px solid ${template.corBordaTabelas};">Responsável:</th>
               <td style="width: 35%; padding: 4px 6px; border: 1px solid ${template.corBordaTabelas};">${tutor}</td>
             </tr>
             <tr>
@@ -160,7 +160,7 @@ function renderizarDadosPaciente(template, dadosPaciente) {
             <p style="margin: 1px 0 0 0; font-weight: bold; color: #111;">${nome}</p>
           </div>
           <div style="background: ${template.corFundoBlocos}; border-left: 3px solid ${template.corPrimaria}; padding: 4px 8px; border-radius: 4px;">
-            <p style="margin: 0; color: #666; font-size: 8pt;">TUTOR</p>
+            <p style="margin: 0; color: #666; font-size: 8pt;">RESPONSÁVEL</p>
             <p style="margin: 1px 0 0 0; font-weight: bold; color: #111;">${tutor}</p>
           </div>
           <div style="background: ${template.corFundoBlocos}; border-left: 3px solid ${template.corPrimaria}; padding: 4px 8px; border-radius: 4px;">
@@ -192,7 +192,7 @@ function renderizarDadosPaciente(template, dadosPaciente) {
             <p style="margin: 2px 0;"><strong>Idade:</strong> ${idade}</p>
           </div>
           <div class="col" style="flex: 1;">
-            <p style="margin: 2px 0;"><strong>Tutor:</strong> ${tutor}</p>
+            <p style="margin: 2px 0;"><strong>Responsável:</strong> ${tutor}</p>
             <p style="margin: 2px 0;"><strong>Sexo:</strong> ${sexo}</p>
             <p style="margin: 2px 0;"><strong>Data:</strong> ${data}</p>
           </div>

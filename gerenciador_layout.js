@@ -53,6 +53,7 @@ function prismaParaSnakeCase(row) {
     cor_secundaria: row.corSecundaria || LAYOUT_PADRAO.cor_secundaria,
     modo_template: normalizarModoTemplate(row.modoTemplate || row.modo_template),
     page_background_url: row.page_background_url || (visualJson && visualJson.pageBackgroundUrl) || null,
+    header_logo_url: row.header_logo_url || (visualJson && visualJson.headerLogoUrl) || null,
     header_banner_url: row.headerBannerUrl || row.header_banner_url || null,
     footer_logo_url: row.footerLogoUrl || row.footer_logo_url || null,
     assinatura_extraida_url: row.assinaturaExtraidaUrl || row.assinatura_extraida_url || null,
@@ -121,11 +122,41 @@ async function salvarLayout(dadosNovos = {}, usuario = null) {
 
   if (dadosNovos.modo_template !== undefined) {
     payloadPrisma.modoTemplate = normalizarModoTemplate(dadosNovos.modo_template);
+  } else if (atual.modo_template === 'clonado_pdf') {
+    payloadPrisma.modoTemplate = 'clonado_pdf';
   }
   if (dadosNovos.header_banner_url !== undefined) payloadPrisma.headerBannerUrl = dadosNovos.header_banner_url;
+  else if (atual.header_banner_url) payloadPrisma.headerBannerUrl = atual.header_banner_url;
+
   if (dadosNovos.footer_logo_url !== undefined) payloadPrisma.footerLogoUrl = dadosNovos.footer_logo_url;
+  else if (atual.footer_logo_url) payloadPrisma.footerLogoUrl = atual.footer_logo_url;
+
   if (dadosNovos.assinatura_extraida_url !== undefined) payloadPrisma.assinaturaExtraidaUrl = dadosNovos.assinatura_extraida_url;
-  if (dadosNovos.visual_config_json !== undefined) payloadPrisma.visualConfigJson = dadosNovos.visual_config_json;
+  else if (atual.assinatura_extraida_url) payloadPrisma.assinaturaExtraidaUrl = atual.assinatura_extraida_url;
+  if (dadosNovos.visual_config_json !== undefined) {
+    payloadPrisma.visualConfigJson = dadosNovos.visual_config_json;
+  } else if (atual.visual_config_json && typeof atual.visual_config_json === 'object') {
+    // Propaga edições manuais do editor (espaçamento entre categorias, entrelinha, fonte, margens) para o template clonado
+    const vc = JSON.parse(JSON.stringify(atual.visual_config_json));
+    vc.bodyTypography = {
+      ...(vc.bodyTypography || {}),
+      ...(dadosNovos.font_family ? { fontFamily: dadosNovos.font_family } : {}),
+      ...(dadosNovos.font_size_body ? { fontSize: dadosNovos.font_size_body } : {}),
+      ...(dadosNovos.line_height !== undefined ? { lineHeight: String(dadosNovos.line_height) } : {}),
+      ...(dadosNovos.paragraph_spacing ? { paragraphSpacing: dadosNovos.paragraph_spacing } : {})
+    };
+    if (dadosNovos.font_size_titulo) {
+      vc.titleConfig = { ...(vc.titleConfig || {}), fontSize: dadosNovos.font_size_titulo };
+    }
+    vc.margins = {
+      ...(vc.margins || {}),
+      ...(dadosNovos.margin_top ? { topFirstPage: dadosNovos.margin_top } : {}),
+      ...(dadosNovos.margin_bottom ? { bottom: dadosNovos.margin_bottom } : {}),
+      ...(dadosNovos.margin_left ? { left: dadosNovos.margin_left } : {}),
+      ...(dadosNovos.margin_right ? { right: dadosNovos.margin_right } : {})
+    };
+    payloadPrisma.visualConfigJson = vc;
+  }
   if (dadosNovos.writing_style_json !== undefined) payloadPrisma.writingStyleJson = dadosNovos.writing_style_json;
   if (dadosNovos.pdfs_referencia_qtd !== undefined) payloadPrisma.pdfsReferenciaQtd = Number(dadosNovos.pdfs_referencia_qtd) || 0;
 
@@ -170,6 +201,18 @@ async function salvarTemplateClonado(perfilExtraido, usuario = null) {
 
   if (ativos.pageBackgroundUrl) {
     lv.pageBackgroundUrl = ativos.pageBackgroundUrl;
+  }
+  if (ativos.headerLogoUrl) {
+    lv.headerLogoUrl = ativos.headerLogoUrl;
+  }
+  if (ativos.headerBannerUrl) {
+    lv.headerBannerUrl = ativos.headerBannerUrl;
+  }
+  if (ativos.assinaturaUrl) {
+    lv.assinaturaUrl = ativos.assinaturaUrl;
+  }
+  if (ativos.footerLogoUrl) {
+    lv.footerLogoUrl = ativos.footerLogoUrl;
   }
 
   const dadosLayout = {

@@ -5,6 +5,7 @@ const { compilarPDF } = require('./compilador_pdf');
 const { obterLayout } = require('./gerenciador_layout');
 const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
 const { construirHtmlLaudo } = require('./renderizador_layout_laudo');
+const { normalizarRotuloResponsavel } = require('./extrator_padrao_laudo');
 
 function lerImagemDataUri(caminhoImg) {
   if (!caminhoImg || !fs.existsSync(caminhoImg)) return '';
@@ -64,7 +65,11 @@ function sanitizarParagrafoOrgao(item, opcoesFormatacao = {}) {
     if (idx > 0 && /^Obs\.?:/i.test(lTrim) && usarObsItalico) {
       return `<span class="obs-italic-line">${lTrim}</span>`;
     }
-    return lTrim.replace(/\bOBS\s*:/g, '<strong>OBS:</strong>');
+    let formatada = lTrim.replace(/\bOBS\s*:/g, '<strong>OBS:</strong>');
+    if (usarDiagDif) {
+      formatada = formatada.replace(/(DIAG\s*DIF\.?\s*:[^<\n]+)/gi, '<em>$1</em>');
+    }
+    return formatada;
   }).filter(Boolean);
 
   const textoFormatado = linhasFormatadas.join('<br>');
@@ -82,6 +87,12 @@ function sanitizarParagrafoOrgao(item, opcoesFormatacao = {}) {
   return p;
 }
 
+function parseMmNumber(val, fallback) {
+  if (typeof val === 'number' && !isNaN(val)) return val;
+  const m = String(val || '').match(/([\d.]+)/);
+  return m ? parseFloat(m[1]) : fallback;
+}
+
 /**
  * Renderiza o HTML 100% agnóstico fiel ao template extraído dos PDFs do médico veterinário.
  */
@@ -90,25 +101,32 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   const escrita = layout.writing_style_json || {};
 
   const pageBackgroundPath = layout.page_background_url || visual.pageBackgroundUrl || null;
-  const headerBannerPath = layout.header_banner_url || null;
-  const sigPath = layout.assinatura_extraida_url || opcoes.usuario?.assinaturaUrl || null;
-  const footerLogoPath = layout.footer_logo_url || null;
+  const headerBannerPath = layout.header_banner_url || visual.headerBannerUrl || null;
+  const headerLogoPath = layout.header_logo_url || visual.headerLogoUrl || null;
+  const sigPath = layout.assinatura_extraida_url || visual.assinaturaUrl || opcoes.usuario?.assinaturaUrl || null;
+  const footerLogoPath = layout.footer_logo_url || visual.footerLogoUrl || null;
 
   const pageBackgroundUri = lerImagemDataUri(pageBackgroundPath);
   const headerBannerUri = lerImagemDataUri(headerBannerPath);
+  const headerLogoUri = lerImagemDataUri(headerLogoPath);
   const sigUri = lerImagemDataUri(sigPath);
   const footerLogoUri = lerImagemDataUri(footerLogoPath);
 
   const ehStationeryFullPage = Boolean(
     pageBackgroundUri && (visual.stationeryMode === 'full_page_background' || !visual.stationeryMode)
   );
+  const ehInlineLogoHeader = Boolean(
+    !ehStationeryFullPage &&
+    (visual.stationeryMode === 'inline_logo_header' || visual.headerMode === 'inline_logo_beside_patient') &&
+    headerLogoUri
+  );
 
   const margins = visual.margins || {
     topFirstPage: '20mm',
     topContinuationPages: '20mm',
     bottom: '20mm',
-    left: '15mm',
-    right: '15mm'
+    left: '20mm',
+    right: '20mm'
   };
 
   // Compatível tanto com patientHeader (novo formato agnóstico) quanto com patientGrid (legado)
@@ -128,7 +146,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
         { key: 'sexo', label: 'Sexo:', widthPct: 16 },
         { key: 'idade', label: 'Idade:', widthPct: 28 }
       ],
-      [{ key: 'tutor', label: 'Tutor(a):', widthPct: 100 }],
+      [{ key: 'tutor', label: 'Responsável:', widthPct: 100 }],
       [{ key: 'requisitante', label: 'Médico(a) Veterinário(a) Requisitante:', widthPct: 100 }]
     ]
   };
@@ -136,8 +154,10 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   const tCfg = visual.titleConfig || {
     showTextTitle: !ehStationeryFullPage,
     text: 'LAUDO ULTRASSONOGRÁFICO',
-    fontFamily: 'Calibri, Arial, sans-serif',
-    fontSize: '11pt',
+    subtitle: null,
+    fontFamily: 'Calibri, Carlito, Arial, sans-serif',
+    fontSize: '12pt',
+    subtitleFontSize: '8pt',
     color: '#000000',
     bold: true,
     underline: false,
@@ -148,9 +168,9 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
 
   const bTypo = visual.bodyTypography || {
     fontFamily: 'Calibri, Carlito, Arial, sans-serif',
-    fontSize: '11pt',
-    lineHeight: '1.4',
-    paragraphSpacing: '8pt',
+    fontSize: '10.5pt',
+    lineHeight: '1.35',
+    paragraphSpacing: '10pt',
     textAlign: 'justify',
     organLabelCase: 'UPPERCASE',
     organLabelBold: true,
@@ -159,18 +179,23 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   };
 
   const sCfg = visual.signatureConfig || {
-    alignment: 'center',
+    alignment: 'right',
     paddingRightMm: '0mm',
-    marginTopMm: '12mm',
+    marginTopMm: '10mm',
+    hasTopLine: false,
     order: 'image_above_text',
     textLines: [],
-    signatureImageHeightMm: '14mm'
+    signatureImageHeightMm: '15mm'
   };
 
   const fCfg = visual.footerConfig || {
-    showOnTextPages: ehStationeryFullPage ? 'baked_in_stationery' : 'last_text_page_disclaimer_all_text_pages_logo',
+    showOnTextPages: ehStationeryFullPage ? 'baked_in_stationery' : 'all_text_pages',
     showOnImagePages: ehStationeryFullPage,
     disclaimerText: null,
+    disclaimerFontFamily: 'Arial, Calibri, sans-serif',
+    disclaimerFontSize: '8pt',
+    disclaimerItalic: true,
+    hasTopBorder: false,
     contactLines: [],
     showFooterLogo: Boolean(footerLogoUri)
   };
@@ -178,12 +203,16 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   const imgCfg = visual.imageGridConfig || {
     columns: 2,
     rowsPerPage: ehStationeryFullPage ? 3 : 4,
-    colGapMm: ehStationeryFullPage ? '12.5mm' : '1mm',
-    rowGapMm: ehStationeryFullPage ? '0mm' : '1mm',
-    cardHeightMm: ehStationeryFullPage ? '56.5mm' : '64mm',
+    colGapMm: ehStationeryFullPage ? '12.5mm' : '8mm',
+    rowGapMm: ehStationeryFullPage ? '0mm' : '4mm',
+    cardWidthMm: null,
+    cardHeightMm: ehStationeryFullPage ? '56.5mm' : '56mm',
     border: 'none',
     pagePaddingTopMm: margins.topContinuationPages || '20mm',
-    pagePaddingSidesMm: margins.left || '15mm'
+    pagePaddingLeftMm: margins.left || '15mm',
+    pagePaddingRightMm: margins.right || '15mm',
+    pagePaddingSidesMm: margins.left || '15mm',
+    centerLastOddImage: false
   };
 
   const formatarValorPaciente = (val, def = '', preservarDr = false) => {
@@ -210,48 +239,80 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   };
 
   const usarTabelaComBordas = pHeader.layoutType === 'boxed_table' && Array.isArray(pHeader.rows) && pHeader.rows.length > 0;
+  const labelWrap = (lbl) => (pHeader.labelBold ? `<strong>${lbl}</strong>` : lbl);
+
+  const colsPadrao = [
+    [
+      { key: 'nome', label: 'Nome:' },
+      { key: 'especie', label: 'Espécie:' },
+      { key: 'idade', label: 'Idade:' }
+    ],
+    [
+      { key: 'tutor', label: 'Responsável:' },
+      { key: 'sexo', label: 'Sexo:' },
+      { key: 'data', label: 'Data:' }
+    ]
+  ];
+  const colsEfetivas = (Array.isArray(pHeader.columns) && pHeader.columns.some(c => Array.isArray(c) && c.length > 0))
+    ? pHeader.columns.filter(c => Array.isArray(c) && c.length > 0)
+    : colsPadrao;
+
+  const temDivisorInferior = pHeader.bottomDivider === true || (
+    typeof pHeader.bottomDivider === 'object' && pHeader.bottomDivider !== null && pHeader.bottomDivider.enabled === true
+  );
 
   let blocoPacienteHtml = '';
-  if (usarTabelaComBordas) {
+  let inlineHeaderHtml = '';
+  let inlineHeaderHeightMm = 0;
+
+  if (ehInlineLogoHeader) {
+    const logoBox = visual.headerLogoBoxMm || { side: 'left', xMm: 6, yMm: 7, widthMm: 35, heightMm: 16 };
+    const headerTopMm = pHeader.headerTopMm || 10;
+    const headerBottomMm = pHeader.headerBottomMm || (headerTopMm + 12);
+    const logoBottomMm = logoBox.yMm + logoBox.heightMm;
+    inlineHeaderHeightMm = Number(Math.max(headerBottomMm + 3, logoBottomMm + 2).toFixed(1));
+
+    const colPositions = Array.isArray(pHeader.colXPositionsMm) && pHeader.colXPositionsMm.length > 0
+      ? pHeader.colXPositionsMm
+      : (logoBox.side === 'left' ? [logoBox.xMm + logoBox.widthMm + 8, logoBox.xMm + logoBox.widthMm + 68] : [20, 82]);
+
+    const colsPosHtml = colsEfetivas.map((col, idx) => {
+      const xPos = colPositions[idx] !== undefined
+        ? colPositions[idx]
+        : (colPositions[0] + idx * 62);
+      const linhas = col.map((campo) => {
+        const val = mapaValoresPaciente[campo.key] ?? formatarValorPaciente(dadosPaciente[campo.key], campo.default || '');
+        return `<p>${labelWrap(normalizarRotuloResponsavel(campo.label))} ${val}</p>`;
+      }).join('\n');
+      return `<div class="inline-patient-col" style="left: ${xPos}mm; top: ${headerTopMm}mm;">${linhas}</div>`;
+    }).join('\n');
+
+    inlineHeaderHtml = `
+      <div class="inline-page-header" style="height: ${inlineHeaderHeightMm}mm;">
+        <img src="${headerLogoUri}" class="inline-header-logo" style="left: ${logoBox.xMm}mm; top: ${logoBox.yMm}mm; width: ${logoBox.widthMm}mm; height: ${logoBox.heightMm}mm;" alt="Logo">
+        ${colsPosHtml}
+        ${temDivisorInferior ? `<div class="inline-header-divider" style="left: ${margins.left || '20mm'}; right: ${margins.right || '20mm'};"></div>` : ''}
+      </div>
+    `;
+  } else if (usarTabelaComBordas) {
     const linhasTabelaHtml = pHeader.rows.map((rowCells) => {
       const celulasHtml = rowCells.map((cell) => {
         const val = mapaValoresPaciente[cell.key] ?? formatarValorPaciente(dadosPaciente[cell.key], '');
         const w = cell.widthPct || Math.floor(100 / Math.max(1, rowCells.length));
-        return `<div class="patient-table-cell" style="width: ${w}%;"><strong>${cell.label}</strong> ${val}</div>`;
+        return `<div class="patient-table-cell" style="width: ${w}%;"><strong>${normalizarRotuloResponsavel(cell.label)}</strong> ${val}</div>`;
       }).join('\n');
       return `<div class="patient-table-row">${celulasHtml}</div>`;
     }).join('\n');
 
     blocoPacienteHtml = `<div class="patient-boxed-table">${linhasTabelaHtml}</div>`;
   } else {
-    const cols = Array.isArray(pHeader.columns) && pHeader.columns.length > 0
-      ? pHeader.columns
-      : [
-          [
-            { key: 'data', label: 'Data:' },
-            { key: 'nome', label: 'Paciente:' },
-            { key: 'sexo', label: 'Sexo:' },
-            { key: 'especie', label: 'Espécie:' },
-            { key: 'requisitante', label: 'Requisitante:' }
-          ],
-          [
-            { key: 'idade', label: 'Idade:' },
-            { key: 'tutor', label: 'Tutor(a):' },
-            { key: 'raca', label: 'Raça:' }
-          ]
-        ];
-
-    const colunasHtml = cols.map((col) => {
+    const colunasHtml = colsEfetivas.map((col) => {
       const linhas = col.map((campo) => {
         const val = mapaValoresPaciente[campo.key] ?? formatarValorPaciente(dadosPaciente[campo.key], campo.default || '');
-        return `<p><strong>${campo.label}</strong> ${val}</p>`;
+        return `<p>${labelWrap(normalizarRotuloResponsavel(campo.label))} ${val}</p>`;
       }).join('\n');
       return `<div class="patient-col">${linhas}</div>`;
     }).join('\n');
-
-    const temDivisorInferior = pHeader.bottomDivider !== false && (
-      typeof pHeader.bottomDivider === 'boolean' ? pHeader.bottomDivider : pHeader.bottomDivider?.enabled !== false
-    );
 
     blocoPacienteHtml = `
       <div class="patient-grid">
@@ -308,27 +369,33 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     let conteudo = l.text || '';
     if (l.italic) conteudo = `<em>${conteudo}</em>`;
     if (l.bold) conteudo = `<strong>${conteudo}</strong>`;
-    return `<p class="sig-line">${conteudo}</p>`;
+    return `<p class="sig-line" ${l.fontSize ? `style="font-size: ${l.fontSize};"` : ''}>${conteudo}</p>`;
   }).join('\n');
 
   const imgAssinaturaHtml = sigUri
     ? `<div class="sig-img-wrap"><img src="${sigUri}" class="sig-img" alt="Assinatura"></div>`
+    : '';
+  const linhaAssinaturaHtml = sCfg.hasTopLine
+    ? `<div class="sig-top-line"></div>`
     : '';
 
   const blocoAssinaturaHtml = `
     <div class="signature-block">
       <div class="signature-inner">
         ${sCfg.order === 'text_above_image'
-          ? `${linhasAssinaturaTexto}\n${imgAssinaturaHtml}`
-          : `${imgAssinaturaHtml}\n${linhasAssinaturaTexto}`}
+          ? `${linhaAssinaturaHtml}\n${linhasAssinaturaTexto}\n${imgAssinaturaHtml}`
+          : `${imgAssinaturaHtml}\n${linhaAssinaturaHtml}\n${linhasAssinaturaTexto}`}
       </div>
     </div>
   `;
 
   const mostrarRodapeHtmlNasPaginasTexto = !ehStationeryFullPage && fCfg.showOnTextPages !== 'baked_in_stationery';
+  const mostrarRodapeEmTodasPaginasTexto = mostrarRodapeHtmlNasPaginasTexto && fCfg.showOnTextPages === 'all_text_pages';
+  const mostrarRodapeNasPaginasImagem = !ehStationeryFullPage && Boolean(fCfg.showOnImagePages && fCfg.disclaimerText);
 
   const blocoDisclaimerRodapeFinalHtml = mostrarRodapeHtmlNasPaginasTexto ? `
     <div class="final-footer-wrap">
+      ${fCfg.hasTopBorder ? `<div class="footer-top-border"></div>` : ''}
       ${fCfg.disclaimerText ? `<div class="disclaimer-text">${fCfg.disclaimerText}</div>` : ''}
       ${(fCfg.contactLines && fCfg.contactLines.length > 0) ? `
         <div class="contact-divider"></div>
@@ -344,14 +411,24 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     </div>
   ` : '';
 
-  const blocoMiniLogoPag1Html = (mostrarRodapeHtmlNasPaginasTexto && fCfg.showFooterLogo && footerLogoUri)
-    ? `<div class="footer-mini-logo-wrap"><img src="${footerLogoUri}" class="footer-mini-logo" alt="Logo Rodapé"></div>`
-    : '';
+  const blocoRodapePag1Html = mostrarRodapeEmTodasPaginasTexto
+    ? blocoDisclaimerRodapeFinalHtml
+    : ((mostrarRodapeHtmlNasPaginasTexto && fCfg.showFooterLogo && footerLogoUri)
+        ? `<div class="footer-mini-logo-wrap"><img src="${footerLogoUri}" class="footer-mini-logo" alt="Logo Rodapé"></div>`
+        : '');
+
+  const blocoRodapePagImagemHtml = mostrarRodapeNasPaginasImagem ? `
+    <div class="final-footer-wrap">
+      ${fCfg.hasTopBorder ? `<div class="footer-top-border"></div>` : ''}
+      <div class="disclaimer-text">${fCfg.disclaimerText}</div>
+    </div>
+  ` : '';
 
   const mostrarTituloTexto = tCfg.showTextTitle !== false && Boolean(tCfg.text && String(tCfg.text).trim());
   const blocoTituloHtml = mostrarTituloTexto ? `
     <div class="report-title-box">
       <h1>${tCfg.text}</h1>
+      ${tCfg.subtitle ? `<p class="report-subtitle">${tCfg.subtitle}</p>` : ''}
     </div>
   ` : '';
 
@@ -371,9 +448,30 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     ? `<img src="${pageBackgroundUri}" class="stationery-bg-img" alt="">`
     : '';
 
+  const repetirCabecalhoInlinePag2 = ehInlineLogoHeader && Boolean(visual.repeatPatientHeaderOnTextPages || visual.repeatHeaderOnTextPage2);
+  const repetirCabecalhoInlineFotos = ehInlineLogoHeader && Boolean(visual.repeatPatientHeaderOnImagePages || visual.repeatHeaderOnImagePages);
+
+  // Calcula padding-top efetivo do corpo abaixo do cabeçalho inline (quando houver)
+  const titleMarginTopNum = parseMmNumber(tCfg.marginTopMm, 5);
   const paddingTopPag1 = ehStationeryFullPage
     ? (margins.topFirstPage || '50mm')
-    : (headerBannerUri ? '4mm' : (margins.topFirstPage || '20mm'));
+    : (ehInlineLogoHeader
+        ? `${Math.max(2, titleMarginTopNum - 2)}mm`
+        : (headerBannerUri ? '4mm' : (margins.topFirstPage || '20mm')));
+
+  const topContNum = parseMmNumber(margins.topContinuationPages, 22);
+  const paddingTopPag2 = repetirCabecalhoInlinePag2
+    ? `${Math.max(3, Number((topContNum - inlineHeaderHeightMm).toFixed(1)))}mm`
+    : (margins.topContinuationPages || '22mm');
+
+  const imgTopNum = parseMmNumber(imgCfg.pagePaddingTopMm, 28);
+  const paddingTopFotos = repetirCabecalhoInlineFotos
+    ? `${Math.max(2, Number((imgTopNum - inlineHeaderHeightMm).toFixed(1)))}mm`
+    : (imgCfg.pagePaddingTopMm || '28mm');
+
+  const imgLeftPad = imgCfg.pagePaddingLeftMm || imgCfg.pagePaddingSidesMm || margins.left || '20mm';
+  const imgRightPad = imgCfg.pagePaddingRightMm || imgCfg.pagePaddingSidesMm || margins.right || '20mm';
+  const bottomPadMm = margins.bottom || '16mm';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -385,8 +483,8 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
       font-family: ${bTypo.fontFamily || layout.font_family || 'Calibri, Carlito, Arial, sans-serif'};
-      font-size: ${bTypo.fontSize || layout.font_size_body || '11pt'};
-      line-height: ${bTypo.lineHeight || layout.line_height || '1.4'};
+      font-size: ${bTypo.fontSize || layout.font_size_body || '10pt'};
+      line-height: ${bTypo.lineHeight || layout.line_height || '1.35'};
       color: #111;
       margin: 0;
       padding: 0;
@@ -427,6 +525,33 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       flex-direction: column;
       justify-content: space-between;
     }
+    /* Cabeçalho com logo posicionada ao lado dos dados do paciente */
+    .inline-page-header {
+      position: relative;
+      width: 210mm;
+      flex-shrink: 0;
+    }
+    .inline-header-logo {
+      position: absolute;
+      object-fit: contain;
+      display: block;
+    }
+    .inline-patient-col {
+      position: absolute;
+      font-family: ${pHeader.fontFamily || 'Arial, Helvetica, sans-serif'};
+      font-size: ${pHeader.fontSize || '10pt'};
+      line-height: 1.28;
+      color: #111;
+      white-space: nowrap;
+    }
+    .inline-patient-col p {
+      margin: 0;
+    }
+    .inline-header-divider {
+      position: absolute;
+      bottom: 0;
+      border-bottom: 1px solid #000;
+    }
     .full-bleed-banner {
       width: 100%;
       margin: 0;
@@ -441,13 +566,13 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       display: block;
     }
     .page-1-body {
-      padding: ${paddingTopPag1} ${margins.right || '20mm'} ${ehStationeryFullPage ? '30mm' : (margins.bottom || '24mm')} ${margins.left || '20mm'};
+      padding: ${paddingTopPag1} ${margins.right || '20mm'} ${ehStationeryFullPage ? '30mm' : '4mm'} ${margins.left || '20mm'};
       flex: 1;
       display: flex;
       flex-direction: column;
     }
     .page-2-body {
-      padding: ${margins.topContinuationPages || '22mm'} ${margins.right || '20mm'} ${margins.bottom || '24mm'} ${margins.left || '20mm'};
+      padding: ${paddingTopPag2} ${margins.right || '20mm'} 4mm ${margins.left || '20mm'};
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -459,8 +584,8 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       border-top: 1px solid #9E9E9E;
       border-left: 1px solid #9E9E9E;
       margin-bottom: 3.5mm;
-      font-family: ${bTypo.fontFamily || 'Calibri, Carlito, Arial, sans-serif'};
-      font-size: 11pt;
+      font-family: ${pHeader.fontFamily || bTypo.fontFamily || 'Calibri, Carlito, Arial, sans-serif'};
+      font-size: ${pHeader.fontSize || '11pt'};
       line-height: 1.25;
       background: transparent;
     }
@@ -481,15 +606,15 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       display: flex;
       justify-content: space-between;
       padding: 2mm 4mm 4mm 4mm;
-      font-family: ${bTypo.fontFamily || 'Calibri, Arial, sans-serif'};
-      font-size: 11pt;
-      line-height: 1.42;
+      font-family: ${pHeader.fontFamily || bTypo.fontFamily || 'Calibri, Arial, sans-serif'};
+      font-size: ${pHeader.fontSize || '10pt'};
+      line-height: 1.35;
     }
     .patient-col {
       width: 48%;
     }
     .patient-col p {
-      margin: 2px 0;
+      margin: 1.5px 0;
     }
     .patient-divider {
       border: none;
@@ -498,24 +623,33 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     }
     .report-title-box {
       text-align: ${tCfg.alignment || 'center'};
-      margin-bottom: ${tCfg.marginBottomMm || '8mm'};
+      margin-bottom: ${tCfg.marginBottomMm || '6mm'};
     }
     .report-title-box h1 {
-      font-family: ${tCfg.fontFamily || 'Calibri, Arial, sans-serif'};
-      font-size: ${tCfg.fontSize || '11pt'};
+      font-family: ${tCfg.fontFamily || bTypo.fontFamily || 'Calibri, Carlito, Arial, sans-serif'};
+      font-size: ${tCfg.fontSize || '12pt'};
       color: ${tCfg.color || '#000'};
-      font-weight: bold;
+      font-weight: ${tCfg.bold === false ? 'normal' : '600'};
       margin: 0;
       display: inline-block;
       ${tCfg.underline ? 'border-bottom: 1.2px solid #000; padding-bottom: 1px;' : ''}
     }
+    .report-subtitle {
+      font-family: ${tCfg.fontFamily || bTypo.fontFamily || 'Calibri, Carlito, Arial, sans-serif'};
+      font-size: ${tCfg.subtitleFontSize || '8pt'};
+      font-style: italic;
+      color: #111;
+      margin: 1.5mm auto 0 auto;
+      line-height: 1.25;
+      max-width: 162mm;
+    }
     .organs-content {
       text-align: ${bTypo.textAlign || 'justify'};
-      font-size: ${bTypo.fontSize || '11pt'};
-      line-height: ${bTypo.lineHeight || '1.4'};
+      font-size: ${bTypo.fontSize || '10pt'};
+      line-height: ${bTypo.lineHeight || '1.35'};
     }
     .organs-content p {
-      margin: 0 0 ${bTypo.paragraphSpacing || '8pt'} 0;
+      margin: 0 0 ${bTypo.paragraphSpacing || '10pt'} 0;
     }
     .obs-italic-line {
       font-size: 8.5pt;
@@ -525,41 +659,54 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     }
     .signature-block {
       display: flex;
-      justify-content: ${sCfg.alignment === 'center' ? 'center' : 'flex-end'};
-      padding-right: ${sCfg.alignment === 'center' ? '0' : (sCfg.paddingRightMm || '22mm')};
-      margin-top: ${sCfg.marginTopMm || '14mm'};
+      justify-content: ${sCfg.alignment === 'left' ? 'flex-start' : (sCfg.alignment === 'center' ? 'center' : 'flex-end')};
+      padding-right: ${sCfg.alignment === 'right' ? (sCfg.paddingRightMm || '0mm') : '0'};
+      margin-top: ${sCfg.marginTopMm || '8mm'};
     }
     .signature-inner {
-      text-align: center;
-      min-width: 65mm;
+      text-align: ${sCfg.alignment === 'right' ? 'right' : (sCfg.alignment === 'left' ? 'left' : 'center')};
+      min-width: 45mm;
+    }
+    .sig-top-line {
+      width: 56mm;
+      border-top: 1px solid #333;
+      margin: 0 0 2mm auto;
     }
     .sig-line {
       margin: 1px 0;
-      font-size: 11pt;
+      font-size: 10pt;
+      color: #111;
     }
     .sig-img-wrap {
-      margin: 2px 0;
+      margin: 0 0 1mm 0;
+      text-align: center;
     }
     .sig-img {
-      height: ${sCfg.signatureImageHeightMm || '13mm'};
+      height: ${sCfg.signatureImageHeightMm || '15mm'};
       width: auto;
       display: inline-block;
     }
     .final-footer-wrap {
-      padding: 0 ${margins.right || '15mm'} 3mm ${margins.left || '15mm'};
+      padding: 0 ${margins.right || '20mm'} ${bottomPadMm} ${margins.left || '20mm'};
+      flex-shrink: 0;
+    }
+    .footer-top-border {
+      border-top: 1px solid #bbb;
+      margin-bottom: 2mm;
     }
     .disclaimer-text {
-      font-family: ${fCfg.disclaimerFontFamily || 'Calibri, sans-serif'};
-      font-size: ${fCfg.disclaimerFontSize || '8.5pt'};
-      line-height: 1.35;
+      font-family: ${fCfg.disclaimerFontFamily || 'Arial, Calibri, sans-serif'};
+      font-size: ${fCfg.disclaimerFontSize || '8pt'};
+      font-style: ${fCfg.disclaimerItalic === false ? 'normal' : 'italic'};
+      line-height: 1.25;
       text-align: center;
       color: #111;
       max-width: 175mm;
-      margin: 0 auto 3mm auto;
+      margin: 0 auto;
     }
     .contact-divider {
-      border-top: 1px ${fCfg.dividerStyle || 'dashed'} #222;
-      margin: 0 2mm 2mm 2mm;
+      border-top: 1px ${fCfg.dividerStyle && fCfg.dividerStyle !== 'none' ? fCfg.dividerStyle : 'dashed'} #222;
+      margin: 2mm 2mm 2mm 2mm;
     }
     .contact-lines {
       font-family: ${fCfg.contactFontFamily || 'Calibri, sans-serif'};
@@ -581,19 +728,28 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       display: inline-block;
     }
     .image-page-body {
-      padding: ${imgCfg.pagePaddingTopMm || '50mm'} ${imgCfg.pagePaddingSidesMm || '20mm'} ${margins.bottom || '24mm'} ${imgCfg.pagePaddingSidesMm || '20mm'};
+      padding: ${paddingTopFotos} ${imgRightPad} 4mm ${imgLeftPad};
       flex: 1;
     }
     .ultrasound-grid {
       display: grid;
-      grid-template-columns: repeat(${imgCfg.columns || 2}, 1fr);
+      grid-template-columns: repeat(${imgCfg.columns || 2}, minmax(0, 1fr));
       column-gap: ${imgCfg.colGapMm || '10mm'};
-      row-gap: ${imgCfg.rowGapMm || '0mm'};
+      row-gap: ${imgCfg.rowGapMm || '4mm'};
       align-content: start;
+      width: 100%;
+    }
+    .ultrasound-grid.single-centered {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .ultrasound-grid.single-centered .ultrasound-cell {
+      width: ${imgCfg.cardWidthMm || '75mm'};
     }
     .ultrasound-cell {
       background: #000;
-      height: ${imgCfg.cardHeightMm || '56.5mm'};
+      height: ${imgCfg.cardHeightMm || '56.2mm'};
       display: flex;
       align-items: center;
       justify-content: center;
@@ -603,7 +759,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     .ultrasound-cell img {
       width: 100%;
       height: 100%;
-      object-fit: fill;
+      object-fit: contain;
       display: block;
     }
   </style>
@@ -614,9 +770,10 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     ${bgLayerPag1Html}
     <div class="page-foreground">
       <div>
-        ${(!ehStationeryFullPage && headerBannerUri) ? `<div class="full-bleed-banner"><img src="${headerBannerUri}" alt="Cabeçalho"></div>` : ''}
+        ${ehInlineLogoHeader ? inlineHeaderHtml : ''}
+        ${(!ehStationeryFullPage && !ehInlineLogoHeader && headerBannerUri) ? `<div class="full-bleed-banner"><img src="${headerBannerUri}" alt="Cabeçalho"></div>` : ''}
         <div class="page-1-body">
-          ${blocoPacienteHtml}
+          ${!ehInlineLogoHeader ? blocoPacienteHtml : ''}
           ${blocoTituloHtml}
           <div class="organs-content">
             ${orgaosPag1}
@@ -624,7 +781,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
           ${!usarDuasPaginasTexto ? blocoAssinaturaHtml : ''}
         </div>
       </div>
-      ${usarDuasPaginasTexto ? blocoMiniLogoPag1Html : blocoDisclaimerRodapeFinalHtml}
+      ${usarDuasPaginasTexto ? blocoRodapePag1Html : blocoDisclaimerRodapeFinalHtml}
     </div>
   </div>
 
@@ -633,11 +790,14 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   <div class="cloned-page">
     ${bgLayerPag2Html}
     <div class="page-foreground">
-      <div class="page-2-body">
-        <div class="organs-content">
-          ${orgaosPag2}
+      <div>
+        ${repetirCabecalhoInlinePag2 ? inlineHeaderHtml : ''}
+        <div class="page-2-body">
+          <div class="organs-content">
+            ${orgaosPag2}
+          </div>
+          ${blocoAssinaturaHtml}
         </div>
-        ${blocoAssinaturaHtml}
       </div>
       ${blocoDisclaimerRodapeFinalHtml}
     </div>
@@ -645,23 +805,30 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   ` : ''}
 
   <!-- PÁGINAS SEGUINTES: MOSAICO DE FOTOS DE ULTRASSOM -->
-  ${paginasImagens.map((fotos) => `
+  ${paginasImagens.map((fotos) => {
+    const ehUnicaCentralizada = fotos.length === 1 && Boolean(imgCfg.centerLastOddImage);
+    return `
   <div class="cloned-page">
     ${bgLayerPagFotosHtml}
     <div class="page-foreground">
-      <div class="image-page-body">
-        <div class="ultrasound-grid">
-          ${fotos.map((fotoPath) => {
-            const srcUri = fotoPath.startsWith('data:')
-              ? fotoPath
-              : lerImagemDataUri(fotoPath);
-            return `<div class="ultrasound-cell"><img src="${srcUri}" alt="Ultrassom"></div>`;
-          }).join('\n')}
+      <div>
+        ${repetirCabecalhoInlineFotos ? inlineHeaderHtml : ''}
+        <div class="image-page-body">
+          <div class="ultrasound-grid${ehUnicaCentralizada ? ' single-centered' : ''}">
+            ${fotos.map((fotoPath) => {
+              const srcUri = fotoPath.startsWith('data:')
+                ? fotoPath
+                : lerImagemDataUri(fotoPath);
+              return `<div class="ultrasound-cell"><img src="${srcUri}" alt="Ultrassom"></div>`;
+            }).join('\n')}
+          </div>
         </div>
       </div>
+      ${blocoRodapePagImagemHtml}
     </div>
   </div>
-  `).join('\n')}
+  `;
+  }).join('\n')}
 </body>
 </html>`;
 }
@@ -686,16 +853,32 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   const crmvMedico = opcoes.crmvMedico || perfilLaudo?.crmvDetectado || usuario.crmv || '';
   const clinicaNome = opcoes.clinicaNome || perfilLaudo?.clinicaDetectada || usuario.nomeClinica || 'Vetaro';
 
+  // Suporta tanto ConfiguracaoLayout clonado quanto visualConfigClonado embutido no PerfilLaudo
+  const visualClonadoPerfil = perfilLaudo?.templateVisual?.visualConfigClonado || null;
+  const layoutEfetivo = (!layout?.visual_config_json && visualClonadoPerfil)
+    ? {
+        ...layout,
+        modo_template: 'clonado_pdf',
+        visual_config_json: visualClonadoPerfil,
+        writing_style_json: perfilLaudo?.templateVisual?.writingStyleClonado || layout?.writing_style_json || null,
+        page_background_url: visualClonadoPerfil.pageBackgroundUrl || layout?.page_background_url || null,
+        header_banner_url: visualClonadoPerfil.headerBannerUrl || layout?.header_banner_url || null,
+        header_logo_url: visualClonadoPerfil.headerLogoUrl || layout?.header_logo_url || null,
+        footer_logo_url: visualClonadoPerfil.footerLogoUrl || layout?.footer_logo_url || null,
+        assinatura_extraida_url: visualClonadoPerfil.assinaturaUrl || layout?.assinatura_extraida_url || null
+      }
+    : layout;
+
   const usarModoClonado = Boolean(
-    layout?.modo_template === 'clonado_pdf' ||
-    layout?.visual_config_json ||
+    layoutEfetivo?.modo_template === 'clonado_pdf' ||
+    layoutEfetivo?.visual_config_json ||
     opcoes.forcarTemplateClonado
   );
 
   let html = '';
 
   if (usarModoClonado) {
-    html = gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layout, {
+    html = gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layoutEfetivo, {
       usuario,
       nomeMedico,
       crmvMedico,
@@ -749,7 +932,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
             <p><strong>Idade:</strong> <span contenteditable="true">${dadosPaciente.idade || 'Não informada'}</span></p>
           </div>
           <div class="col">
-            <p><strong>Tutor:</strong> <span contenteditable="true">${dadosPaciente.tutor || ''}</span></p>
+            <p><strong>Responsável:</strong> <span contenteditable="true">${dadosPaciente.tutor || ''}</span></p>
             <p><strong>Sexo:</strong> <span contenteditable="true">${dadosPaciente.sexo || ''}</span></p>
             <p><strong>Data:</strong> <span contenteditable="true">${dadosPaciente.data || ''}</span></p>
           </div>
@@ -890,19 +1073,19 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     } catch (e) {}
   }
 
-  const caminhoLogoEfetivo = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
-    ? usuario.logoUrl
-    : null;
-  const templateVisual = perfilLaudo?.templateVisual || layout?.visual_config_json || {};
+  const caminhoLogoEfetivo = (layoutEfetivo?.header_logo_url && fs.existsSync(layoutEfetivo.header_logo_url))
+    ? layoutEfetivo.header_logo_url
+    : ((usuario.logoUrl && fs.existsSync(usuario.logoUrl)) ? usuario.logoUrl : null);
+  const templateVisual = perfilLaudo?.templateVisual || layoutEfetivo?.visual_config_json || {};
 
-  await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layout, {
+  await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layoutEfetivo, {
     usuario,
     nomeMedico,
     crmvMedico,
     clinicaNome,
     perfilLaudo,
     templateVisual,
-    assinaturaPath: layout?.assinatura_extraida_url || usuario.assinaturaUrl || null
+    assinaturaPath: layoutEfetivo?.assinatura_extraida_url || usuario.assinaturaUrl || null
   });
 
   return { caminhoPdf, caminhoDocx };

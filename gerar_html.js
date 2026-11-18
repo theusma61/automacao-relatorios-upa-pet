@@ -31,7 +31,7 @@ function gerarRelatorioHTML(dadosPaciente, laudoTexto, imagensUrls = [], caminho
           <p><strong>Idade:</strong> ${dadosPaciente.idade || ''}</p>
         </div>
         <div class="col">
-          <p><strong>Tutor:</strong> ${dadosPaciente.tutor || ''}</p>
+          <p><strong>Responsável:</strong> ${dadosPaciente.tutor || ''}</p>
           <p><strong>Sexo:</strong> ${dadosPaciente.sexo || ''}</p>
           <p><strong>Data:</strong> ${dadosPaciente.data || ''}</p>
         </div>

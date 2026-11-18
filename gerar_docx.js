@@ -1,3 +1,4 @@
+const { normalizarRotuloResponsavel } = require('./extrator_padrao_laudo');
 const fs = require('fs');
 const {
   Document,
@@ -56,7 +57,7 @@ function criarCabecalhoDocx(dados, logoPath, cfgDocx, clinicaNome = 'Vetaro') {
     new TableCell({
       width: { size: larguraColDir, type: WidthType.PERCENTAGE },
       children: [
-        new Paragraph({ children: [new TextRun({ text: 'Tutor: ', bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.tutor || '', size: szCabecalho, font: fonte })] }),
+        new Paragraph({ children: [new TextRun({ text: 'Responsável: ', bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.tutor || '', size: szCabecalho, font: fonte })] }),
         new Paragraph({ children: [new TextRun({ text: 'Sexo: ', bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.sexo || '', size: szCabecalho, font: fonte })] }),
         new Paragraph({ children: [new TextRun({ text: 'Data: ', bold: true, size: szCabecalho, font: fonte }), new TextRun({ text: dados.data || '', size: szCabecalho, font: fonte })] })
       ]
@@ -110,7 +111,7 @@ function criarCabecalhoClonadoDocx(dados, headerBannerPath, visual, fonte) {
         { key: 'sexo', label: 'Sexo:', widthPct: 16 },
         { key: 'idade', label: 'Idade:', widthPct: 28 }
       ],
-      [{ key: 'tutor', label: 'Tutor(a):', widthPct: 100 }],
+      [{ key: 'tutor', label: 'Responsável:', widthPct: 100 }],
       [{ key: 'requisitante', label: 'Médico(a) Veterinário(a) Requisitante:', widthPct: 100 }]
     ]
   };

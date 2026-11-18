@@ -206,6 +206,7 @@ export default function EstiloLaudoTab({
           clinicaDetectada: detectado.clinicaDetectada || userProfile.nomeClinica || '',
           layoutDetectado: detectado.layoutDetectado || {},
           templateVisual: {
+            ...tVisual,
             tipoCabecalho: tVisual.tipoCabecalho || 'logo-esquerda-texto-direita',
             tipoDadosPaciente: tVisual.tipoDadosPaciente || 'tabela-zebrada',
             tituloDocumento: tVisual.tituloDocumento || 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL',
@@ -960,6 +961,70 @@ export default function EstiloLaudoTab({
                         onChange={(e) => setPerfilEditando({
                           ...perfilEditando,
                           templateVisual: { ...tv, marginRight: e.target.value }
+                        })}
+                        className={`w-full px-3 py-1.5 rounded-lg text-xs border ${
+                          darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Espaçamento entre Categorias / Órgãos e Entrelinha */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Espaço entre Categorias (Órgãos)
+                      </label>
+                      <select
+                        value={tv.paragraphSpacing || '8pt'}
+                        onChange={(e) => setPerfilEditando({
+                          ...perfilEditando,
+                          templateVisual: { ...tv, paragraphSpacing: e.target.value }
+                        })}
+                        className={`w-full px-3 py-1.5 rounded-lg text-xs border font-medium ${
+                          darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        {['4pt', '6pt', '8pt', '10pt', '12pt', '14pt', '16pt', '18pt', '20pt', '22pt'].map(sp => (
+                          <option key={sp} value={sp}>{sp}{sp === '6pt' ? ' (Compacto)' : sp === '10pt' ? ' (Equilibrado)' : sp === '16pt' ? ' (Amplo)' : ''}</option>
+                        ))}
+                        {tv.paragraphSpacing && !['4pt', '6pt', '8pt', '10pt', '12pt', '14pt', '16pt', '18pt', '20pt', '22pt'].includes(tv.paragraphSpacing) && (
+                          <option value={tv.paragraphSpacing}>{tv.paragraphSpacing} (Extraído)</option>
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Espaçamento entre Linhas (Entrelinha)
+                      </label>
+                      <select
+                        value={tv.lineHeight || '1.35'}
+                        onChange={(e) => setPerfilEditando({
+                          ...perfilEditando,
+                          templateVisual: { ...tv, lineHeight: e.target.value }
+                        })}
+                        className={`w-full px-3 py-1.5 rounded-lg text-xs border font-medium ${
+                          darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        {['1.15', '1.2', '1.25', '1.3', '1.35', '1.4', '1.5', '1.6'].map(lh => (
+                          <option key={lh} value={lh}>{lh}</option>
+                        ))}
+                        {tv.lineHeight && !['1.15', '1.2', '1.25', '1.3', '1.35', '1.4', '1.5', '1.6'].includes(String(tv.lineHeight)) && (
+                          <option value={tv.lineHeight}>{tv.lineHeight} (Extraído)</option>
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Tamanho do Título
+                      </label>
+                      <input
+                        type="text"
+                        value={tv.fontSizeTitulo || '12pt'}
+                        onChange={(e) => setPerfilEditando({
+                          ...perfilEditando,
+                          templateVisual: { ...tv, fontSizeTitulo: e.target.value }
                         })}
                         className={`w-full px-3 py-1.5 rounded-lg text-xs border ${
                           darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200'

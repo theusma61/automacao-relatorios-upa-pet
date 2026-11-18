@@ -79,9 +79,14 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
     }
   });
 
-  // 2. Sincronizar layout detectado com ConfiguracaoLayout do usuário
-  if (Object.keys(layout).length > 0) {
-    await salvarLayout({
+  // 2. Sincronizar layout detectado (e template clonado geométrico, se presente) com ConfiguracaoLayout do usuário
+  const tVis = dados.templateVisual || {};
+  const visualClonado = tVis.visualConfigClonado || dados.perfilClonado?.layoutVisual || null;
+  const writingClonado = tVis.writingStyleClonado || dados.perfilClonado?.estiloEscritaClinica || null;
+  const ativosClonados = tVis.ativosVisuais || dados.perfilClonado?.ativosVisuais || {};
+
+  if (Object.keys(layout).length > 0 || visualClonado) {
+    const payloadLayout = {
       font_family: layout.fontFamily,
       font_size_body: layout.fontSizeBody,
       font_size_titulo: layout.fontSizeTitulo,
@@ -93,7 +98,44 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
       paragraph_spacing: layout.paragraphSpacing,
       cor_primaria: layout.corPrimaria,
       cor_secundaria: layout.corSecundaria
-    }, { id: usuarioId, role: 'veterinario' });
+    };
+    if (visualClonado) {
+      payloadLayout.modo_template = 'clonado_pdf';
+      payloadLayout.visual_config_json = {
+        ...visualClonado,
+        bodyTypography: {
+          ...(visualClonado.bodyTypography || {}),
+          ...(layout.fontFamily ? { fontFamily: layout.fontFamily } : {}),
+          ...(layout.fontSizeBody ? { fontSize: layout.fontSizeBody } : {}),
+          ...(layout.lineHeight ? { lineHeight: String(layout.lineHeight) } : {}),
+          ...(layout.paragraphSpacing ? { paragraphSpacing: layout.paragraphSpacing } : {})
+        },
+        titleConfig: {
+          ...(visualClonado.titleConfig || {}),
+          ...(layout.fontSizeTitulo ? { fontSize: layout.fontSizeTitulo } : {}),
+          ...(tVis.tituloDocumento ? { text: tVis.tituloDocumento } : {}),
+          ...(tVis.subtituloDocumento !== undefined ? { subtitle: tVis.subtituloDocumento || null } : {})
+        },
+        margins: {
+          ...(visualClonado.margins || {}),
+          ...(layout.marginTop ? { topFirstPage: layout.marginTop } : {}),
+          ...(layout.marginBottom ? { bottom: layout.marginBottom } : {}),
+          ...(layout.marginLeft ? { left: layout.marginLeft } : {}),
+          ...(layout.marginRight ? { right: layout.marginRight } : {})
+        },
+        ...(ativosClonados.pageBackgroundUrl ? { pageBackgroundUrl: ativosClonados.pageBackgroundUrl } : {}),
+        ...(ativosClonados.headerLogoUrl ? { headerLogoUrl: ativosClonados.headerLogoUrl } : {}),
+        ...(ativosClonados.headerBannerUrl ? { headerBannerUrl: ativosClonados.headerBannerUrl } : {}),
+        ...(ativosClonados.assinaturaUrl ? { assinaturaUrl: ativosClonados.assinaturaUrl } : {}),
+        ...(ativosClonados.footerLogoUrl ? { footerLogoUrl: ativosClonados.footerLogoUrl } : {})
+      };
+      payloadLayout.writing_style_json = writingClonado || null;
+      payloadLayout.header_banner_url = ativosClonados.headerBannerUrl || null;
+      payloadLayout.footer_logo_url = ativosClonados.footerLogoUrl || null;
+      payloadLayout.assinatura_extraida_url = ativosClonados.assinaturaUrl || null;
+      payloadLayout.pdfs_referencia_qtd = quantidadeAmostras || 1;
+    }
+    await salvarLayout(payloadLayout, { id: usuarioId, role: 'veterinario' });
   }
 
   // 3. Opcionalmente atualizar CRMV e Clínica do usuário se ele permitiu
@@ -106,6 +148,12 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
   }
   if (dados.nomeDetectado && dados.atualizarUsuarioNome) {
     updateUsuario.nome = dados.nomeDetectado;
+  }
+  if (ativosClonados.headerLogoUrl) {
+    updateUsuario.logoUrl = ativosClonados.headerLogoUrl;
+  }
+  if (ativosClonados.assinaturaUrl) {
+    updateUsuario.assinaturaUrl = ativosClonados.assinaturaUrl;
   }
 
   if (Object.keys(updateUsuario).length > 0) {

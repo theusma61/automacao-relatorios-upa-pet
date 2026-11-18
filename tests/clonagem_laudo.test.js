@@ -3,10 +3,12 @@ const path = require('path');
 const {
   decodificarPng,
   codificarPng,
-  recortarImagemRgba
+  recortarImagemRgba,
+  trimImagemRgba
 } = require('../extrator_ativos_pdf');
 const {
   mapearChaveCampoPaciente,
+  normalizarRotuloResponsavel,
   extrairPadraoCompletoDePdfs
 } = require('../extrator_padrao_laudo');
 const {
@@ -196,5 +198,91 @@ describe('Motor 100% Agnóstico de Clonagem Visual e Textual de Laudos (1 a 10 P
     expect(html).not.toContain('TESTÍCULOS');
     expect(html).not.toContain('Michele Resende');
     expect(html).not.toContain('UPA PET');
+  });
+
+  test('trimImagemRgba apara margens brancas e calcula offsets exatos', () => {
+    const data = Buffer.alloc(30 * 30 * 4, 255);
+    for (let y = 10; y < 20; y++) {
+      for (let x = 8; x < 22; x++) {
+        const idx = (y * 30 + x) * 4;
+        data[idx] = 15;
+        data[idx + 1] = 25;
+        data[idx + 2] = 35;
+        data[idx + 3] = 255;
+      }
+    }
+    const decoded = decodificarPng(codificarPng({ width: 30, height: 30, data }));
+    const trimmed = trimImagemRgba(decoded, { padding: 2, removerFundoBranco: true });
+    expect(trimmed.width).toBe(18);
+    expect(trimmed.height).toBe(14);
+    expect(trimmed.offsetX).toBe(6);
+    expect(trimmed.offsetY).toBe(8);
+  });
+
+  test('gerarHtmlTemplateClonado suporta logo inline lateral (esquerda ou direita), repeticao de cabecalho/rodape e subtitulo', () => {
+    const os = require('os');
+    const tmpLogo = path.join(os.tmpdir(), `logo_test_${Date.now()}.png`);
+    const data = Buffer.alloc(10 * 10 * 4, 40);
+    fs.writeFileSync(tmpLogo, codificarPng({ width: 10, height: 10, data }));
+
+    try {
+      const html = gerarHtmlTemplateClonado(
+        { nome: 'Thor', tutor: 'João', sexo: 'Macho', especie: 'Canina', idade: '3 anos', data: '18/11/2026' },
+        [
+          { orgao: 'BEXIGA', texto: 'Normal.' },
+          { orgao: 'BAÇO', texto: 'Aumentado. DIAG DIF.: PROCESSO INFLAMATÓRIO.' }
+        ],
+        [],
+        {
+          modo_template: 'clonado_pdf',
+          header_logo_url: tmpLogo,
+          visual_config_json: {
+            stationeryMode: 'inline_logo_header',
+            headerMode: 'inline_logo_beside_patient',
+            headerLogoBoxMm: { side: 'right', xMm: 162, yMm: 10, widthMm: 32, heightMm: 15 },
+            repeatPatientHeaderOnTextPages: true,
+            repeatPatientHeaderOnImagePages: true,
+            margins: { topFirstPage: '10mm', topContinuationPages: '28mm', bottom: '14mm', left: '20mm', right: '20mm' },
+            patientHeader: {
+              layoutType: 'two_columns',
+              bottomDivider: false,
+              headerTopMm: 10,
+              headerBottomMm: 22,
+              colXPositionsMm: [20, 88],
+              columns: [[{ key: 'nome', label: 'Nome:' }], [{ key: 'tutor', label: 'Tutor:' }]]
+            },
+            titleConfig: {
+              showTextTitle: true,
+              text: 'RELATÓRIO DE ULTRASSONOGRAFIA ABDOMINAL',
+              subtitle: 'Exame em modo B.',
+              underline: false
+            },
+            bodyTypography: { fontSize: '10pt', lineHeight: '1.3', paragraphSpacing: '12pt', firstPageOrganCount: 1 },
+            signatureConfig: { alignment: 'right', hasTopLine: false, textLines: [{ text: 'Dr. Teste', italic: true }] },
+            footerConfig: { showOnTextPages: 'all_text_pages', showOnImagePages: true, disclaimerText: 'Aviso legal.', hasTopBorder: false }
+          },
+          writing_style_json: { usarDiagDifSeparado: true, usarTopicoConsideracoesSeparado: true }
+        }
+      );
+
+      expect(html).toContain('inline-page-header');
+      expect(html).toContain('left: 162mm;');
+      expect(html).toContain('report-subtitle');
+      expect(html).toContain('<em>DIAG DIF.: PROCESSO INFLAMATÓRIO.</em>');
+      expect(html).not.toContain('inline-header-divider');
+      expect(html).not.toContain('sig-top-line');
+      expect(html).not.toContain('footer-top-border');
+      expect((html.match(/inline-page-header/g) || []).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      try { fs.unlinkSync(tmpLogo); } catch (_) {}
+    }
+  });
+
+  test('normalizarRotuloResponsavel aplica regra universal Tutor -> Responsável', () => {
+    expect(normalizarRotuloResponsavel('Tutor:')).toBe('Responsável:');
+    expect(normalizarRotuloResponsavel('Tutor(a):')).toBe('Responsável:');
+    expect(normalizarRotuloResponsavel('TUTOR:')).toBe('RESPONSÁVEL:');
+    expect(normalizarRotuloResponsavel('TUTOR')).toBe('RESPONSÁVEL');
+    expect(normalizarRotuloResponsavel('Nome:')).toBe('Nome:');
   });
 });
