@@ -44,24 +44,38 @@ RUN ARCH=$(dpkg --print-architecture) \
 ENV CHROME_BIN=/usr/bin/google-chrome \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
-    NODE_OPTIONS="--max-old-space-size=2048" \
+    NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=2048" \
     PORT=3000
 
 WORKDIR /app
 
-# Otimiza o NPM para conexões de VPS (evita ETIMEDOUT limitando sockets simultâneos e aumentando retries)
-RUN npm config set fetch-retries 5 \
+# Otimiza o NPM para conexões de VPS (força IPv4, espelho CDN Cloudflare/Yarn resiliente e limita conexões simultâneas)
+RUN npm config set registry https://registry.yarnpkg.com/ \
+    && npm config set fetch-retries 5 \
+    && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
     && npm config set fetch-timeout 600000 \
-    && npm config set maxsockets 4
+    && npm config set maxsockets 3
 
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund || (sleep 3 && npm install --omit=dev --ignore-scripts --no-audit --no-fund)
+RUN for i in 1 2 3; do \
+      npm install --omit=dev --ignore-scripts --no-audit --no-fund && break || { \
+        echo "npm install oscilou. Limpando cache e tentando novamente em 3s (tentativa $i/3)..."; \
+        npm cache clean --force; \
+        sleep 3; \
+      }; \
+    done
 RUN npx prisma generate
 
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && (npm install --include=dev --no-audit --no-fund || (sleep 3 && npm install --include=dev --no-audit --no-fund))
+RUN cd frontend && for i in 1 2 3; do \
+      npm install --include=dev --no-audit --no-fund && break || { \
+        echo "npm install frontend oscilou. Tentando novamente em 3s..."; \
+        npm cache clean --force; \
+        sleep 3; \
+      }; \
+    done
 
 COPY . .
 RUN cd frontend && npm run build && rm -rf node_modules
