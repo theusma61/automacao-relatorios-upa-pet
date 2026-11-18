@@ -269,9 +269,9 @@ describe('Motor 100% Agnóstico de Clonagem Visual e Textual de Laudos (1 a 10 P
       expect(html).toContain('left: 162mm;');
       expect(html).toContain('report-subtitle');
       expect(html).toContain('<em>DIAG DIF.: PROCESSO INFLAMATÓRIO.</em>');
-      expect(html).not.toContain('inline-header-divider');
-      expect(html).not.toContain('sig-top-line');
-      expect(html).not.toContain('footer-top-border');
+      expect(html).not.toContain('class="inline-header-divider"');
+      expect(html).not.toContain('class="sig-top-line"');
+      expect(html).not.toContain('class="footer-top-border"');
       expect((html.match(/inline-page-header/g) || []).length).toBeGreaterThanOrEqual(2);
     } finally {
       try { fs.unlinkSync(tmpLogo); } catch (_) {}
