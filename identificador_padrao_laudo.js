@@ -14,9 +14,10 @@ const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const MODELOS_CANDIDATOS = [
-  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
   'gemini-3.5-flash-lite',
   'gemini-flash-latest',
+  'gemini-3.5-flash',
   'gemini-3.8-flash'
 ];
 
@@ -292,9 +293,9 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem markdown, sem comentários, s
         ...perfilSanitizado
       };
     } catch (err) {
-      console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha com ${modeloNome} (chave free): ${err.message}.`);
+      console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha com ${modeloNome} (chave free): ${err.message}${err.cause ? ' (Detalhe: ' + (err.cause.code || err.cause.message) + ')' : ''}.`);
       ultimoErro = err;
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 
@@ -302,7 +303,13 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem markdown, sem comentários, s
   if (paidApiKey && paidApiKey !== apiKey) {
     console.log(`💳 [APRENDER PADRÃO VISUAL] Modelos da chave free esgotados/indisponíveis. Ativando fallback para CHAVE PAGA...`);
     const genAIPaid = new GoogleGenerativeAI(paidApiKey);
-    const modelosPagos = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+    const modelosPagos = [
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash'
+    ];
 
     for (const modeloPago of modelosPagos) {
       try {
@@ -330,9 +337,9 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem markdown, sem comentários, s
           ...perfilSanitizado
         };
       } catch (errPago) {
-        console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha na chave paga com ${modeloPago}: ${errPago.message}.`);
+        console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha na chave paga com ${modeloPago}: ${errPago.message}${errPago.cause ? ' (Detalhe: ' + (errPago.cause.code || errPago.cause.message) + ')' : ''}.`);
         ultimoErro = errPago;
-        await new Promise(r => setTimeout(r, 1200));
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
   }

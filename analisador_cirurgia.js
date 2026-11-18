@@ -176,9 +176,10 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
   }
 
   const modelosIA = [
-    'gemini-3.5-flash',
+    'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
     'gemini-flash-latest',
+    'gemini-3.5-flash',
     'gemini-3.8-flash'
   ];
 
@@ -197,8 +198,9 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
         return JSON.parse(jsonMatch[0]);
       }
     } catch (err) {
-      console.warn(`Aviso: Falha com ${modeloNome} (chave free): ${err.message}.`);
+      console.warn(`Aviso: Falha com ${modeloNome} (chave free): ${err.message}${err.cause ? ' (Detalhe: ' + (err.cause.code || err.cause.message) + ')' : ''}.`);
       ultimoErro = err;
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 
@@ -206,7 +208,13 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
   if (paidApiKey && paidApiKey !== apiKey) {
     console.log(`💳 [CIRURGIA] Chave principal/free esgotada. Acionando fallback para CHAVE PAGA...`);
     const genAIPaid = new GoogleGenerativeAI(paidApiKey);
-    const modelosPagos = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+    const modelosPagos = [
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash'
+    ];
 
     for (const modeloPago of modelosPagos) {
       try {
@@ -220,8 +228,9 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
           return JSON.parse(jsonMatch[0]);
         }
       } catch (errPago) {
-        console.warn(`Aviso: Falha no fallback pago com ${modeloPago}: ${errPago.message}.`);
+        console.warn(`Aviso: Falha no fallback pago com ${modeloPago}: ${errPago.message}${errPago.cause ? ' (Detalhe: ' + (errPago.cause.code || errPago.cause.message) + ')' : ''}.`);
         ultimoErro = errPago;
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
   }

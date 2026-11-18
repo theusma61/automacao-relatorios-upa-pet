@@ -173,7 +173,13 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
 
 async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const modelosCandidatos = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  const modelosCandidatos = [
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.5-flash',
+    'gemini-3.8-flash'
+  ];
 
   const usuario = opcoes.usuario || null;
   let layout = opcoes.layout || null;
@@ -308,9 +314,9 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
 
       return jsonParsed;
     } catch (err) {
-      console.warn(`⚠️ Tentativa com ${nomeModelo} (chave free) falhou: ${err.message}.`);
+      console.warn(`⚠️ Tentativa com ${nomeModelo} (chave free) falhou: ${err.message}${err.cause ? ' (Detalhe: ' + (err.cause.code || err.cause.message) + ')' : ''}.`);
       ultimoErro = err;
-      await new Promise(res => setTimeout(res, 1200));
+      await new Promise(res => setTimeout(res, 1000));
     }
   }
 
@@ -318,7 +324,13 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
   if (paidApiKey && paidApiKey !== apiKey) {
     console.log(`💳 [ANALISADOR IA] Chave principal/free esgotada ou indisponível. Acionando fallback para CHAVE PAGA...`);
     const genAIPaid = new GoogleGenerativeAI(paidApiKey);
-    const modelosPagos = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+    const modelosPagos = [
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash'
+    ];
 
     for (const nomeModeloPago of modelosPagos) {
       try {
@@ -343,9 +355,9 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
 
         return jsonParsed;
       } catch (errPago) {
-        console.warn(`⚠️ [ANALISADOR IA] Falha no fallback pago com ${nomeModeloPago}: ${errPago.message}.`);
+        console.warn(`⚠️ [ANALISADOR IA] Falha no fallback pago com ${nomeModeloPago}: ${errPago.message}${errPago.cause ? ' (Detalhe: ' + (errPago.cause.code || errPago.cause.message) + ')' : ''}.`);
         ultimoErro = errPago;
-        await new Promise(res => setTimeout(res, 1200));
+        await new Promise(res => setTimeout(res, 1000));
       }
     }
   }
