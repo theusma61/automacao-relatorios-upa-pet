@@ -53,10 +53,13 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
       '--single-process'
     ];
 
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined));
+
     try {
       const browser = await puppeteer.launch({
         headless: 'new',
-        args: argsLaunch
+        args: argsLaunch,
+        executablePath
       });
       const page = await browser.newPage();
       await page.goto(fileUrl, { waitUntil: 'networkidle0' });
@@ -76,7 +79,8 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
           execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
           const browserRetry = await puppeteer.launch({
             headless: 'new',
-            args: argsLaunch
+            args: argsLaunch,
+            executablePath
           });
           const pageRetry = await browserRetry.newPage();
           await pageRetry.goto(fileUrl, { waitUntil: 'networkidle0' });

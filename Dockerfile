@@ -18,12 +18,15 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
         fonts-crosextra-carlito \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Instala o Google Chrome oficial via CDN de alta velocidade do Google (baixa em segundos, sem os 180+ pacotes pesados do Debian)
+# 2. Instala o Google Chrome oficial via HTTPS direto (porta 443, com resume/retries e progresso visível)
 RUN ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "amd64" ]; then \
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-        && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-        && apt-get update && apt-get install -y --no-install-recommends google-chrome-stable \
+        sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true \
+        && sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true \
+        && wget -4 --no-check-certificate --tries=10 --timeout=30 -c --progress=dot:giga https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+        && rm -f /tmp/chrome.deb \
         && ln -sf /usr/bin/google-chrome-stable /usr/bin/chromium \
         && ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome; \
     else \
