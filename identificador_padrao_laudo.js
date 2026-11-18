@@ -261,8 +261,11 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem markdown, sem comentários, s
 `;
 
   const pdfParts = caminhosPdfs.map(caminho => pdfToGenerativePart(caminho));
+  const paidApiKey = opcoes.paidApiKey || process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_PAID_API_KEY;
 
   let ultimoErro = null;
+
+  // FASE 1: Chave Principal / Free Tier
   for (const modeloNome of MODELOS_CANDIDATOS) {
     try {
       console.log(`📑 [APRENDER PADRÃO VISUAL] Analisando ${caminhosPdfs.length} PDFs com modelo ${modeloNome}...`);
@@ -289,9 +292,48 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem markdown, sem comentários, s
         ...perfilSanitizado
       };
     } catch (err) {
-      console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha com ${modeloNome}: ${err.message}. Tentando próximo modelo...`);
+      console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha com ${modeloNome} (chave free): ${err.message}.`);
       ultimoErro = err;
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+
+  // FASE 2: Fallback para a Chave Paga (se configurada)
+  if (paidApiKey && paidApiKey !== apiKey) {
+    console.log(`💳 [APRENDER PADRÃO VISUAL] Modelos da chave free esgotados/indisponíveis. Ativando fallback para CHAVE PAGA...`);
+    const genAIPaid = new GoogleGenerativeAI(paidApiKey);
+    const modelosPagos = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+
+    for (const modeloPago of modelosPagos) {
+      try {
+        console.log(`💎 [APRENDER PADRÃO VISUAL - CHAVE PAGA] Analisando com modelo prioritário ${modeloPago}...`);
+        const model = genAIPaid.getGenerativeModel({ model: modeloPago });
+        const resultado = await model.generateContent([promptInstrucoes, ...pdfParts]);
+        const textoResposta = resultado.response.text().trim();
+
+        const jsonLimpo = textoResposta.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+        const jsonParsed = JSON.parse(jsonLimpo);
+
+        const perfilSanitizado = sanitizarPerfilExtraido(jsonParsed);
+
+        const amostrasInfo = caminhosPdfs.map(f => ({
+          nome: path.basename(f),
+          tamanho: fs.existsSync(f) ? fs.statSync(f).size : 0,
+          enviadoEm: new Date().toISOString()
+        }));
+
+        return {
+          sucesso: true,
+          modeloUtilizado: `${modeloPago} (chave paga)`,
+          amostras: amostrasInfo,
+          quantidadeAmostras: caminhosPdfs.length,
+          ...perfilSanitizado
+        };
+      } catch (errPago) {
+        console.warn(`⚠️ [APRENDER PADRÃO VISUAL] Falha na chave paga com ${modeloPago}: ${errPago.message}.`);
+        ultimoErro = errPago;
+        await new Promise(r => setTimeout(r, 1200));
+      }
     }
   }
 

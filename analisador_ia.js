@@ -282,6 +282,9 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
   });
 
   let ultimoErro = null;
+  const paidApiKey = opcoes.paidApiKey || process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_PAID_API_KEY;
+
+  // FASE 1: Chave Principal / Free Tier
   for (const nomeModelo of modelosCandidatos) {
     try {
       console.log(`🤖 Chamando modelo ${nomeModelo}...`);
@@ -305,9 +308,45 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
 
       return jsonParsed;
     } catch (err) {
-      console.warn(`⚠️ Tentativa com ${nomeModelo} falhou: ${err.message}. Tentando próximo modelo...`);
+      console.warn(`⚠️ Tentativa com ${nomeModelo} (chave free) falhou: ${err.message}.`);
       ultimoErro = err;
-      await new Promise(res => setTimeout(res, 2000));
+      await new Promise(res => setTimeout(res, 1200));
+    }
+  }
+
+  // FASE 2: Fallback para a Chave Paga (se configurada)
+  if (paidApiKey && paidApiKey !== apiKey) {
+    console.log(`💳 [ANALISADOR IA] Chave principal/free esgotada ou indisponível. Acionando fallback para CHAVE PAGA...`);
+    const genAIPaid = new GoogleGenerativeAI(paidApiKey);
+    const modelosPagos = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+
+    for (const nomeModeloPago of modelosPagos) {
+      try {
+        console.log(`💎 [ANALISADOR IA - CHAVE PAGA] Chamando modelo prioritário ${nomeModeloPago}...`);
+        const model = genAIPaid.getGenerativeModel({ model: nomeModeloPago });
+        const result = await model.generateContent([promptFinal, ...imageParts]);
+        const responseText = result.response.text().trim();
+
+        const jsonClean = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        const jsonParsed = JSON.parse(jsonClean);
+
+        jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
+
+        const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
+
+        jsonParsed.caminhosOrdenados = ordenarImagensCanonicamente(
+          caminhoImagens,
+          jsonParsed.classificacaoImagens,
+          jsonParsed.nomesArquivosOrdenados,
+          mapaPrioridadesEfetivo
+        );
+
+        return jsonParsed;
+      } catch (errPago) {
+        console.warn(`⚠️ [ANALISADOR IA] Falha no fallback pago com ${nomeModeloPago}: ${errPago.message}.`);
+        ultimoErro = errPago;
+        await new Promise(res => setTimeout(res, 1200));
+      }
     }
   }
 

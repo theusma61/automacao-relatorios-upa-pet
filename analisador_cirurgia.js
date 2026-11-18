@@ -183,6 +183,7 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
   ];
 
   let ultimoErro = null;
+  const paidApiKey = opcoes.paidApiKey || process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_PAID_API_KEY;
 
   for (const modeloNome of modelosIA) {
     try {
@@ -196,8 +197,32 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
         return JSON.parse(jsonMatch[0]);
       }
     } catch (err) {
-      console.warn(`Aviso: Falha com ${modeloNome}: ${err.message}. Tentando próximo modelo...`);
+      console.warn(`Aviso: Falha com ${modeloNome} (chave free): ${err.message}.`);
       ultimoErro = err;
+    }
+  }
+
+  // Fallback para a Chave Paga
+  if (paidApiKey && paidApiKey !== apiKey) {
+    console.log(`💳 [CIRURGIA] Chave principal/free esgotada. Acionando fallback para CHAVE PAGA...`);
+    const genAIPaid = new GoogleGenerativeAI(paidApiKey);
+    const modelosPagos = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+
+    for (const modeloPago of modelosPagos) {
+      try {
+        console.log(`💎 [CIRURGIA - CHAVE PAGA] Tentando com modelo prioritário ${modeloPago}...`);
+        const model = genAIPaid.getGenerativeModel({ model: modeloPago });
+        const resultado = await model.generateContent(partes);
+        const texto = resultado.response.text();
+
+        const jsonMatch = texto.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      } catch (errPago) {
+        console.warn(`Aviso: Falha no fallback pago com ${modeloPago}: ${errPago.message}.`);
+        ultimoErro = errPago;
+      }
     }
   }
 
