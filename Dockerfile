@@ -45,37 +45,41 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
     NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=2048" \
+    PATH="/app/node_modules/.bin:$PATH" \
     PORT=3000
 
 WORKDIR /app
 
-# Otimiza o NPM para conexões de VPS (força IPv4, espelho CDN Cloudflare/Yarn resiliente e limita conexões simultâneas)
-RUN npm config set registry https://registry.yarnpkg.com/ \
-    && npm config set fetch-retries 5 \
+# Otimiza o NPM para conexões de VPS (registrador oficial, IPv4 forçado, retries estendidos e limite de 2 conexões para não saturar banda)
+RUN npm config set registry https://registry.npmjs.org/ \
+    && npm config set fetch-retries 10 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
     && npm config set fetch-timeout 600000 \
-    && npm config set maxsockets 3
+    && npm config set maxsockets 2
 
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN for i in 1 2 3; do \
-      npm install --omit=dev --ignore-scripts --no-audit --no-fund && break || { \
-        echo "npm install oscilou. Limpando cache e tentando novamente em 3s (tentativa $i/3)..."; \
+RUN for i in 1 2 3 4 5; do \
+      npm install --omit=dev --no-audit --no-fund && break || { \
+        echo "npm install oscilou. Limpando cache e tentando novamente em 3s (tentativa $i/5)..."; \
         npm cache clean --force; \
         sleep 3; \
       }; \
-    done
-RUN npx prisma generate
+    done \
+    && test -f ./node_modules/.bin/prisma
+
+RUN ./node_modules/.bin/prisma generate
 
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && for i in 1 2 3; do \
+RUN cd frontend && for i in 1 2 3 4 5; do \
       npm install --include=dev --no-audit --no-fund && break || { \
-        echo "npm install frontend oscilou. Tentando novamente em 3s..."; \
+        echo "npm install frontend oscilou. Tentando novamente em 3s (tentativa $i/5)..."; \
         npm cache clean --force; \
         sleep 3; \
       }; \
-    done
+    done \
+    && test -f ./node_modules/.bin/vite
 
 COPY . .
 RUN cd frontend && npm run build && rm -rf node_modules
