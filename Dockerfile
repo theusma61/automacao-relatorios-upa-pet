@@ -2,9 +2,11 @@ FROM node:20-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Instala utilitários essenciais, ferramentas de chave GPG e fontes (Calibri/Carlito + Liberation)
+# 1. Otimiza APT para conexões de VPS e instala utilitários essenciais e fontes
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
-    && echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::Timeout "45";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::Pipeline-Depth "0";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::No-Cache "true";' >> /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::ForceIPv4 "true";' >> /etc/apt/apt.conf.d/80-retries \
     && apt-get update && apt-get install -y --no-install-recommends --fix-missing \
         wget \
