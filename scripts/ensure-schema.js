@@ -11,6 +11,27 @@ async function garantirSchemaSemPerdaDeDados() {
 
   try {
     const alterStatements = [
+      `CREATE TABLE IF NOT EXISTS "perfis_laudo" (
+        "id" TEXT PRIMARY KEY,
+        "usuario_id" TEXT NOT NULL UNIQUE REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+        "ativo" BOOLEAN NOT NULL DEFAULT true,
+        "status" TEXT NOT NULL DEFAULT 'aprendido',
+        "quantidade_amostras" INTEGER NOT NULL DEFAULT 0,
+        "arquivos_amostras" JSONB,
+        "ordem_orgaos" TEXT[] DEFAULT ARRAY[]::TEXT[],
+        "vocabulario_preferido" JSONB,
+        "frases_normalidade" JSONB,
+        "estilo_conclusao" TEXT,
+        "observacoes_estilo" TEXT,
+        "nome_detectado" TEXT,
+        "crmv_detectado" TEXT,
+        "clinica_detectada" TEXT,
+        "layout_detectado" JSONB,
+        "template_visual" JSONB,
+        "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "atualizado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );`,
+      `CREATE INDEX IF NOT EXISTS "perfis_laudo_usuario_id_idx" ON "perfis_laudo"("usuario_id");`,
       `ALTER TABLE "configuracoes_layout" ADD COLUMN IF NOT EXISTS "modo_template" TEXT NOT NULL DEFAULT 'padrao_vetaro';`,
       `ALTER TABLE "configuracoes_layout" ADD COLUMN IF NOT EXISTS "header_banner_url" TEXT;`,
       `ALTER TABLE "configuracoes_layout" ADD COLUMN IF NOT EXISTS "footer_logo_url" TEXT;`,
