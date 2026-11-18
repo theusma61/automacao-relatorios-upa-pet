@@ -2,26 +2,37 @@ FROM node:20-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Resiliência de rede e APT para VPS:
-# 1. Força IPv4 (evita congelamento de conexões IPv6 em Docker/VPS)
-# 2. Configura 5 retentativas automáticas para pacotes grandes (Chromium)
-# 3. Timeout de 120s para conexões mais lentas
+# 1. Instala utilitários essenciais, ferramentas de chave GPG e fontes (Calibri/Carlito + Liberation)
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::ForceIPv4 "true";' >> /etc/apt/apt.conf.d/80-retries \
     && apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+        wget \
+        gnupg \
         openssl \
         ca-certificates \
-        chromium \
         poppler-utils \
         fonts-liberation \
         fonts-crosextra-carlito \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Instala o Google Chrome oficial via CDN de alta velocidade do Google (baixa em segundos, sem os 180+ pacotes pesados do Debian)
+RUN ARCH=$(dpkg --print-architecture) \
+    && if [ "$ARCH" = "amd64" ]; then \
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+        && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+        && apt-get update && apt-get install -y --no-install-recommends google-chrome-stable \
+        && ln -sf /usr/bin/google-chrome-stable /usr/bin/chromium \
+        && ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome; \
+    else \
+        apt-get update && apt-get install -y --no-install-recommends chromium; \
+    fi \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-ENV CHROME_BIN=/usr/bin/chromium \
+ENV CHROME_BIN=/usr/bin/google-chrome \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
     NODE_OPTIONS="--max-old-space-size=2048" \
     PORT=3000
 
