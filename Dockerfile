@@ -49,13 +49,19 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
 
 WORKDIR /app
 
+# Otimiza o NPM para conexões de VPS (evita ETIMEDOUT limitando sockets simultâneos e aumentando retries)
+RUN npm config set fetch-retries 5 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm config set fetch-timeout 600000 \
+    && npm config set maxsockets 4
+
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund
+RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund || (sleep 3 && npm install --omit=dev --ignore-scripts --no-audit --no-fund)
 RUN npx prisma generate
 
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install --include=dev --no-audit --no-fund
+RUN cd frontend && (npm install --include=dev --no-audit --no-fund || (sleep 3 && npm install --include=dev --no-audit --no-fund))
 
 COPY . .
 RUN cd frontend && npm run build && rm -rf node_modules
