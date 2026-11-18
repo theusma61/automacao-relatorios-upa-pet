@@ -50,19 +50,21 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--single-process'
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-extensions'
     ];
 
     const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined));
 
     try {
       const browser = await puppeteer.launch({
-        headless: 'new',
+        headless: true,
         args: argsLaunch,
         executablePath
       });
       const page = await browser.newPage();
-      await page.goto(fileUrl, { waitUntil: 'networkidle0' });
+      await page.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 60000 });
       await page.pdf({
         path: caminhoPdf,
         format: 'A4',
@@ -78,12 +80,12 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
         try {
           execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
           const browserRetry = await puppeteer.launch({
-            headless: 'new',
+            headless: true,
             args: argsLaunch,
             executablePath
           });
           const pageRetry = await browserRetry.newPage();
-          await pageRetry.goto(fileUrl, { waitUntil: 'networkidle0' });
+          await pageRetry.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 60000 });
           await pageRetry.pdf({
             path: caminhoPdf,
             format: 'A4',
