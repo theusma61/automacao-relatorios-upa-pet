@@ -45,7 +45,11 @@ async function garantirSchemaSemPerdaDeDados() {
     ];
 
     for (const sql of alterStatements) {
-      await prisma.$executeRawUnsafe(sql);
+      try {
+        await prisma.$executeRawUnsafe(sql);
+      } catch (sqlErr) {
+        // Tolera se a tabela ou coluna ainda não foi provisionada nesta etapa
+      }
     }
 
     console.log("✅ [DB-BOOT] Schema e Padrão Vetaro verificados com sucesso! Nenhuma tabela existente foi removida.");

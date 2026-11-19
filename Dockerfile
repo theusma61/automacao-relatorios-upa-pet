@@ -32,7 +32,8 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
             fonts-liberation \
             fonts-crosextra-carlito \
             ca-certificates \
-            openssl && break || { \
+            openssl \
+            libssl3 && break || { \
             echo "Tentativa $i falhou na instalação de pacotes APT. Retentando em 3s..."; \
             sleep 3; \
         }; \
@@ -45,6 +46,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 ENV CHROME_BIN=/usr/bin/chromium \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x" \
     NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=2048" \
     PATH="/app/node_modules/.bin:$PATH" \
     PORT=3000
