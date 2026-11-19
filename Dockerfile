@@ -2,7 +2,7 @@ FROM node:20-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Configura repositórios oficiais com espelho brasileiro (UFPR / C3SL) e HTTPS seguro
+# 1. Configura repositórios oficiais com espelho brasileiro (UFPR / C3SL) e tolerância de rede
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::http::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::https::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries \
@@ -14,13 +14,13 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && truncate -s 0 /etc/apt/sources.list 2>/dev/null || true \
     && printf '%s\n' \
         'Types: deb' \
-        'URIs: https://debian.c3sl.ufpr.br/debian https://ftp.br.debian.org/debian https://deb.debian.org/debian' \
+        'URIs: http://debian.c3sl.ufpr.br/debian http://ftp.br.debian.org/debian http://deb.debian.org/debian' \
         'Suites: bookworm bookworm-updates' \
         'Components: main' \
         'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
         '' \
         'Types: deb' \
-        'URIs: https://security.debian.org/debian-security https://deb.debian.org/debian-security' \
+        'URIs: http://security.debian.org/debian-security http://deb.debian.org/debian-security' \
         'Suites: bookworm-security' \
         'Components: main' \
         'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
