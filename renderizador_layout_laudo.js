@@ -229,7 +229,11 @@ function renderizarTitulo(template) {
 /**
  * Renderiza os achados dos órgãos conforme o estilo visual especificado
  */
-function renderizarAchadosOrgaos(template, laudoArray) {
+function renderizarAchadosOrgaos(template, laudoArray, autoFit = {}) {
+  const fSizeBody = autoFit.fontSizeBody || template.fontSizeBody || '10.5pt';
+  const lHeight = autoFit.lineHeight || template.lineHeight || '1.35';
+  const pSpacing = autoFit.paragraphSpacing || template.paragraphSpacing || '6pt';
+
   // Separa seções normais de órgãos vs seção de conclusão/considerações
   const itensCorpo = [];
   const itensConclusao = [];
@@ -253,24 +257,24 @@ function renderizarAchadosOrgaos(template, laudoArray) {
     switch (template.estiloOrgaos) {
       case 'tarja-colorida':
         return `
-          <div class="organ-item orgao-badge" style="margin-bottom: 6px;">
-            <div style="background: ${template.corPrimaria}; color: white; padding: 2.5px 8px; font-weight: bold; font-size: 10pt; border-radius: 3px; display: inline-block; letter-spacing: 0.3px;">
+          <div class="organ-item orgao-badge" style="margin-bottom: ${pSpacing};">
+            <div style="background: ${template.corPrimaria}; color: white; padding: 2px 7px; font-weight: bold; font-size: 9.5pt; border-radius: 3px; display: inline-block; letter-spacing: 0.2px;">
               ${item.orgao}
             </div>
-            <div style="margin-top: 2px; text-align: justify; font-size: ${template.fontSizeBody}; line-height: ${template.lineHeight};">
+            <div style="margin-top: 1px; text-align: justify; font-size: ${fSizeBody}; line-height: ${lHeight};">
               ${textoFormatado}
-              ${item.diagDif ? `<div style="color: ${template.corSecundaria}; font-style: italic; font-weight: 600; margin-top: 2px;">DIAG DIF.: ${item.diagDif}</div>` : ''}
+              ${item.diagDif ? `<div style="color: ${template.corSecundaria}; font-style: italic; font-weight: 600; margin-top: 1px;">DIAG DIF.: ${item.diagDif}</div>` : ''}
             </div>
           </div>
         `;
 
       case 'barra-lateral':
         return `
-          <div class="organ-item" style="border-left: 3.5px solid ${template.corPrimaria}; padding-left: 8px; margin-bottom: 7px;">
-            <div style="font-weight: 800; color: ${template.corPrimaria}; font-size: 10.5pt; text-transform: uppercase;">
+          <div class="organ-item" style="border-left: 3px solid ${template.corPrimaria}; padding-left: 7px; margin-bottom: ${pSpacing};">
+            <div style="font-weight: 800; color: ${template.corPrimaria}; font-size: 10pt; text-transform: uppercase;">
               ${item.orgao}
             </div>
-            <div style="margin-top: 1px; text-align: justify; font-size: ${template.fontSizeBody}; line-height: ${template.lineHeight};">
+            <div style="margin-top: 1px; text-align: justify; font-size: ${fSizeBody}; line-height: ${lHeight};">
               ${textoFormatado}
               ${item.diagDif ? `<div style="color: ${template.corSecundaria}; font-style: italic; font-weight: 600; margin-top: 1px;">DIAG DIF.: ${item.diagDif}</div>` : ''}
             </div>
@@ -279,11 +283,11 @@ function renderizarAchadosOrgaos(template, laudoArray) {
 
       case 'sublinhado':
         return `
-          <div class="organ-item" style="margin-bottom: 6px;">
-            <div style="border-bottom: 1px solid ${template.corSecundaria}; color: ${template.corPrimaria}; font-weight: bold; font-size: 10.5pt; padding-bottom: 1px; margin-bottom: 2px;">
+          <div class="organ-item" style="margin-bottom: ${pSpacing};">
+            <div style="border-bottom: 1px solid ${template.corSecundaria}; color: ${template.corPrimaria}; font-weight: bold; font-size: 10pt; padding-bottom: 1px; margin-bottom: 1px;">
               ${item.orgao}
             </div>
-            <div style="text-align: justify; font-size: ${template.fontSizeBody}; line-height: ${template.lineHeight};">
+            <div style="text-align: justify; font-size: ${fSizeBody}; line-height: ${lHeight};">
               ${textoFormatado}
               ${item.diagDif ? `<span style="color: ${template.corSecundaria}; font-style: italic;"> (DIAG DIF.: ${item.diagDif})</span>` : ''}
             </div>
@@ -293,7 +297,7 @@ function renderizarAchadosOrgaos(template, laudoArray) {
       case 'negrito-inline':
       default:
         return `
-          <p style="margin: 0 0 ${template.paragraphSpacing || '6pt'} 0; text-align: justify; font-size: ${template.fontSizeBody}; line-height: ${template.lineHeight};">
+          <p style="margin: 0 0 ${pSpacing} 0; text-align: justify; font-size: ${fSizeBody}; line-height: ${lHeight};">
             <strong style="color: ${template.corPrimaria};">${item.orgao}:</strong> ${textoFormatado}
             ${item.diagDif ? `<em style="color: ${template.corSecundaria}; font-weight: 600;"> DIAG DIF.: ${item.diagDif}</em>` : ''}
           </p>
@@ -365,6 +369,172 @@ function renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml) {
 }
 
 /**
+ * Unifica anatomicamente estruturas correlatas (ex: CUD/CUE no Útero)
+ * para evitar criação de tópicos isolados e economizar linhas e respiros verticais.
+ */
+function normalizarOrgaosCanonica(laudoArray) {
+  if (!Array.isArray(laudoArray) || laudoArray.length === 0) return [];
+
+  const itens = JSON.parse(JSON.stringify(laudoArray));
+  const idxUtero = itens.findIndex(it => /^(UTERO|ÚTERO)$/i.test((it.orgao || '').trim()));
+  const indicesParaRemover = [];
+
+  itens.forEach((it, idx) => {
+    const nomeNorm = (it.orgao || '').trim().toUpperCase();
+    if (idxUtero !== -1 && idx !== idxUtero) {
+      if (/^(CUD|CUE|CORNO\s+UTERINO(\s+(DIREITO|ESQUERDO))?)$/i.test(nomeNorm)) {
+        const textoCorno = (it.texto || '').trim();
+        if (textoCorno) {
+          const prefixo = nomeNorm.startsWith('CUD') ? 'CUD: ' : (nomeNorm.startsWith('CUE') ? 'CUE: ' : '');
+          const textoAdicionar = textoCorno.toUpperCase().startsWith(prefixo) ? textoCorno : `${prefixo}${textoCorno}`;
+          itens[idxUtero].texto = `${itens[idxUtero].texto.trim()} ${textoAdicionar}`.trim();
+        }
+        if (it.diagDif && it.diagDif.trim()) {
+          const diagAtual = (itens[idxUtero].diagDif || '').trim();
+          if (!diagAtual) {
+            itens[idxUtero].diagDif = it.diagDif.trim();
+          } else if (!diagAtual.includes(it.diagDif.trim())) {
+            itens[idxUtero].diagDif = `${diagAtual}, ${it.diagDif.trim()}`;
+          }
+        }
+        indicesParaRemover.push(idx);
+      }
+    } else if (idxUtero === -1 && /^(CUD|CUE)$/i.test(nomeNorm)) {
+      it.orgao = 'ÚTERO';
+    }
+  });
+
+  return itens.filter((_, idx) => !indicesParaRemover.includes(idx));
+}
+
+/**
+ * Auto-Fit Dinâmico e Agnóstico da Página Textual de Ultrassom.
+ * Analisa a densidade textual (órgãos, caracteres, quebras de linha e diagnósticos diferenciais)
+ * e calcula proporções de contração suaves (fontes, entrelinhas, margens e espaçamento entre parágrafos)
+ * para assegurar a Regra Pétrea da Página Única sem quebras acidentais de 1 linha para a página 2.
+ */
+function calcularAutoFitLaudoTextual(laudoArray = [], layoutBase = {}, opcoes = {}) {
+  const laudo = normalizarOrgaosCanonica(laudoArray);
+  const qtdOrgaos = laudo.length;
+
+  const totalChars = laudo.reduce((acc, item) => {
+    return acc + (item?.orgao?.length || 0) + (item?.texto?.length || 0) + (item?.diagDif?.length || 0);
+  }, 0);
+
+  const qtdQuebras = laudo.reduce((acc, item) => {
+    return acc + ((item?.texto || '').split(/\r?\n/).length - 1);
+  }, 0);
+
+  // Score de Densidade Vertical (considera comprimento de texto, quantidade de órgãos e quebras de linha)
+  const score = totalChars + (qtdOrgaos * 130) + (qtdQuebras * 80);
+
+  // Lê valores base do layout fornecido (aceita tanto snake_case do banco quanto camelCase do template)
+  const fontBase = layoutBase.font_family || layoutBase.fontFamily || 'Calibri, sans-serif';
+  const corPrimaria = layoutBase.cor_primaria || layoutBase.corPrimaria || '#1B365D';
+  const corSecundaria = layoutBase.cor_secundaria || layoutBase.corSecundaria || '#4A777A';
+
+  // Configuração padrão relaxada (laudos pequenos: <= 7 órgãos ou score <= 2400)
+  if (qtdOrgaos <= 7 && score <= 2400) {
+    return {
+      laudoAjustado: laudo,
+      modoPaginacao: 'single_page',
+      score,
+      tier: 'normal',
+      fontSizeBody: layoutBase.font_size_body || layoutBase.fontSizeBody || '10.5pt',
+      fontSizeTitulo: layoutBase.font_size_titulo || layoutBase.fontSizeTitulo || '13.5pt',
+      subtitleFontSize: '8pt',
+      lineHeight: layoutBase.line_height || layoutBase.lineHeight || '1.36',
+      paragraphSpacing: layoutBase.paragraph_spacing || layoutBase.paragraphSpacing || '3.5mm',
+      marginTop: layoutBase.margin_top || layoutBase.marginTop || '16mm',
+      marginBottom: layoutBase.margin_bottom || layoutBase.marginBottom || '16mm',
+      marginLeft: layoutBase.margin_left || layoutBase.marginLeft || '15mm',
+      marginRight: layoutBase.margin_right || layoutBase.marginRight || '15mm',
+      marginHeaderBottom: '6px',
+      paddingHeaderBottom: '6px',
+      marginTitleBox: '6px 0 8px 0',
+      marginSignatureTop: '6px',
+      signatureMaxHeight: '44px',
+      logoMaxHeight: '52px'
+    };
+  }
+
+  // Nível 1: Compact Auto-Fit (8 a 11 órgãos ou score entre 2401 e 4300 - Caso típico de Lua e ultrassons completos)
+  if (qtdOrgaos <= 11 && score <= 4300) {
+    return {
+      laudoAjustado: laudo,
+      modoPaginacao: 'single_page',
+      score,
+      tier: 'compact',
+      fontSizeBody: '9.4pt',
+      fontSizeTitulo: '12pt',
+      subtitleFontSize: '7.5pt',
+      lineHeight: '1.24',
+      paragraphSpacing: '2.0mm',
+      marginTop: '11mm',
+      marginBottom: '10mm',
+      marginLeft: layoutBase.margin_left || layoutBase.marginLeft || '14mm',
+      marginRight: layoutBase.margin_right || layoutBase.marginRight || '14mm',
+      marginHeaderBottom: '3px',
+      paddingHeaderBottom: '3px',
+      marginTitleBox: '4px 0 4px 0',
+      marginSignatureTop: '3px',
+      signatureMaxHeight: '38px',
+      logoMaxHeight: '44px'
+    };
+  }
+
+  // Nível 2: Ultra-Compact Auto-Fit (12 a 14 órgãos ou score entre 4301 e 5600)
+  if (qtdOrgaos <= 14 && score <= 5600) {
+    return {
+      laudoAjustado: laudo,
+      modoPaginacao: 'single_page',
+      score,
+      tier: 'ultra_compact',
+      fontSizeBody: '8.8pt',
+      fontSizeTitulo: '11pt',
+      subtitleFontSize: '7.0pt',
+      lineHeight: '1.18',
+      paragraphSpacing: '1.5mm',
+      marginTop: '9mm',
+      marginBottom: '8mm',
+      marginLeft: '13mm',
+      marginRight: '13mm',
+      marginHeaderBottom: '2px',
+      paddingHeaderBottom: '2px',
+      marginTitleBox: '2px 0 3px 0',
+      marginSignatureTop: '2px',
+      signatureMaxHeight: '32px',
+      logoMaxHeight: '38px'
+    };
+  }
+
+  // Nível 3: Laudo Gigantesco (> 14 órgãos ou score > 5600) -> 2 Páginas Equilibradas (sem folha vazia!)
+  const corte = Math.ceil(qtdOrgaos / 2);
+  return {
+    laudoAjustado: laudo,
+    modoPaginacao: 'two_page_balanced',
+    cortePagina1: corte,
+    score,
+    tier: 'two_page_balanced',
+    fontSizeBody: '10pt',
+    fontSizeTitulo: '13pt',
+    subtitleFontSize: '7.8pt',
+    lineHeight: '1.32',
+    paragraphSpacing: '3.0mm',
+    marginTop: '15mm',
+    marginBottom: '15mm',
+    marginLeft: '15mm',
+    marginRight: '15mm',
+    marginHeaderBottom: '5px',
+    paddingHeaderBottom: '5px',
+    marginTitleBox: '6px 0 6px 0',
+    marginSignatureTop: '8px',
+    signatureMaxHeight: '44px',
+    logoMaxHeight: '48px'
+  };
+}
+
+/**
  * Constrói o HTML completo para impressão / compilação PDF
  */
 function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes = {}) {
@@ -406,10 +576,13 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
     assinaturaImgHtml = `<img src="data:${assExt};base64,${assBase64}" style="max-height: 44px; display: inline-block; margin-bottom: 2px;" alt="Assinatura"><br>`;
   }
 
+  const autoFit = calcularAutoFitLaudoTextual(laudoArray, template, opcoes);
+  const laudoProcessado = autoFit.laudoAjustado;
+
   const cabecalhoHtml = renderizarCabecalho(template, clinicaNome, logoBase64, logoMime);
   const dadosPacienteHtml = renderizarDadosPaciente(template, dadosPaciente);
   const tituloHtml = renderizarTitulo(template);
-  const { corpoHtml, conclusaoHtml } = renderizarAchadosOrgaos(template, laudoArray);
+  const { corpoHtml, conclusaoHtml } = renderizarAchadosOrgaos(template, laudoProcessado, autoFit);
   const rodapeHtml = renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml);
 
   // Paginação de imagens (máximo 8 por folha)
@@ -435,8 +608,8 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
     }
     body {
       font-family: ${template.fontFamily};
-      font-size: ${template.fontSizeBody};
-      line-height: ${template.lineHeight};
+      font-size: ${autoFit.fontSizeBody};
+      line-height: ${autoFit.lineHeight};
       color: #111;
       margin: 0;
       padding: 0;
@@ -447,12 +620,14 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
       height: 297mm;
       margin: 20px auto;
       background: white;
-      padding: ${template.marginTop} ${template.marginRight} ${template.marginBottom} ${template.marginLeft};
+      padding: ${autoFit.marginTop} ${autoFit.marginRight} ${autoFit.marginBottom} ${autoFit.marginLeft};
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       position: relative;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     @media print {
       body { background: transparent; }
@@ -461,17 +636,19 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
         height: 297mm !important;
         max-height: 297mm !important;
         margin: 0 !important;
-        padding: ${template.marginTop} ${template.marginRight} ${template.marginBottom} ${template.marginLeft} !important;
+        padding: ${autoFit.marginTop} ${autoFit.marginRight} ${autoFit.marginBottom} ${autoFit.marginLeft} !important;
         box-shadow: none !important;
         page-break-after: always !important;
         break-after: page !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
       }
     }
     .logo-img {
       max-width: 140px;
-      max-height: 52px;
+      max-height: ${autoFit.logoMaxHeight};
       object-fit: contain;
     }
     .logo-tipografico {
@@ -496,8 +673,8 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
     .content-body {
       flex: 1;
       text-align: justify;
-      font-size: ${template.fontSizeBody};
-      line-height: ${template.lineHeight};
+      font-size: ${autoFit.fontSizeBody};
+      line-height: ${autoFit.lineHeight};
       outline: none;
     }
     .image-grid {
@@ -568,5 +745,7 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
 module.exports = {
   construirHtmlLaudo,
   normalizarTemplateVisual,
-  TEMPLATE_VISUAL_PADRAO
+  TEMPLATE_VISUAL_PADRAO,
+  calcularAutoFitLaudoTextual,
+  normalizarOrgaosCanonica
 };

@@ -4,7 +4,11 @@ const os = require('os');
 const { compilarPDF } = require('./compilador_pdf');
 const { obterLayout } = require('./gerenciador_layout');
 const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
-const { construirHtmlLaudo } = require('./renderizador_layout_laudo');
+const {
+  construirHtmlLaudo,
+  calcularAutoFitLaudoTextual,
+  normalizarOrgaosCanonica
+} = require('./renderizador_layout_laudo');
 const { normalizarRotuloResponsavel } = require('./extrator_padrao_laudo');
 
 function lerImagemDataUri(caminhoImg) {
@@ -341,7 +345,8 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     return true;
   });
 
-  const paragrafosOrgaos = laudoFiltrado.map((item) =>
+  const laudoNormalizado = normalizarOrgaosCanonica(laudoFiltrado);
+  const paragrafosOrgaos = laudoNormalizado.map((item) =>
     sanitizarParagrafoOrgao(item, {
       organLabelCase: bTypo.organLabelCase || 'UPPERCASE',
       usarDiagDifSeparado: escrita.usarDiagDifSeparado,
@@ -940,13 +945,16 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       </div>
     `;
 
+    const autoFit = calcularAutoFitLaudoTextual(laudoArray, layout, opcoes);
+    const laudoProcessado = autoFit.laudoAjustado;
+
     const rodape = `
       <div class="footer">
         O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.
       </div>
     `;
 
-    const laudoTextoHTML = laudoArray.map(item =>
+    const laudoTextoHTML = laudoProcessado.map(item =>
       sanitizarParagrafoOrgao(item, { organLabelCase: 'UPPERCASE', usarDiagDifSeparado: true })
     ).join('\n');
 
@@ -960,8 +968,8 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
     body {
       font-family: ${layout.font_family};
-      font-size: ${layout.font_size_body};
-      line-height: ${layout.line_height};
+      font-size: ${autoFit.fontSizeBody};
+      line-height: ${autoFit.lineHeight};
       color: #111;
       margin: 0;
       padding: 0;
@@ -972,12 +980,14 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       height: 297mm;
       margin: 20px auto;
       background: white;
-      padding: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left};
+      padding: ${autoFit.marginTop} ${layout.margin_right || '15mm'} ${autoFit.marginBottom} ${layout.margin_left || '15mm'};
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       position: relative;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     @media print {
       body { background: transparent; }
@@ -986,29 +996,31 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
         height: 297mm !important;
         max-height: 297mm !important;
         margin: 0 !important;
-        padding: ${layout.margin_top} ${layout.margin_right} ${layout.margin_bottom} ${layout.margin_left} !important;
+        padding: ${autoFit.marginTop} ${layout.margin_right || '15mm'} ${autoFit.marginBottom} ${layout.margin_left || '15mm'} !important;
         box-shadow: none !important;
         page-break-after: always !important;
         break-after: page !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
       }
     }
-    .header { display: flex; align-items: center; margin-bottom: 4px; border-bottom: 1px solid #d1d5db; padding-bottom: 6px; }
+    .header { display: flex; align-items: center; margin-bottom: ${autoFit.marginHeaderBottom}; border-bottom: 1px solid #d1d5db; padding-bottom: ${autoFit.paddingHeaderBottom}; }
     .logo-box { width: 140px; display: flex; align-items: center; }
-    .logo-img { max-width: 130px; max-height: 52px; object-fit: contain; }
+    .logo-img { max-width: 130px; max-height: ${autoFit.logoMaxHeight}; object-fit: contain; }
     .patient-info { flex: 1; display: flex; justify-content: space-between; font-size: 10pt; }
     .patient-info .col { width: 48%; }
     .patient-info .col p { margin: 1.5px 0; }
-    .title-box { text-align: center; margin-top: 8px; margin-bottom: 8px; }
-    .title-box h1 { font-size: ${layout.font_size_titulo}; font-weight: bold; margin: 0; letter-spacing: 0.3px; color: ${layout.cor_primaria}; }
-    .title-box p { font-size: 8pt; font-style: italic; margin: 2px 0 0 0; color: ${layout.cor_secundaria}; }
-    .content { flex: 1; text-align: justify; font-size: ${layout.font_size_body}; line-height: ${layout.line_height}; outline: none; }
-    .content p { margin: 0 0 ${layout.paragraph_spacing} 0; }
+    .title-box { text-align: center; margin: ${autoFit.marginTitleBox}; }
+    .title-box h1 { font-size: ${autoFit.fontSizeTitulo}; font-weight: bold; margin: 0; letter-spacing: 0.3px; color: ${layout.cor_primaria}; }
+    .title-box p { font-size: ${autoFit.subtitleFontSize}; font-style: italic; margin: 2px 0 0 0; color: ${layout.cor_secundaria}; }
+    .content { flex: 1; text-align: justify; font-size: ${autoFit.fontSizeBody}; line-height: ${autoFit.lineHeight}; outline: none; }
+    .content p { margin: 0 0 ${autoFit.paragraphSpacing} 0; }
     .content p:last-child { margin-bottom: 0; }
-    .signature { text-align: right; margin-top: 4px; padding-right: 15px; }
+    .signature { text-align: right; margin-top: ${autoFit.marginSignatureTop}; padding-right: 15px; }
     .signature p { margin: 1px 0; font-size: 9.5pt; }
-    .footer { font-size: 7.2pt; font-style: italic; color: #555; text-align: center; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 4px; }
+    .footer { font-size: 7.2pt; font-style: italic; color: #555; text-align: center; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 3px; }
     .image-grid { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 6px; flex: 1; margin-top: 6px; align-content: start; }
     .img-card { border: 1px solid #222; background: #000; display: flex; align-items: center; justify-content: center; height: 52mm; overflow: hidden; }
     .img-card img { max-width: 100%; max-height: 100%; object-fit: contain; }

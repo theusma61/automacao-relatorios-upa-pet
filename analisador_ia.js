@@ -148,7 +148,7 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
    - FÍGADO
    - VESICULA BILIAR
    - ALÇAS INTESTINAIS
-   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia). JAMAIS inclua PRÓSTATA em fêmeas.
+   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia; medidas e achados de cornos uterinos CUE, CUD e corpo devem ser descritos conjuntamente no tópico ÚTERO). JAMAIS inclua PRÓSTATA em fêmeas.
    - Se Macho: TESTICULO ESQUERDO, TESTICULO DIREITO, PROSTATA (ou histórico de orquiectomia)
    - GLANDULA ADRENAL
    - PANCREAS
