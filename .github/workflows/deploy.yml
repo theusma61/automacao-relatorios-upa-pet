@@ -67,10 +67,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p $SSH_PORT $SSH_HOST >> ~/.ssh/known_hosts 2>/dev/null
 
-          echo "📡 Executando script de deploy na VPS..."
-          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "bash -s" < scripts/deploy-vps.sh
+          echo "📦 Sincronizando código backend, prisma e scripts para a VPS..."
+          scp -P $SSH_PORT -r *.js prisma scripts $SSH_USER@$SSH_HOST:/var/www/vetaro/
 
           echo "📦 Sincronizando novo frontend/dist compilado para a VPS..."
           scp -P $SSH_PORT -r frontend/dist/* $SSH_USER@$SSH_HOST:/var/www/vetaro/frontend/dist/
+
+          echo "📡 Executando script de deploy e reload dos containers na VPS..."
+          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "bash -s" < scripts/deploy-vps.sh
 
           echo "🎉 SUCESSO: Aplicação Vetaro atualizada e no ar!"

@@ -379,8 +379,10 @@ app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
   if (req.query.inline === '1' || req.query.preview === '1') {
     const isPdf = safeFilename.toLowerCase().endsWith('.pdf');
     res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/octet-stream');
-    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(safeFilename)}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
     res.setHeader('Cache-Control', 'public, max-age=3600');
     return res.sendFile(path.resolve(filePath));
   }

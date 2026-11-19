@@ -18,9 +18,9 @@ PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
 
 # 2. Atualiza o repositório Git com a branch main de forma limpa
 echo "📥 1. Atualizando repositório Git (branch main)..."
-git fetch origin main
-git reset --hard origin/main
-NEW_COMMIT=$(git rev-parse HEAD)
+git fetch origin main || echo "⚠️ Aviso: git fetch falhou ou sem credenciais, usando arquivos sincronizados via SCP."
+git reset --hard origin/main 2>/dev/null || true
+NEW_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "$PREV_COMMIT")
 echo "📌 Commit atualizado: $PREV_COMMIT -> $NEW_COMMIT"
 
 # 3. Garante que os diretórios necessários existem

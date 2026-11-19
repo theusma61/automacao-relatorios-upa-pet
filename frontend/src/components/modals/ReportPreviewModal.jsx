@@ -1008,12 +1008,12 @@ export default function ReportPreviewModal({
           {/* MODO PREVIEW REALISTA DO PDF (DIREITA NO MODO SPLIT OU TELA CHEIA NO PREVIEW) */}
           {(activeTab === 'preview' || activeTab === 'split') && (
             <div
-              className={`h-full flex flex-col bg-slate-900 ${
+              className={`h-full min-h-0 flex flex-col bg-slate-900 ${
                 activeTab === 'split' ? 'w-1/2' : 'w-full'
               }`}
             >
               {pdfUrlLive ? (
-                <div className="w-full h-full flex flex-col relative">
+                <div className="w-full h-full min-h-0 flex-1 flex flex-col relative">
                   {/* Barra de utilidades do PDF */}
                   <div
                     className={`px-4 py-2 border-b flex items-center justify-between gap-2 shrink-0 ${
@@ -1039,27 +1039,30 @@ export default function ReportPreviewModal({
                     </div>
                   </div>
 
-                  {pdfDirectUrl ? (
-                    <iframe
-                      key={pdfDirectUrl}
-                      title="Pré-visualização do Laudo PDF"
-                      src={pdfDirectUrl}
-                      className="w-full flex-1 border-0 bg-slate-900"
-                    />
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                      <FileText className="w-10 h-10 mb-2 text-slate-500 opacity-60" />
-                      <p className="text-xs font-bold">PDF gerado no servidor.</p>
-                      <a
-                        href={pdfUrlLive}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 text-xs text-[#00D296] underline font-bold"
-                      >
-                        Clique para abrir em nova aba
-                      </a>
-                    </div>
-                  )}
+                  <div className="flex-1 w-full min-h-0 relative bg-slate-900 overflow-hidden">
+                    {pdfDirectUrl ? (
+                      <iframe
+                        key={pdfDirectUrl}
+                        title="Pré-visualização do Laudo PDF"
+                        src={pdfDirectUrl}
+                        className="w-full h-full border-0 absolute inset-0 block bg-slate-900"
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                        <FileText className="w-10 h-10 mb-2 text-slate-500 opacity-60" />
+                        <p className="text-xs font-bold">PDF gerado no servidor.</p>
+                        <a
+                          href={pdfUrlLive}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 text-xs text-[#00D296] underline font-bold"
+                        >
+                          Clique para abrir em nova aba
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
