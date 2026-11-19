@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   User,
   Palette,
@@ -7,7 +7,11 @@ import {
   Download,
   FileCheck,
   Lock,
-  Eye
+  Eye,
+  AlertTriangle,
+  ArrowUpRight,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import {
   VetaroLogo,
@@ -39,6 +43,27 @@ export default function UltrasoundGenerator({
   const [reportPageTab, setReportPageTab] = useState('p1');
   const [reportParaEdicao, setReportParaEdicao] = useState(null);
   const [previewModalAberto, setPreviewModalAberto] = useState(false);
+  const [cotaInfo, setCotaInfo] = useState(null);
+  const [carregandoCota, setCarregandoCota] = useState(true);
+
+  const carregarStatusCota = async () => {
+    try {
+      const res = await api.getStatusCota();
+      if (res && res.sucesso) {
+        setCotaInfo(res);
+      }
+    } catch (err) {
+      console.warn('Não foi possível obter status da cota:', err);
+    } finally {
+      setCarregandoCota(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarStatusCota();
+  }, []);
+
+  const isCotaBloqueada = cotaInfo?.bloqueado === true;
 
   const podeEmitir =
     userProfile?.podeGerarLaudos ||
@@ -46,6 +71,10 @@ export default function UltrasoundGenerator({
     userProfile?.role === 'veterinario';
 
   const handleFilesSelected = (fileList) => {
+    if (isCotaBloqueada) {
+      onToast('Limite de cota mensal atingido. Faça upgrade do plano para enviar novas imagens.');
+      return;
+    }
     const arr = Array.from(fileList || []).slice(0, 25);
     if (arr.length === 0) return;
     setRawFiles(arr);
@@ -60,6 +89,10 @@ export default function UltrasoundGenerator({
   };
 
   const handleGenerate = async () => {
+    if (isCotaBloqueada) {
+      onToast('Limite de cota mensal atingido. Faça upgrade do seu plano para gerar laudos.');
+      return;
+    }
     if (!podeEmitir) {
       onToast('Sua conta não possui permissão para gerar laudos.');
       return;
@@ -117,7 +150,11 @@ export default function UltrasoundGenerator({
       setReportParaEdicao(novoRelatorio);
       onAddActivity(novoRelatorio);
       onToast('Laudo Oficial de Ultrassom gerado com sucesso!');
+      carregarStatusCota();
     } catch (err) {
+      if (err.codigo === 'COTA_ATINGIDA' || err.message?.includes('cota')) {
+        carregarStatusCota();
+      }
       onToast('Erro ao processar ultrassom: ' + err.message);
     } finally {
       setIsGenerating(false);
@@ -151,10 +188,50 @@ export default function UltrasoundGenerator({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {cotaInfo && (
+              <div
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition ${
+                  cotaInfo.admin
+                    ? darkMode
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : isCotaBloqueada
+                    ? darkMode
+                      ? 'bg-rose-950/50 border-rose-500/50 text-rose-300 animate-pulse'
+                      : 'bg-rose-50 border-rose-300 text-rose-700'
+                    : darkMode
+                    ? 'bg-[#142634] border-[#2A445A] text-slate-200'
+                    : 'bg-slate-100 border-slate-200 text-slate-700'
+                }`}
+                title={
+                  cotaInfo.admin
+                    ? 'Acesso Administrativo: Cota ilimitada'
+                    : `Cota mensal: ${cotaInfo.consumido}/${cotaInfo.limite} laudos utilizados`
+                }
+              >
+                {cotaInfo.admin ? (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Cota: Ilimitada (Admin)</span>
+                  </>
+                ) : isCotaBloqueada ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span>Cota Esgotada ({cotaInfo.consumido}/{cotaInfo.limite})</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Cota: {cotaInfo.disponivel} restante(s)</span>
+                  </>
+                )}
+              </div>
+            )}
+
             <button
               type="button"
-              onClick={onOpenProfile}
+              onClick={() => onOpenProfile('perfil')}
               className="px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 border transition shadow-xs bg-[#E3FAF2] text-[#0D5C56] border-[#00D296]/40 hover:bg-[#ccf5e7]"
             >
               <User className="w-4 h-4 text-[#00A878] shrink-0" />
@@ -182,6 +259,54 @@ export default function UltrasoundGenerator({
           </div>
         </div>
 
+        {/* Banner de Aviso de Cota Esgotada */}
+        {isCotaBloqueada && (
+          <div
+            className={`relative z-10 mb-5 p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition shadow-md ${
+              darkMode
+                ? 'bg-rose-950/40 border-rose-500/50 text-white'
+                : 'bg-rose-50 border-rose-200 text-rose-950'
+            }`}
+          >
+            <div className="flex items-start gap-3.5">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  darkMode ? 'bg-rose-900/60 text-rose-300' : 'bg-rose-100 text-rose-600'
+                }`}
+              >
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm sm:text-base font-extrabold flex items-center gap-2">
+                  <span>Limite de Cota Mensal Atingido</span>
+                  {cotaInfo && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                      {cotaInfo.consumido}/{cotaInfo.limite} laudos
+                    </span>
+                  )}
+                </h4>
+                <p
+                  className={`text-xs mt-1 leading-relaxed ${
+                    darkMode ? 'text-rose-200/80' : 'text-rose-700'
+                  }`}
+                >
+                  {cotaInfo?.motivo ||
+                    'Você atingiu o limite mensal do seu plano. Para emitir novos laudos oficiais de ultrassom, faça upgrade agora.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenProfile('assinatura')}
+              className="px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 shrink-0 transition bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white shadow-md hover:scale-[1.02]"
+            >
+              <span>Fazer Upgrade do Plano</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Gaveta / Editor A4 do Layout conectado ao PostgreSQL */}
         <LayoutEditorDrawer
           darkMode={darkMode}
@@ -205,39 +330,69 @@ export default function UltrasoundGenerator({
 
         {/* Dropzone Tracejada */}
         <div
-          onClick={() => fileInputRef.current && fileInputRef.current.click()}
-          onDragOver={(e) => e.preventDefault()}
+          onClick={() => {
+            if (isCotaBloqueada) {
+              onToast('Limite de cota mensal atingido. Faça upgrade do plano na aba Assinatura.');
+              return;
+            }
+            if (fileInputRef.current) fileInputRef.current.click();
+          }}
+          onDragOver={(e) => {
+            if (!isCotaBloqueada) e.preventDefault();
+          }}
           onDrop={(e) => {
             e.preventDefault();
+            if (isCotaBloqueada) {
+              onToast('Limite de cota atingido. Faça upgrade do plano para enviar novas imagens.');
+              return;
+            }
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
               handleFilesSelected(e.dataTransfer.files);
             }
           }}
-          className={`relative z-10 rounded-2xl border-2 border-dashed py-10 px-6 text-center cursor-pointer transition group ${
-            darkMode
-              ? 'bg-[#1A2B38]/85 border-[#3A566E] hover:border-[#00D296] hover:bg-[#162936]'
-              : 'bg-[#E9F5F2]/80 border-[#89B8B0] hover:border-[#0D5C56] hover:bg-[#DEF2EC]'
+          className={`relative z-10 rounded-2xl border-2 border-dashed py-10 px-6 text-center transition group ${
+            isCotaBloqueada
+              ? darkMode
+                ? 'bg-rose-950/20 border-rose-800/40 opacity-75 cursor-not-allowed'
+                : 'bg-rose-50/50 border-rose-300/60 opacity-80 cursor-not-allowed'
+              : darkMode
+              ? 'bg-[#1A2B38]/85 border-[#3A566E] hover:border-[#00D296] hover:bg-[#162936] cursor-pointer'
+              : 'bg-[#E9F5F2]/80 border-[#89B8B0] hover:border-[#0D5C56] hover:bg-[#DEF2EC] cursor-pointer'
           }`}
         >
           <div className="flex justify-center mb-3">
             <div
               className={`w-16 h-16 rounded-2xl flex items-center justify-center transition group-hover:scale-105 ${
-                darkMode ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#C7F0E3] text-[#0D5C56]'
+                isCotaBloqueada
+                  ? darkMode
+                    ? 'bg-rose-900/40 text-rose-400'
+                    : 'bg-rose-100 text-rose-600'
+                  : darkMode
+                  ? 'bg-[#0E3A38] text-[#00D296]'
+                  : 'bg-[#C7F0E3] text-[#0D5C56]'
               }`}
             >
-              <CloudUploadVetaroIcon className="w-11 h-11" />
+              {isCotaBloqueada ? (
+                <Lock className="w-10 h-10" />
+              ) : (
+                <CloudUploadVetaroIcon className="w-11 h-11" />
+              )}
             </div>
           </div>
 
           <p className="text-sm sm:text-base font-extrabold">
-            Clique para selecionar as fotos ou arraste até aqui
+            {isCotaBloqueada
+              ? 'Envio de Imagens Bloqueado por Limite de Cota'
+              : 'Clique para selecionar as fotos ou arraste até aqui'}
           </p>
           <p
             className={`text-xs mt-1 font-medium ${
               darkMode ? 'text-slate-300/80' : 'text-[#52657A]'
             }`}
           >
-            Formatos aceitos: JPG, PNG, WEBP (até 25 fotos por exame)
+            {isCotaBloqueada
+              ? 'Faça upgrade do seu plano para liberar novas análises e laudos oficiais'
+              : 'Formatos aceitos: JPG, PNG, WEBP (até 25 fotos por exame)'}
           </p>
 
           {mindrayFiles.length > 0 && (
@@ -278,10 +433,14 @@ export default function UltrasoundGenerator({
         <button
           type="button"
           onClick={handleGenerate}
-          disabled={isGenerating || !podeEmitir}
+          disabled={isGenerating || !podeEmitir || isCotaBloqueada}
           className={`relative z-10 w-full mt-5 py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ${
             !podeEmitir
               ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+              : isCotaBloqueada
+              ? darkMode
+                ? 'bg-rose-950/60 border border-rose-500/50 text-rose-300 cursor-not-allowed'
+                : 'bg-rose-100 border border-rose-300 text-rose-700 cursor-not-allowed'
               : darkMode
               ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110'
               : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110'
@@ -291,6 +450,13 @@ export default function UltrasoundGenerator({
             <>
               <Lock className="w-5 h-5" />
               <span>Geração de Laudo Bloqueada (Sem Permissão)</span>
+            </>
+          ) : isCotaBloqueada ? (
+            <>
+              <Lock className="w-5 h-5 text-rose-400" />
+              <span>
+                🔒 Limite de Cota Atingido ({cotaInfo?.consumido}/{cotaInfo?.limite} laudos) — Faça Upgrade
+              </span>
             </>
           ) : (
             <>

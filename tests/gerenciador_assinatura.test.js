@@ -6,7 +6,8 @@ const {
   TABELA_PLANOS,
   obterOuCriarAssinatura,
   obterMetricasUsoAssinatura,
-  atualizarPlanoAssinatura
+  atualizarPlanoAssinatura,
+  verificarLimiteCotaUltrassom
 } = require('../gerenciador_assinatura');
 const { prisma } = require('../db');
 
@@ -90,5 +91,64 @@ describe('Gerenciador de Assinaturas e Cotas (PostgreSQL Multi-Tenant)', () => {
     expect(sub.cotaLimite).toBe(10);
     expect(Number(sub.precoMensal)).toBe(0);
     expect(sub.cartaoFinal).toBeNull();
+  });
+
+  test('verificarLimiteCotaUltrassom permite emissão irrestrita para administrador', async () => {
+    const adminUser = await prisma.usuario.create({
+      data: {
+        email: `admin_${Date.now()}@vetaro.com`,
+        nome: 'Admin Teste',
+        role: 'admin'
+      }
+    });
+
+    const statusAdmin = await verificarLimiteCotaUltrassom(adminUser.id);
+    expect(statusAdmin.bloqueado).toBe(false);
+    expect(statusAdmin.admin).toBe(true);
+    expect(statusAdmin.limite).toBe(Infinity);
+  });
+
+  test('verificarLimiteCotaUltrassom bloqueia usuário quando limite de cota é atingido', async () => {
+    const userLimite = await prisma.usuario.create({
+      data: {
+        email: `cota_bloqueada_${Date.now()}@vetaro.com`,
+        nome: 'Dr. Cota Atingida',
+        role: 'veterinario'
+      }
+    });
+
+    // Cria assinatura com limite 2
+    const sub = await obterOuCriarAssinatura(userLimite.id);
+    await prisma.assinatura.update({
+      where: { id: sub.id },
+      data: { cotaLimite: 2 }
+    });
+
+    // Simula 2 exames criados no ciclo atual
+    await prisma.exameLaudo.create({
+      data: {
+        usuarioId: userLimite.id,
+        pacienteNome: 'Exame 1',
+        pacienteEspecie: 'Canina',
+        dataExame: '19/11/2026',
+        laudoEstruturado: []
+      }
+    });
+    await prisma.exameLaudo.create({
+      data: {
+        usuarioId: userLimite.id,
+        pacienteNome: 'Exame 2',
+        pacienteEspecie: 'Felina',
+        dataExame: '19/11/2026',
+        laudoEstruturado: []
+      }
+    });
+
+    const checagem = await verificarLimiteCotaUltrassom(userLimite.id);
+    expect(checagem.bloqueado).toBe(true);
+    expect(checagem.consumido).toBe(2);
+    expect(checagem.limite).toBe(2);
+    expect(checagem.disponivel).toBe(0);
+    expect(checagem.motivo).toMatch(/limite da sua cota mensal/);
   });
 });

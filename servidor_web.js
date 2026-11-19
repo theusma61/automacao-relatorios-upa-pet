@@ -54,7 +54,8 @@ const {
 } = require('./gerenciador_usuarios');
 const {
   obterMetricasUsoAssinatura,
-  atualizarPlanoAssinatura
+  atualizarPlanoAssinatura,
+  verificarLimiteCotaUltrassom
 } = require('./gerenciador_assinatura');
 
 const { logger, requestLogger } = require('./logger');
@@ -211,10 +212,23 @@ app.get('/api/auth/config', (req, res) => {
   });
 });
 
-app.get('/api/auth/me', (req, res) => {
-  res.json({
-    usuario: req.usuario || null
-  });
+app.get('/api/auth/me', async (req, res) => {
+  if (!req.usuario) {
+    return res.json({ usuario: null });
+  }
+  try {
+    const cotaUltrassom = await verificarLimiteCotaUltrassom(req.usuario.id);
+    res.json({
+      usuario: {
+        ...req.usuario,
+        cotaUltrassom
+      }
+    });
+  } catch (_) {
+    res.json({
+      usuario: req.usuario
+    });
+  }
 });
 
 app.post('/api/auth/google', validate(authSchemas.googleLogin, 'body'), async (req, res) => {
@@ -968,7 +982,40 @@ app.post('/api/assinatura/trocar-plano', exigirAutenticacao, async (req, res) =>
   }
 });
 
+// Endpoint leve para consulta rápida do status da cota de ultrassom
+app.get('/api/assinatura/status-cota', exigirAutenticacao, async (req, res) => {
+  try {
+    const status = await verificarLimiteCotaUltrassom(req.usuario.id);
+    res.json({ sucesso: true, ...status });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao verificar cota: ' + err.message });
+  }
+});
+
 app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('imagens', 25), async (req, res) => {
+  // TRAVA DE LIMITES DA COTA MENSAL DE ULTRASSOM
+  try {
+    const checagemCota = await verificarLimiteCotaUltrassom(req.usuario.id);
+    if (checagemCota.bloqueado) {
+      if (Array.isArray(req.files)) {
+        req.files.forEach((f) => {
+          try { fs.unlinkSync(f.path); } catch (_) {}
+        });
+      }
+      return res.status(403).json({
+        error: checagemCota.motivo,
+        codigo: 'COTA_ATINGIDA',
+        limite: checagemCota.limite,
+        consumido: checagemCota.consumido,
+        disponivel: checagemCota.disponivel,
+        plano: checagemCota.plano,
+        planoNome: checagemCota.planoNome
+      });
+    }
+  } catch (errCota) {
+    logger.warn('Aviso ao checar limite de cota de ultrassom', { error: errCota.message });
+  }
+
   if (!apiKey) {
     return res.status(400).json({ error: 'Chave da API Gemini não configurada (GEMINI_API_KEY).' });
   }

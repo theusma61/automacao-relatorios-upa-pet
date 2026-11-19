@@ -264,7 +264,7 @@ export default function App() {
           userProfile={usuario}
           layoutConfig={layoutConfig}
           setLayoutConfig={setLayoutConfig}
-          onOpenProfile={() => openFromProfileMenu('perfil')}
+          onOpenProfile={(tab = 'perfil') => openFromProfileMenu(tab)}
           onNavigateHome={() => setActiveNav('inicio')}
           onAddActivity={handleAddActivity}
           onToast={showToast}
@@ -278,7 +278,7 @@ export default function App() {
           darkMode={darkMode}
           userProfile={usuario}
           layoutConfig={layoutConfig}
-          onOpenProfile={() => openFromProfileMenu('perfil')}
+          onOpenProfile={(tab = 'perfil') => openFromProfileMenu(tab)}
           onNavigateHome={() => setActiveNav('inicio')}
           onAddActivity={handleAddActivity}
           onToast={showToast}

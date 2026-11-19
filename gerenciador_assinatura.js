@@ -297,9 +297,56 @@ async function atualizarPlanoAssinatura(usuarioId, novoPlano, ciclo = 'mensal') 
   return obterMetricasUsoAssinatura(usuarioId);
 }
 
+/**
+ * Verifica se o usuário tem cota disponível para emitir novo laudo de ultrassom.
+ * Administradores possuem cota ilimitada.
+ * Para os demais usuários, bloqueia caso consumido >= limite da cota mensal contratada.
+ */
+async function verificarLimiteCotaUltrassom(usuarioId) {
+  if (!usuarioId) throw new Error('ID do usuário é obrigatório.');
+
+  const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
+  if (!usuario) throw new Error('Usuário não encontrado.');
+
+  if (usuario.role === 'admin') {
+    return {
+      bloqueado: false,
+      motivo: null,
+      admin: true,
+      limite: Infinity,
+      consumido: 0,
+      disponivel: Infinity,
+      porcentagem: 0,
+      plano: 'ADMIN',
+      planoNome: 'Administrador (Ilimitado)'
+    };
+  }
+
+  const metricas = await obterMetricasUsoAssinatura(usuarioId);
+  const { cota, plano } = metricas;
+
+  const bloqueado = cota.consumido >= cota.limite;
+  const motivo = bloqueado
+    ? `Você atingiu o limite da sua cota mensal de ${cota.limite} laudo(s) de ultrassom (${cota.consumido}/${cota.limite} emitidos no plano ${plano.nome}). Para continuar gerando novos laudos oficiais, faça upgrade do seu plano.`
+    : null;
+
+  return {
+    bloqueado,
+    motivo,
+    admin: false,
+    limite: cota.limite,
+    consumido: cota.consumido,
+    disponivel: cota.disponivel,
+    porcentagem: cota.porcentagem,
+    plano: plano.chave,
+    planoNome: plano.nome
+  };
+}
+
 module.exports = {
   TABELA_PLANOS,
   obterOuCriarAssinatura,
   obterMetricasUsoAssinatura,
-  atualizarPlanoAssinatura
+  atualizarPlanoAssinatura,
+  verificarLimiteCotaUltrassom
 };

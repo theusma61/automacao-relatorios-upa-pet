@@ -107,6 +107,7 @@ export const api = {
 
   // Controle de Gastos, Cotas e Assinatura
   getUsoAssinatura: () => requestJson('/api/assinatura/uso'),
+  getStatusCota: () => requestJson('/api/assinatura/status-cota'),
   trocarPlanoAssinatura: (plano, ciclo = 'mensal') =>
     requestJson('/api/assinatura/trocar-plano', {
       method: 'POST',

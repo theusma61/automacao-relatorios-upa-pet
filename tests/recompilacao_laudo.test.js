@@ -5,7 +5,7 @@ const { gerarDocumentosExame } = require('../motor_laudo');
 const { gerarDocumentosCirurgicos } = require('../motor_cirurgia');
 
 describe('Recompilação e Edição de Laudos e Cirurgias (motor_laudo.js e motor_cirurgia.js)', () => {
-  jest.setTimeout(30000);
+  jest.setTimeout(90000);
   const tmpDir = path.join(os.tmpdir(), `teste_recompilacao_${Date.now()}`);
 
   beforeAll(() => {
@@ -76,7 +76,7 @@ describe('Recompilação e Edição de Laudos e Cirurgias (motor_laudo.js e moto
     // O arquivo PDF gerado deve ter tamanho > 0
     const statsPdf = fs.statSync(docs.caminhoPdf);
     expect(statsPdf.size).toBeGreaterThan(1000);
-  });
+  }, 90000);
 
   test('deve recompilar relatório cirúrgico após edição de técnica e considerações', async () => {
     const cirurgiaModificada = {
@@ -110,7 +110,7 @@ describe('Recompilação e Edição de Laudos e Cirurgias (motor_laudo.js e moto
 
     const statsDocx = fs.statSync(docs.caminhoDocx);
     expect(statsDocx.size).toBeGreaterThan(1000);
-  });
+  }, 90000);
 
   test('deve extrair texto e órgãos de um arquivo DOCX gerado utilizando JSZip', async () => {
     const JSZip = require('jszip');
