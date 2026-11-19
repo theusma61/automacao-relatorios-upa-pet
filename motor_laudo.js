@@ -7,7 +7,8 @@ const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
 const {
   construirHtmlLaudo,
   calcularAutoFitLaudoTextual,
-  normalizarOrgaosCanonica
+  normalizarOrgaosCanonica,
+  distribuirFotosEquilibradas
 } = require('./renderizador_layout_laudo');
 const { normalizarRotuloResponsavel } = require('./extrator_padrao_laudo');
 
@@ -345,7 +346,9 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     return true;
   });
 
-  const laudoNormalizado = normalizarOrgaosCanonica(laudoFiltrado);
+  // Aplica Auto-Fit dinâmico e agnóstico na clonagem visual
+  const autoFit = calcularAutoFitLaudoTextual(laudoFiltrado, layout, opcoes);
+  const laudoNormalizado = autoFit.laudoAjustado;
   const paragrafosOrgaos = laudoNormalizado.map((item) =>
     sanitizarParagrafoOrgao(item, {
       organLabelCase: bTypo.organLabelCase || 'UPPERCASE',
@@ -355,10 +358,10 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     })
   );
 
-  const cortePag1 = bTypo.firstPageOrganCount || 8;
-  const usarDuasPaginasTexto = (
-    bTypo.paginationMode === 'two_page_flow' || bTypo.paginationMode === 'two_page_ulsvet'
-  ) && paragrafosOrgaos.length > cortePag1;
+  // Paginação inteligente: Se o exame couber em 1 página (modo single_page),
+  // NUNCA quebra em 2 páginas artificiais que deixam folhas com 80% em branco!
+  const usarDuasPaginasTexto = autoFit.modoPaginacao === 'two_page_balanced' || autoFit.modoPaginacao === 'two_page_flow';
+  const cortePag1 = autoFit.cortePagina1 || Math.ceil(paragrafosOrgaos.length / 2);
 
   const orgaosPag1 = usarDuasPaginasTexto ? paragrafosOrgaos.slice(0, cortePag1).join('\n') : paragrafosOrgaos.join('\n');
   const orgaosPag2 = usarDuasPaginasTexto ? paragrafosOrgaos.slice(cortePag1).join('\n') : '';
@@ -437,11 +440,8 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     </div>
   ` : '';
 
-  const fotosPorPagina = (imgCfg.columns || 2) * (imgCfg.rowsPerPage || 3);
-  const paginasImagens = [];
-  for (let i = 0; i < imagensPaths.length; i += fotosPorPagina) {
-    paginasImagens.push(imagensPaths.slice(i, i + fotosPorPagina));
-  }
+  const maxFotosPorPagina = (imgCfg.columns || 2) * (imgCfg.rowsPerPage || 4);
+  const paginasImagens = distribuirFotosEquilibradas(imagensPaths, maxFotosPorPagina || 8);
 
   const bgLayerPag1Html = ehStationeryFullPage
     ? `<img src="${pageBackgroundUri}" class="stationery-bg-img" alt="">`
@@ -488,8 +488,8 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
       font-family: ${bTypo.fontFamily || layout.font_family || 'Calibri, Carlito, Arial, sans-serif'};
-      font-size: ${bTypo.fontSize || layout.font_size_body || '10pt'};
-      line-height: ${bTypo.lineHeight || layout.line_height || '1.35'};
+      font-size: ${autoFit.fontSizeBody || bTypo.fontSize || layout.font_size_body || '10pt'};
+      line-height: ${autoFit.lineHeight || bTypo.lineHeight || layout.line_height || '1.30'};
       color: #111;
       margin: 0;
       padding: 0;
@@ -628,11 +628,12 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     }
     .report-title-box {
       text-align: ${tCfg.alignment || 'center'};
-      margin-bottom: ${tCfg.marginBottomMm || '6mm'};
+      margin-top: ${autoFit.tier === 'compact' || autoFit.tier === 'ultra_compact' ? '2mm' : (tCfg.marginTopMm || '4mm')};
+      margin-bottom: ${autoFit.tier === 'compact' || autoFit.tier === 'ultra_compact' ? '3mm' : (tCfg.marginBottomMm || '5mm')};
     }
     .report-title-box h1 {
       font-family: ${tCfg.fontFamily || bTypo.fontFamily || 'Calibri, Carlito, Arial, sans-serif'};
-      font-size: ${tCfg.fontSize || '12pt'};
+      font-size: ${autoFit.fontSizeTitulo || tCfg.fontSize || '12pt'};
       color: ${tCfg.color || '#000'};
       font-weight: ${tCfg.bold === false ? 'normal' : '600'};
       margin: 0;
@@ -641,20 +642,20 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     }
     .report-subtitle {
       font-family: ${tCfg.fontFamily || bTypo.fontFamily || 'Calibri, Carlito, Arial, sans-serif'};
-      font-size: ${tCfg.subtitleFontSize || '8pt'};
+      font-size: ${autoFit.subtitleFontSize || tCfg.subtitleFontSize || '8pt'};
       font-style: italic;
       color: #111;
-      margin: 1.5mm auto 0 auto;
+      margin: 1mm auto 0 auto;
       line-height: 1.25;
       max-width: 162mm;
     }
     .organs-content {
       text-align: ${bTypo.textAlign || 'justify'};
-      font-size: ${bTypo.fontSize || '10pt'};
-      line-height: ${bTypo.lineHeight || '1.35'};
+      font-size: ${autoFit.fontSizeBody || bTypo.fontSize || '9.5pt'};
+      line-height: ${autoFit.lineHeight || bTypo.lineHeight || '1.26'};
     }
     .organs-content p {
-      margin: 0 0 ${bTypo.paragraphSpacing || '10pt'} 0;
+      margin: 0 0 ${autoFit.paragraphSpacing || bTypo.paragraphSpacing || '2.0mm'} 0;
     }
     .obs-italic-line {
       font-size: 8.5pt;
@@ -666,7 +667,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       display: flex;
       justify-content: ${sCfg.alignment === 'left' ? 'flex-start' : (sCfg.alignment === 'center' ? 'center' : 'flex-end')};
       padding-right: ${sCfg.alignment === 'right' ? (sCfg.paddingRightMm || '0mm') : '0'};
-      margin-top: ${sCfg.marginTopMm || '8mm'};
+      margin-top: ${autoFit.marginSignatureTop || sCfg.marginTopMm || '4mm'};
     }
     .signature-inner {
       text-align: ${sCfg.alignment === 'right' ? 'right' : (sCfg.alignment === 'left' ? 'left' : 'center')};
@@ -918,10 +919,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       assinaturaImgHtml = `<img src="data:${assExt};base64,${assBase64}" style="max-height:42px; display:inline-block; margin-bottom:2px;" alt="Assinatura"><br>`;
     }
 
-    const paginasImagens = [];
-    for (let i = 0; i < imagensPaths.length; i += 8) {
-      paginasImagens.push(imagensPaths.slice(i, i + 8));
-    }
+    const paginasImagens = distribuirFotosEquilibradas(imagensPaths, 8);
 
     const cabecalho = `
       <div class="header">

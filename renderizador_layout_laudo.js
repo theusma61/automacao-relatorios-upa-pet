@@ -535,6 +535,28 @@ function calcularAutoFitLaudoTextual(laudoArray = [], layoutBase = {}, opcoes = 
 }
 
 /**
+ * Distribui fotos equilibradamente entre páginas evitando páginas com apenas 1 ou 2 fotos órfãs
+ */
+function distribuirFotosEquilibradas(fotos = [], maxPorPagina = 8) {
+  if (!Array.isArray(fotos) || fotos.length === 0) return [];
+  const total = fotos.length;
+  if (total <= maxPorPagina) return [fotos];
+
+  const numPaginas = Math.ceil(total / maxPorPagina);
+  const basePorPagina = Math.floor(total / numPaginas);
+  const resto = total % numPaginas;
+
+  const paginas = [];
+  let offset = 0;
+  for (let p = 0; p < numPaginas; p++) {
+    const qtdDestaPagina = basePorPagina + (p < resto ? 1 : 0);
+    paginas.push(fotos.slice(offset, offset + qtdDestaPagina));
+    offset += qtdDestaPagina;
+  }
+  return paginas;
+}
+
+/**
  * Constrói o HTML completo para impressão / compilação PDF
  */
 function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes = {}) {
@@ -585,11 +607,8 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
   const { corpoHtml, conclusaoHtml } = renderizarAchadosOrgaos(template, laudoProcessado, autoFit);
   const rodapeHtml = renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml);
 
-  // Paginação de imagens (máximo 8 por folha)
-  const paginasImagens = [];
-  for (let i = 0; i < imagensPaths.length; i += 8) {
-    paginasImagens.push(imagensPaths.slice(i, i + 8));
-  }
+  // Paginação equilibrada de imagens (máximo 8 por folha sem páginas com 1 foto órfã)
+  const paginasImagens = distribuirFotosEquilibradas(imagensPaths, 8);
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -747,5 +766,6 @@ module.exports = {
   normalizarTemplateVisual,
   TEMPLATE_VISUAL_PADRAO,
   calcularAutoFitLaudoTextual,
-  normalizarOrgaosCanonica
+  normalizarOrgaosCanonica,
+  distribuirFotosEquilibradas
 };
