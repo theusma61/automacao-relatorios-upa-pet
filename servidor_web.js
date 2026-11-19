@@ -354,12 +354,22 @@ app.get('/health', (req, res) => {
 
 app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
   const { jobId, filename } = req.params;
-  const filePath = path.join(outputDir, jobId, filename);
-  if (fs.existsSync(filePath)) {
-    res.download(filePath);
-  } else {
-    res.status(404).send('Arquivo não encontrado ou já expirou.');
+  const safeJobId = path.basename(jobId);
+  const safeFilename = path.basename(filename);
+  const filePath = path.join(outputDir, safeJobId, safeFilename);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('Arquivo não encontrado ou já expirou.');
   }
+
+  if (req.query.inline === '1' || req.query.preview === '1') {
+    const isPdf = safeFilename.toLowerCase().endsWith('.pdf');
+    res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(safeFilename)}"`);
+    return res.sendFile(path.resolve(filePath));
+  }
+
+  res.download(filePath, safeFilename);
 });
 
 app.get('/api/modelos-cirurgicos', async (req, res) => {
@@ -756,9 +766,20 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
 
   const jobId = `ultra_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   const jobFolder = path.join(outputDir, jobId);
-  fs.mkdirSync(jobFolder, { recursive: true });
+  const imagensDir = path.join(jobFolder, 'imagens');
+  fs.mkdirSync(imagensDir, { recursive: true });
 
-  const caminhosArquivos = req.files.map(f => f.path);
+  // Preserva cópia das imagens na pasta do exame para permitir recompilações instantâneas
+  const caminhosArquivos = req.files.map((f, idx) => {
+    const ext = path.extname(f.originalname) || '.jpg';
+    const destino = path.join(imagensDir, `img_${idx + 1}_${Date.now()}${ext}`);
+    try {
+      fs.copyFileSync(f.path, destino);
+      return destino;
+    } catch (_) {
+      return f.path;
+    }
+  });
 
   try {
     console.log(`📡 [WEB - ULTRASSOM] [Usuário: ${req.usuario.email}] Processando ${caminhosArquivos.length} imagens...`);
@@ -795,6 +816,24 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
     const pdfUrl = `/downloads/${jobId}/${encodeURIComponent(pdfNome)}`;
     const docxUrl = `/downloads/${jobId}/${encodeURIComponent(docxNome)}`;
 
+    // Salva metadados estruturados para edição e recompilação rápida
+    try {
+      fs.writeFileSync(
+        path.join(jobFolder, 'meta_exame.json'),
+        JSON.stringify({
+          jobId,
+          paciente: resultadoIA.paciente,
+          laudo: resultadoIA.laudo,
+          imagensPaths: imagensOrdenadas,
+          usuarioId: req.usuario?.id,
+          criadoEm: new Date().toISOString()
+        }, null, 2),
+        'utf8'
+      );
+    } catch (metaErr) {
+      logger.warn('Aviso ao salvar meta_exame.json', { error: metaErr.message });
+    }
+
     if (req.usuario && req.usuario.id) {
       await prisma.exameLaudo.create({
         data: {
@@ -815,7 +854,9 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
 
     res.json({
       sucesso: true,
+      jobId,
       paciente: resultadoIA.paciente,
+      laudo: resultadoIA.laudo,
       pdfUrl,
       docxUrl,
       pdfNome,
@@ -825,8 +866,9 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
     console.error('Erro ao processar ultrassom:', err);
     res.status(500).json({ error: err.message || 'Erro interno ao processar laudo de ultrassom.' });
   } finally {
-    caminhosArquivos.forEach(f => {
-      try { fs.unlinkSync(f); } catch (_) {}
+    // Remove os arquivos temporários de uploads/
+    req.files.forEach(f => {
+      try { fs.unlinkSync(f.path); } catch (_) {}
     });
   }
 });
@@ -856,9 +898,21 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
     fs.writeFileSync(caminhoTxt, textoDigitado, 'utf8');
   }
 
+  const fotosDir = path.join(jobFolder, 'fotos');
+  fs.mkdirSync(fotosDir, { recursive: true });
+  const fotosCaminhos = fotoFiles.map((f, idx) => {
+    const ext = path.extname(f.originalname) || '.jpg';
+    const destino = path.join(fotosDir, `foto_${idx + 1}_${Date.now()}${ext}`);
+    try {
+      fs.copyFileSync(f.path, destino);
+      return destino;
+    } catch (_) {
+      return f.path;
+    }
+  });
+
   const todosArquivos = [];
   if (docFile) todosArquivos.push(docFile.path);
-  const fotosCaminhos = fotoFiles.map(f => f.path);
   todosArquivos.push(...fotosCaminhos);
 
   try {
@@ -906,6 +960,24 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
     const pdfUrl = `/downloads/${jobId}/${encodeURIComponent(pdfNome)}`;
     const docxUrl = `/downloads/${jobId}/${encodeURIComponent(docxNome)}`;
 
+    // Salva metadados da cirurgia para recompilações
+    try {
+      fs.writeFileSync(
+        path.join(jobFolder, 'meta_cirurgia.json'),
+        JSON.stringify({
+          jobId,
+          paciente: resultadoIA.paciente,
+          cirurgia: resultadoIA.cirurgia,
+          fotosCaminhos,
+          usuarioId: req.usuario?.id,
+          criadoEm: new Date().toISOString()
+        }, null, 2),
+        'utf8'
+      );
+    } catch (metaErr) {
+      logger.warn('Aviso ao salvar meta_cirurgia.json', { error: metaErr.message });
+    }
+
     if (req.usuario && req.usuario.id) {
       await prisma.relatorioCirurgico.create({
         data: {
@@ -925,6 +997,7 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 
     res.json({
       sucesso: true,
+      jobId,
       paciente: resultadoIA.paciente,
       cirurgia: resultadoIA.cirurgia,
       pdfUrl,
@@ -936,10 +1009,217 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
     console.error('Erro ao processar cirurgia:', err);
     res.status(500).json({ error: err.message || 'Erro interno ao processar relatório cirúrgico.' });
   } finally {
-    todosArquivos.forEach(f => {
-      try { fs.unlinkSync(f); } catch (_) {}
+    if (docFile) {
+      try { fs.unlinkSync(docFile.path); } catch (_) {}
+    }
+    fotoFiles.forEach(f => {
+      try { fs.unlinkSync(f.path); } catch (_) {}
     });
   }
+});
+
+// =========================================================================
+// RECOMPILAÇÃO E EDIÇÃO EM TEMPO REAL DE LAUDOS E CIRURGIAS
+// =========================================================================
+
+app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar_ultrassom'), async (req, res) => {
+  const { jobId, paciente, laudo } = req.body;
+  if (!jobId || !laudo || !Array.isArray(laudo)) {
+    return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId, paciente e a lista de órgãos (laudo).' });
+  }
+
+  const safeJobId = path.basename(jobId);
+  const jobFolder = path.join(outputDir, safeJobId);
+  if (!fs.existsSync(jobFolder)) {
+    return res.status(404).json({ error: 'Exame não encontrado ou sessão expirada no servidor.' });
+  }
+
+  try {
+    const metaPath = path.join(jobFolder, 'meta_exame.json');
+    let imagensOrdenadas = [];
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (req.usuario.role !== 'admin' && meta.usuarioId && meta.usuarioId !== req.usuario.id) {
+          return res.status(403).json({ error: 'Você não tem permissão para editar este exame.' });
+        }
+        imagensOrdenadas = meta.imagensPaths || [];
+      } catch (_) {}
+    }
+
+    // Fallback: se não encontrar no meta, vasculha o diretório imagens/ do job
+    if (imagensOrdenadas.length === 0) {
+      const imgDir = path.join(jobFolder, 'imagens');
+      if (fs.existsSync(imgDir)) {
+        imagensOrdenadas = fs.readdirSync(imgDir)
+          .filter(f => /\.(jpe?g|png|webp)$/i.test(f))
+          .map(f => path.join(imgDir, f));
+      }
+    }
+
+    const layoutUsuario = await obterLayout(req.usuario?.id || null);
+    const perfilDoUsuario = await obterPerfilLaudo(req.usuario?.id || null);
+    const usuarioEfetivo = {
+      ...req.usuario,
+      nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
+      crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica
+    };
+
+    const docs = await gerarDocumentosExame(
+      paciente || {},
+      laudo,
+      imagensOrdenadas,
+      jobFolder,
+      layoutUsuario,
+      {
+        usuario: usuarioEfetivo,
+        perfilLaudo: perfilDoUsuario
+      }
+    );
+
+    const pdfNome = path.basename(docs.caminhoPdf);
+    const docxNome = path.basename(docs.caminhoDocx);
+    const cacheBuster = Date.now();
+    const pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}?v=${cacheBuster}`;
+    const docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}?v=${cacheBuster}`;
+
+    // Atualiza o arquivo de metadados
+    fs.writeFileSync(metaPath, JSON.stringify({
+      jobId: safeJobId,
+      paciente,
+      laudo,
+      imagensPaths: imagensOrdenadas,
+      usuarioId: req.usuario?.id,
+      atualizadoEm: new Date().toISOString()
+    }, null, 2), 'utf8');
+
+    // Atualiza o registro no PostgreSQL se existir
+    if (req.usuario && req.usuario.id) {
+      await prisma.exameLaudo.updateMany({
+        where: {
+          usuarioId: req.usuario.id,
+          pdfArquivo: { contains: safeJobId }
+        },
+        data: {
+          pacienteNome: paciente?.nome || 'Não identificado',
+          pacienteEspecie: paciente?.especie || 'Canina',
+          pacienteSexo: paciente?.sexo || null,
+          pacienteIdade: paciente?.idade || null,
+          tutorNome: paciente?.tutor || null,
+          laudoEstruturado: laudo,
+          pdfArquivo: `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}`,
+          docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`
+        }
+      }).catch(e => logger.warn('Aviso ao sincronizar exame recompilado no banco', { error: e.message }));
+    }
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Laudo recompilado com sucesso com suas modificações!',
+      paciente,
+      laudo,
+      pdfUrl,
+      docxUrl,
+      pdfNome,
+      docxNome
+    });
+  } catch (err) {
+    console.error('Erro ao recompilar laudo de ultrassom:', err);
+    res.status(500).json({ error: err.message || 'Erro ao recompilar documentos do laudo.' });
+  }
+});
+
+app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_cirurgia'), async (req, res) => {
+  const { jobId, paciente, cirurgia } = req.body;
+  if (!jobId || !cirurgia) {
+    return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId e os dados da cirurgia.' });
+  }
+
+  const safeJobId = path.basename(jobId);
+  const jobFolder = path.join(outputDir, safeJobId);
+  if (!fs.existsSync(jobFolder)) {
+    return res.status(404).json({ error: 'Relatório não encontrado ou sessão expirada no servidor.' });
+  }
+
+  try {
+    const metaPath = path.join(jobFolder, 'meta_cirurgia.json');
+    let fotosCaminhos = [];
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (req.usuario.role !== 'admin' && meta.usuarioId && meta.usuarioId !== req.usuario.id) {
+          return res.status(403).json({ error: 'Você não tem permissão para editar este relatório.' });
+        }
+        fotosCaminhos = meta.fotosCaminhos || [];
+      } catch (_) {}
+    }
+
+    if (fotosCaminhos.length === 0) {
+      const fotosDir = path.join(jobFolder, 'fotos');
+      if (fs.existsSync(fotosDir)) {
+        fotosCaminhos = fs.readdirSync(fotosDir)
+          .filter(f => /\.(jpe?g|png|webp)$/i.test(f))
+          .map(f => path.join(fotosDir, f));
+      }
+    }
+
+    const docs = await gerarDocumentosCirurgicos(
+      paciente || {},
+      cirurgia,
+      jobFolder,
+      fotosCaminhos,
+      { usuario: req.usuario }
+    );
+
+    const pdfNome = path.basename(docs.caminhoPdf);
+    const docxNome = path.basename(docs.caminhoDocx);
+    const cacheBuster = Date.now();
+    const pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}?v=${cacheBuster}`;
+    const docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}?v=${cacheBuster}`;
+
+    fs.writeFileSync(metaPath, JSON.stringify({
+      jobId: safeJobId,
+      paciente,
+      cirurgia,
+      fotosCaminhos,
+      usuarioId: req.usuario?.id,
+      atualizadoEm: new Date().toISOString()
+    }, null, 2), 'utf8');
+
+    if (req.usuario && req.usuario.id) {
+      await prisma.relatorioCirurgico.updateMany({
+        where: {
+          usuarioId: req.usuario.id,
+          pdfArquivo: { contains: safeJobId }
+        },
+        data: {
+          pacienteNome: paciente?.nome || 'Paciente',
+          pacienteEspecie: paciente?.especie || null,
+          procedimento: cirurgia.procedimento || 'Procedimento Cirúrgico',
+          diagnostico: cirurgia.diagnosticoPreCirurgico || null,
+          dadosCirurgia: cirurgia,
+          pdfArquivo: `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}`,
+          docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`
+        }
+      }).catch(e => logger.warn('Aviso ao sincronizar relatório recompilado no banco', { error: e.message }));
+    }
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Relatório cirúrgico recompilado com sucesso com suas modificações!',
+      paciente,
+      cirurgia,
+      pdfUrl,
+      docxUrl,
+      pdfNome,
+      docxNome
+    });
+  } catch (err) {
+    console.error('Erro ao recompilar relatório cirúrgico:', err);
+    res.status(500).json({ error: err.message || 'Erro ao recompilar relatório cirúrgico.' });
+  }
+});
 });
 
 // =========================================================================

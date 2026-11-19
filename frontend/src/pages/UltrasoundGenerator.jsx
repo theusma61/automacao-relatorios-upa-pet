@@ -6,7 +6,8 @@ import {
   Wand2,
   Download,
   FileCheck,
-  Lock
+  Lock,
+  Eye
 } from 'lucide-react';
 import {
   VetaroLogo,
@@ -15,6 +16,7 @@ import {
   CloudUploadVetaroIcon
 } from '../components/icons/VetaroIcons';
 import LayoutEditorDrawer from '../components/modals/LayoutEditorDrawer';
+import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
 
 export default function UltrasoundGenerator({
@@ -35,6 +37,8 @@ export default function UltrasoundGenerator({
   const [generatedOutput, setGeneratedOutput] = useState('');
   const [downloadLinks, setDownloadLinks] = useState({ pdfUrl: '', docxUrl: '' });
   const [reportPageTab, setReportPageTab] = useState('p1');
+  const [reportParaEdicao, setReportParaEdicao] = useState(null);
+  const [previewModalAberto, setPreviewModalAberto] = useState(false);
 
   const podeEmitir =
     userProfile?.podeGerarLaudos ||
@@ -95,8 +99,9 @@ export default function UltrasoundGenerator({
 
       setGeneratedOutput(resumoReal);
       setDownloadLinks({ pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' });
-      onAddActivity({
+      const novoRelatorio = {
         id: `ultra-${Date.now()}`,
+        jobId: res.jobId,
         type: 'ultrassom',
         title: 'Laudo de Ultrassom',
         patient: `${pac.nome || 'Paciente'} (${pac.especie || 'Canina'})`,
@@ -105,8 +110,12 @@ export default function UltrasoundGenerator({
         status: 'Concluído',
         summary: resumoReal,
         pdfUrl: res.pdfUrl,
-        docxUrl: res.docxUrl
-      });
+        docxUrl: res.docxUrl,
+        paciente: res.paciente,
+        laudo: res.laudo
+      };
+      setReportParaEdicao(novoRelatorio);
+      onAddActivity(novoRelatorio);
       onToast('Laudo Oficial de Ultrassom gerado com sucesso!');
     } catch (err) {
       onToast('Erro ao processar ultrassom: ' + err.message);
@@ -388,6 +397,17 @@ export default function UltrasoundGenerator({
             </button>
 
             <div className="flex flex-wrap items-center gap-2">
+              {reportParaEdicao && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalAberto(true)}
+                  className="px-4 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] flex items-center gap-1.5 shadow-md hover:brightness-110"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Pré-Visualizar & Editar Laudo</span>
+                </button>
+              )}
+
               {downloadLinks.docxUrl && (
                 <a
                   href={downloadLinks.docxUrl}
@@ -412,6 +432,30 @@ export default function UltrasoundGenerator({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Pré-Visualização e Edição de Texto / Órgãos */}
+      {previewModalAberto && reportParaEdicao && (
+        <ReportPreviewModal
+          report={reportParaEdicao}
+          darkMode={darkMode}
+          onClose={() => setPreviewModalAberto(false)}
+          onToast={onToast}
+          onUpdateReport={(updated) => {
+            setReportParaEdicao(updated);
+            setDownloadLinks({ pdfUrl: updated.pdfUrl, docxUrl: updated.docxUrl });
+            if (updated.paciente) {
+              const pac = updated.paciente;
+              setGeneratedOutput(
+                `LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL (ATUALIZADO)\n` +
+                `Paciente: ${pac.nome || 'Paciente'} (${pac.especie || 'Canina'}${pac.idade ? `, ${pac.idade}` : ''}) | Tutor: ${pac.tutor || 'Não informado'}\n` +
+                `Responsável Técnico: ${userProfile.name} (${userProfile.crmv}) — ${userProfile.clinicName}\n` +
+                `--------------------------------------------------------------------------------\n` +
+                `Laudo oficial atualizado e recompilado com ${updated.laudo?.length || 0} órgão(s) avaliados.`
+              );
+            }
+          }}
+        />
       )}
     </div>
   );

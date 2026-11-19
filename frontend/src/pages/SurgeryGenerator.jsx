@@ -23,6 +23,7 @@ import {
   CameraSolidIcon
 } from '../components/icons/VetaroIcons';
 import ModeloCirurgicoModal from '../components/modals/ModeloCirurgicoModal';
+import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
 
 export default function SurgeryGenerator({
@@ -47,6 +48,8 @@ export default function SurgeryGenerator({
   const [generatedOutput, setGeneratedOutput] = useState('');
   const [downloadLinks, setDownloadLinks] = useState({ pdfUrl: '', docxUrl: '' });
   const [reportPageTab, setReportPageTab] = useState('p1');
+  const [reportParaEdicao, setReportParaEdicao] = useState(null);
+  const [previewModalAberto, setPreviewModalAberto] = useState(false);
 
   const [modelos, setModelos] = useState([]);
   const [filtroOrigem, setFiltroOrigem] = useState('todos');
@@ -172,8 +175,9 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
 
       setGeneratedOutput(textReal);
       setDownloadLinks({ pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' });
-      onAddActivity({
+      const novoRelatorio = {
         id: `cirurg-${Date.now()}`,
+        jobId: res.jobId,
         type: 'relatorio',
         title: `Relatório Cirúrgico — ${cir.procedimento || 'Oficial'}`,
         patient: `${pac.nome || 'Paciente'} (${pac.especie || 'Canina'})`,
@@ -182,8 +186,12 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
         status: 'Concluído',
         summary: textReal,
         pdfUrl: res.pdfUrl,
-        docxUrl: res.docxUrl
-      });
+        docxUrl: res.docxUrl,
+        paciente: res.paciente,
+        cirurgia: res.cirurgia
+      };
+      setReportParaEdicao(novoRelatorio);
+      onAddActivity(novoRelatorio);
       onToast('Relatório Cirúrgico Oficial concluído com sucesso!');
     } catch (err) {
       onToast('Erro ao processar cirurgia: ' + err.message);
@@ -616,6 +624,17 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
               ← Voltar ao Início
             </button>
             <div className="flex flex-wrap items-center gap-2">
+              {reportParaEdicao && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalAberto(true)}
+                  className="px-4 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] flex items-center gap-1.5 shadow-md hover:brightness-110"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Pré-Visualizar & Editar Relatório</span>
+                </button>
+              )}
+
               {downloadLinks.docxUrl && (
                 <a
                   href={downloadLinks.docxUrl}
@@ -816,6 +835,19 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
         }}
         onToast={onToast}
       />
+      {/* Modal de Pré-Visualização e Edição da Cirurgia */}
+      {previewModalAberto && reportParaEdicao && (
+        <ReportPreviewModal
+          report={reportParaEdicao}
+          darkMode={darkMode}
+          onClose={() => setPreviewModalAberto(false)}
+          onToast={onToast}
+          onUpdateReport={(updated) => {
+            setReportParaEdicao(updated);
+            setDownloadLinks({ pdfUrl: updated.pdfUrl, docxUrl: updated.docxUrl });
+          }}
+        />
+      )}
     </div>
   );
 }

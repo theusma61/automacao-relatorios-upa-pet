@@ -130,5 +130,19 @@ export const api = {
   resetPerfilLaudo: () =>
     requestJson('/api/laudos/meu-perfil', {
       method: 'DELETE'
+    }),
+
+  // Recompilação e Edição em Tempo Real de Laudos e Cirurgias
+  recompilarUltrassom: (payload) =>
+    requestJson('/api/ultrassom/recompilar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  recompilarCirurgia: (payload) =>
+    requestJson('/api/cirurgia/recompilar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
 };

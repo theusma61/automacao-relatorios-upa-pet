@@ -85,45 +85,67 @@ export default function App() {
       const exames = Array.isArray(res.exames) ? res.exames : [];
       const cirurgias = Array.isArray(res.cirurgias) ? res.cirurgias : [];
 
-      const mappedExames = exames.map((ex) => ({
-        id: `ex-${ex.id}`,
-        type: 'ultrassom',
-        title: 'Laudo de Ultrassom',
-        patient: `${ex.pacienteNome || 'Paciente'} (${ex.pacienteEspecie || 'Canina'})`,
-        tutor: ex.tutorNome || '',
-        date: ex.criadoEm ? formatDatePtBr(ex.criadoEm) : `Gerado em ${ex.dataExame || ''}`,
-        timestamp: ex.criadoEm ? new Date(ex.criadoEm).getTime() : 0,
-        status: 'Concluído',
-        pdfUrl: ex.pdfArquivo || '',
-        docxUrl: ex.docxArquivo || '',
-        summary: Array.isArray(ex.laudoEstruturado)
-          ? ex.laudoEstruturado
-              .map((item) => `• ${item.orgao || ''}: ${item.achados || ''}`)
-              .join('\n')
-          : `Laudo de Ultrassonografia Abdominal — Paciente ${ex.pacienteNome} (${
-              ex.imagensQtd || 0
-            } imagens).`
-      }));
+      const mappedExames = exames.map((ex) => {
+        const jobId = ex.pdfArquivo ? ex.pdfArquivo.split('/')[2] : '';
+        return {
+          id: `ex-${ex.id}`,
+          jobId,
+          type: 'ultrassom',
+          title: 'Laudo de Ultrassom',
+          patient: `${ex.pacienteNome || 'Paciente'} (${ex.pacienteEspecie || 'Canina'})`,
+          tutor: ex.tutorNome || '',
+          date: ex.criadoEm ? formatDatePtBr(ex.criadoEm) : `Gerado em ${ex.dataExame || ''}`,
+          timestamp: ex.criadoEm ? new Date(ex.criadoEm).getTime() : 0,
+          status: 'Concluído',
+          pdfUrl: ex.pdfArquivo || '',
+          docxUrl: ex.docxArquivo || '',
+          paciente: {
+            nome: ex.pacienteNome || '',
+            especie: ex.pacienteEspecie || 'Canina',
+            sexo: ex.pacienteSexo || 'Macho',
+            idade: ex.pacienteIdade || '',
+            tutor: ex.tutorNome || '',
+            data: ex.dataExame || ''
+          },
+          laudo: ex.laudoEstruturado || [],
+          summary: Array.isArray(ex.laudoEstruturado)
+            ? ex.laudoEstruturado
+                .map((item) => `• ${item.orgao || ''}: ${item.texto || item.achados || ''}`)
+                .join('\n')
+            : `Laudo de Ultrassonografia Abdominal — Paciente ${ex.pacienteNome} (${
+                ex.imagensQtd || 0
+              } imagens).`
+        };
+      });
 
-      const mappedCirurgias = cirurgias.map((c) => ({
-        id: `cir-${c.id}`,
-        type: 'relatorio',
-        title: `Relatório Cirúrgico — ${c.procedimento || 'Oficial'}`,
-        patient: `${c.pacienteNome || 'Paciente'}${
-          c.pacienteEspecie ? ` (${c.pacienteEspecie})` : ''
-        }`,
-        tutor: '',
-        date: formatDatePtBr(c.criadoEm),
-        timestamp: c.criadoEm ? new Date(c.criadoEm).getTime() : 0,
-        status: 'Concluído',
-        pdfUrl: c.pdfArquivo || '',
-        docxUrl: c.docxArquivo || '',
-        summary:
-          c.dadosCirurgia?.descricaoProcedimento ||
-          `Procedimento: ${c.procedimento || 'Cirurgia'}\nDiagnóstico: ${
-            c.diagnostico || 'Padrão'
-          }`
-      }));
+      const mappedCirurgias = cirurgias.map((c) => {
+        const jobId = c.pdfArquivo ? c.pdfArquivo.split('/')[2] : '';
+        return {
+          id: `cir-${c.id}`,
+          jobId,
+          type: 'relatorio',
+          title: `Relatório Cirúrgico — ${c.procedimento || 'Oficial'}`,
+          patient: `${c.pacienteNome || 'Paciente'}${
+            c.pacienteEspecie ? ` (${c.pacienteEspecie})` : ''
+          }`,
+          tutor: '',
+          date: formatDatePtBr(c.criadoEm),
+          timestamp: c.criadoEm ? new Date(c.criadoEm).getTime() : 0,
+          status: 'Concluído',
+          pdfUrl: c.pdfArquivo || '',
+          docxUrl: c.docxArquivo || '',
+          paciente: {
+            nome: c.pacienteNome || '',
+            especie: c.pacienteEspecie || 'Canina'
+          },
+          cirurgia: c.dadosCirurgia || {},
+          summary:
+            c.dadosCirurgia?.descricaoProcedimento ||
+            `Procedimento: ${c.procedimento || 'Cirurgia'}\nDiagnóstico: ${
+              c.diagnostico || 'Padrão'
+            }`
+        };
+      });
 
       const combined = [...mappedExames, ...mappedCirurgias].sort(
         (a, b) => b.timestamp - a.timestamp
@@ -424,6 +446,12 @@ export default function App() {
         darkMode={darkMode}
         onClose={() => setSelectedReport(null)}
         onToast={showToast}
+        onUpdateReport={(updated) => {
+          setSelectedReport(updated);
+          setActivities((prev) =>
+            prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+          );
+        }}
       />
 
       {/* Modal Administrativo RBAC */}
