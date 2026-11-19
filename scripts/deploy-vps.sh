@@ -52,13 +52,21 @@ if [ -n "$PREV_COMMIT" ] && [ "$PREV_COMMIT" != "$NEW_COMMIT" ]; then
   fi
 fi
 
-# 6. Sincroniza schema do banco de dados (Prisma)
-echo "🛡️ 4. Sincronizando schema do banco de dados PostgreSQL..."
+# 6. Sincroniza arquivos de código backend diretamente no container upa_app
+echo "📦 4. Sincronizando código atualizado do backend no container upa_app..."
+for f in /var/www/vetaro/*.js; do
+  [ -f "$f" ] && docker cp "$f" upa_app:/app/ 2>/dev/null || true
+done
+docker cp /var/www/vetaro/prisma upa_app:/app/ 2>/dev/null || true
+docker cp /var/www/vetaro/scripts upa_app:/app/ 2>/dev/null || true
+
+# 7. Sincroniza schema do banco de dados (Prisma)
+echo "🛡️ 5. Sincronizando schema do banco de dados PostgreSQL..."
 docker compose exec -T app npx prisma migrate deploy || true
 docker compose exec -T app node scripts/ensure-schema.js || true
 
-# 7. Reinicia a aplicação Node.js para carregar o novo código
-echo "🔄 5. Reiniciando container upa_app (deploy instantâneo)..."
+# 8. Reinicia a aplicação Node.js para carregar o novo código
+echo "🔄 6. Reiniciando container upa_app (deploy instantâneo)..."
 docker compose restart app
 
 # 8. Verificação de Saúde (Healthcheck)
