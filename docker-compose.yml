@@ -50,6 +50,8 @@ services:
       - OUTPUT_PERSISTENT_DIR=/app/output
       - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=2048
     volumes:
+      - ./:/app
+      - /app/node_modules
       - app_uploads:/app/uploads
       - app_outputs:/app/output
     depends_on:
