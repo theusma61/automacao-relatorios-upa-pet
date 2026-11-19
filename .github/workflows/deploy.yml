@@ -1,0 +1,74 @@
+name: CI/CD - Deploy para VPS Vetaro
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Evita deploys simultâneos conflitantes
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  test-build-and-deploy:
+    name: Testes, Build do Frontend e Deploy na VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 1. Clonar repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: ⚙️ 2. Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 3. Instalar dependências backend
+        run: npm ci || npm install
+
+      - name: 🧪 4. Executar testes automatizados (Jest)
+        run: npm test
+
+      - name: 🎨 5. Compilar Frontend (Vite + React)
+        run: |
+          cd frontend
+          npm ci || npm install
+          npm run build
+
+      - name: 🚀 6. Executar Deploy na VPS via SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_HOST: ${{ secrets.VPS_HOST }}
+          SSH_USER: ${{ secrets.VPS_USER || 'root' }}
+          SSH_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          # Validação amigável de secrets
+          if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_HOST" ]; then
+            echo "❌ ERRO: Secrets do GitHub Actions não configuradas."
+            echo "👉 Acesse: GitHub -> Settings -> Secrets and variables -> Actions e configure:"
+            echo "   - VPS_HOST (ex: 177.153.193.59 ou vetaro.com.br)"
+            echo "   - VPS_SSH_KEY (chave privada SSH configurada na VPS)"
+            echo "   - VPS_USER (opcional, padrão: root)"
+            echo "   - VPS_PORT (opcional, padrão: 22)"
+            exit 1
+          fi
+
+          echo "🔐 Configurando autenticação SSH..."
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p $SSH_PORT $SSH_HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          echo "📡 Executando script de deploy na VPS..."
+          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "bash -s" < scripts/deploy-vps.sh
+
+          echo "📦 Sincronizando novo frontend/dist compilado para a VPS..."
+          scp -P $SSH_PORT -r frontend/dist/* $SSH_USER@$SSH_HOST:/var/www/vetaro/frontend/dist/
+
+          echo "🎉 SUCESSO: Aplicação Vetaro atualizada e no ar!"
