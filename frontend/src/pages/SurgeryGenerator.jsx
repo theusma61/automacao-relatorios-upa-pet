@@ -10,7 +10,10 @@ import {
   Copy,
   Plus,
   Search,
-  Lock
+  Lock,
+  FileText,
+  Upload,
+  Sparkles
 } from 'lucide-react';
 import {
   VetaroLogo,
@@ -38,6 +41,8 @@ export default function SurgeryGenerator({
   const [rawDocFile, setRawDocFile] = useState(null);
   const [surgeryPhotos, setSurgeryPhotos] = useState([]);
   const [rawPhotoFiles, setRawPhotoFiles] = useState([]);
+  const [inputMode, setInputMode] = useState('text'); // 'text' ou 'file'
+  const [surgeryText, setSurgeryText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedOutput, setGeneratedOutput] = useState('');
   const [downloadLinks, setDownloadLinks] = useState({ pdfUrl: '', docxUrl: '' });
@@ -53,6 +58,27 @@ export default function SurgeryGenerator({
     userProfile?.podeGerarCirurgia ||
     userProfile?.role === 'admin' ||
     userProfile?.role === 'veterinario';
+
+  const handleInsertTemplate = () => {
+    const template = `Paciente: Thor | Espécie: Canina | Sexo: Macho | Idade: 5 anos | Peso: 14 kg
+Tutor: Carlos Silva | Data: ${new Date().toLocaleDateString('pt-BR')}
+Procedimento: Orquiectomia pré-escrotal eletiva
+Diagnóstico pré-cirúrgico: Esterilização eletiva
+
+Descrição da técnica:
+Antissepsia rigorosa em 3 ciclos com clorexidina degermante e alcoólica.
+Incisão cutânea pré-escrotal longitudinal na rafe mediana.
+Exteriorização dos testículos com dissecção romba da fáscia espermática.
+Ligadura tripla do cordão espermático e vasos testiculares com fio Nylon 2-0.
+Síntese do tecido subcutâneo com fio Poliglecaprone 3-0 em padrão intradérmico.
+Síntese cutânea com fio Nylon 3-0 em pontos simples separados.
+
+Recuperação pós-anestésica:
+Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia ou sangramentos.`;
+
+    setSurgeryText(template);
+    if (onToast) onToast('Modelo de exemplo inserido no campo!');
+  };
 
   const carregarModelos = async () => {
     try {
@@ -97,9 +123,13 @@ export default function SurgeryGenerator({
       onToast('Sua conta não possui permissão para gerar relatórios cirúrgicos.');
       return;
     }
-    if (!rawDocFile && rawPhotoFiles.length === 0) {
-      onToast('Selecione o arquivo da cirurgia (.docx, .pages, .txt ou áudio) antes de gerar.');
-      if (docInputRef.current) docInputRef.current.click();
+    const hasText = Boolean(surgeryText && surgeryText.trim().length >= 8);
+    const hasDoc = Boolean(rawDocFile);
+    const hasPhotos = rawPhotoFiles.length > 0;
+
+    if (!hasText && !hasDoc && !hasPhotos) {
+      onToast('Digite as informações da cirurgia ou selecione um arquivo/áudio antes de gerar.');
+      if (inputMode === 'file' && docInputRef.current) docInputRef.current.click();
       return;
     }
 
@@ -119,6 +149,7 @@ export default function SurgeryGenerator({
     try {
       const fd = new FormData();
       if (rawDocFile) fd.append('documento', rawDocFile);
+      if (surgeryText && surgeryText.trim()) fd.append('textoDigitado', surgeryText.trim());
       rawPhotoFiles.forEach((f) => fd.append('fotos', f));
 
       const res = await api.gerarCirurgia(fd);
@@ -237,63 +268,177 @@ export default function SurgeryGenerator({
           onChange={(e) => handlePhotosSelected(e.target.files)}
         />
 
-        {/* SEÇÃO 1: 1. FICHA CIRÚRGICA OU ÁUDIO */}
+        {/* SEÇÃO 1: INFORMAÇÕES DO PROCEDIMENTO CIRÚRGICO */}
         <div className="relative z-10 mb-5">
-          <p
-            className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-wider mb-2 ${
-              darkMode ? 'text-slate-200' : 'text-[#1E2D3D]'
-            }`}
-          >
-            1. FICHA CIRÚRGICA OU ÁUDIO
-          </p>
-
-          <div
-            onClick={() => docInputRef.current && docInputRef.current.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                handleDocSelected(e.dataTransfer.files);
-              }
-            }}
-            className={`rounded-2xl border-2 border-dashed py-8 px-5 text-center cursor-pointer transition group ${
-              darkMode
-                ? 'bg-[#1A2B38]/85 border-[#3A566E] hover:border-[#00D296] hover:bg-[#162936]'
-                : 'bg-[#E9F5F2]/80 border-[#89B8B0] hover:border-[#0D5C56] hover:bg-[#DEF2EC]'
-            }`}
-          >
-            <div className="flex justify-center mb-2.5">
-              <div
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition group-hover:scale-105 ${
-                  darkMode ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#C7F0E3] text-[#0D5C56]'
-                }`}
-              >
-                <SurgicalFilePulseIcon className="w-10 h-10" />
-              </div>
-            </div>
-
-            <p className="text-sm sm:text-base font-extrabold">
-              Selecione o arquivo da cirurgia
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
             <p
-              className={`text-xs mt-1 font-medium ${
-                darkMode ? 'text-slate-300/80' : 'text-[#52657A]'
+              className={`text-[11px] sm:text-xs font-extrabold uppercase tracking-wider ${
+                darkMode ? 'text-slate-200' : 'text-[#1E2D3D]'
               }`}
             >
-              Word (.docx), Pages (.pages), Texto (.txt) ou Áudios (.m4a, .mp3, .wav, .ogg)
+              1. INFORMAÇÕES DO PROCEDIMENTO CIRÚRGICO
             </p>
 
-            {surgeryDocFile && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="mt-4 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-xl bg-[#00D296]/20 border border-[#00D296] text-xs font-extrabold text-[#00D296]"
+            {/* Alternador de Modo: Digitar vs Arquivo */}
+            <div
+              className={`p-1 rounded-xl flex items-center gap-1 border ${
+                darkMode ? 'bg-[#0E1B26] border-[#22374A]' : 'bg-[#E2EBE8] border-slate-300/80'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setInputMode('text')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                  inputMode === 'text'
+                    ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#0A1A24] shadow-sm'
+                    : darkMode
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{surgeryDocFile.name}</span>
-                <span className="opacity-75">({surgeryDocFile.size})</span>
-              </div>
-            )}
+                <FileText className="w-3.5 h-3.5" />
+                <span>✍️ Digitar Informações</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode('file')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                  inputMode === 'file'
+                    ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#0A1A24] shadow-sm'
+                    : darkMode
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>📁 Anexar Arquivo / Áudio</span>
+              </button>
+            </div>
           </div>
+
+          {inputMode === 'text' ? (
+            /* Modo 1: Digitar ou Colar Texto Livre Inteligente */
+            <div
+              className={`rounded-2xl border p-4 transition ${
+                darkMode
+                  ? 'bg-[#12222F] border-[#24394B] focus-within:border-[#00D296]'
+                  : 'bg-white border-[#B2D6CD] focus-within:border-[#0D5C56]'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-dashed border-slate-500/20">
+                <span className="text-xs font-bold text-[#00A878] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Texto Livre Inteligente (A IA organiza e formaliza tudo no padrão oficial)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleInsertTemplate}
+                    className="text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-[#00D296]/15 hover:bg-[#00D296]/25 text-[#00A878] border border-[#00D296]/40 transition"
+                  >
+                    + Inserir Modelo de Exemplo
+                  </button>
+                  {surgeryText && (
+                    <button
+                      type="button"
+                      onClick={() => setSurgeryText('')}
+                      className="text-[11px] font-bold text-slate-400 hover:text-rose-500 transition px-2 py-1"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <textarea
+                value={surgeryText}
+                onChange={(e) => setSurgeryText(e.target.value)}
+                rows={9}
+                placeholder={`Cole ou digite aqui as informações da cirurgia...
+
+Exemplo:
+Paciente: Thor | Espécie: Canina | Macho | 4 anos | Peso: 15 kg
+Tutor: Carlos Silva | Data: 19/11/2026
+Procedimento: Celiotomia exploratória com enterotomia por corpo estranho.
+Descrição: Antissepsia rigorosa em 3 ciclos com clorexidina degermante e alcoólica. Incisão mediana pré e pós-umbilical. Localizado corpo estranho linear em jejuno proximal. Enterotomia com lâmina 11, retirada de fragmento plástico. Enterorrafia com PDS 3-0 em pontos simples separados e omentopexia. Síntese muscular com nylon 2-0 Reverdin, subcutâneo com poliglecaprone 3-0 intradérmico e pele com nylon 3-0 Sultan.
+Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
+                className={`w-full text-xs sm:text-sm leading-relaxed outline-none resize-y font-mono bg-transparent ${
+                  darkMode ? 'text-slate-100 placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
+                }`}
+              />
+
+              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-500/15 text-slate-400">
+                <span>💡 Cole anotações do WhatsApp, prontuário ou bloco de notas livremente.</span>
+                <span className="font-mono">{surgeryText.length} caracteres</span>
+              </div>
+            </div>
+          ) : (
+            /* Modo 2: Upload de Arquivo / Áudio */
+            <div>
+              <div
+                onClick={() => docInputRef.current && docInputRef.current.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleDocSelected(e.dataTransfer.files);
+                  }
+                }}
+                className={`rounded-2xl border-2 border-dashed py-8 px-5 text-center cursor-pointer transition group ${
+                  darkMode
+                    ? 'bg-[#1A2B38]/85 border-[#3A566E] hover:border-[#00D296] hover:bg-[#162936]'
+                    : 'bg-[#E9F5F2]/80 border-[#89B8B0] hover:border-[#0D5C56] hover:bg-[#DEF2EC]'
+                }`}
+              >
+                <div className="flex justify-center mb-2.5">
+                  <div
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center transition group-hover:scale-105 ${
+                      darkMode ? 'bg-[#0E3A38] text-[#00D296]' : 'bg-[#C7F0E3] text-[#0D5C56]'
+                    }`}
+                  >
+                    <SurgicalFilePulseIcon className="w-10 h-10" />
+                  </div>
+                </div>
+
+                <p className="text-sm sm:text-base font-extrabold">
+                  Selecione o arquivo da cirurgia
+                </p>
+                <p
+                  className={`text-xs mt-1 font-medium ${
+                    darkMode ? 'text-slate-300/80' : 'text-[#52657A]'
+                  }`}
+                >
+                  Word (.docx), Pages (.pages), Texto (.txt) ou Áudios (.m4a, .mp3, .wav, .ogg)
+                </p>
+
+                {surgeryDocFile && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-4 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-xl bg-[#00D296]/20 border border-[#00D296] text-xs font-extrabold text-[#00D296]"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{surgeryDocFile.name}</span>
+                    <span className="opacity-75">({surgeryDocFile.size})</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Campo opcional de observação extra quando em modo arquivo */}
+              <div className="mt-3">
+                <input
+                  type="text"
+                  value={surgeryText}
+                  onChange={(e) => setSurgeryText(e.target.value)}
+                  placeholder="Observação ou detalhe complementar opcional (ex: complicação inesperada, fio alternativo)..."
+                  className={`w-full text-xs px-3.5 py-2 rounded-xl border outline-none ${
+                    darkMode
+                      ? 'bg-[#101D27] border-[#22374A] text-slate-200 placeholder-slate-500'
+                      : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* SEÇÃO 2: 2. FOTOS INTRAOPERATÓRIAS / PEÇA CIRÚRGICA */}

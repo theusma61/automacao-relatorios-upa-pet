@@ -108,6 +108,12 @@ REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
 
   const partes = [{ text: promptInstrucoes }];
 
+  if (opcoes.textoDigitado && typeof opcoes.textoDigitado === 'string' && opcoes.textoDigitado.trim()) {
+    partes.push({
+      text: `[INFORMAÇÕES E ANOTAÇÕES CIRÚRGICAS DIGITADAS DIRETAMENTE PELO MÉDICO VETERINÁRIO]:\n"""\n${opcoes.textoDigitado.trim()}\n"""`
+    });
+  }
+
   for (const arq of arquivos) {
     const ext = path.extname(arq).toLowerCase();
     if (/\.(m4a|mp3|wav|ogg|opus)$/i.test(ext)) {

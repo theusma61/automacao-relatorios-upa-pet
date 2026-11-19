@@ -841,14 +841,20 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 
   const docFile = req.files && req.files['documento'] ? req.files['documento'][0] : null;
   const fotoFiles = req.files && req.files['fotos'] ? req.files['fotos'] : [];
+  const textoDigitado = (req.body.textoDigitado || req.body.textoCirurgia || req.body.anotacoes || '').trim();
 
-  if (!docFile && fotoFiles.length === 0) {
-    return res.status(400).json({ error: 'Envie ao menos um documento (.docx, .pages, .txt, áudio) da cirurgia.' });
+  if (!docFile && fotoFiles.length === 0 && !textoDigitado) {
+    return res.status(400).json({ error: 'Envie ao menos um documento (.docx, .pages, .txt, áudio), foto ou digite as informações da cirurgia.' });
   }
 
   const jobId = `cirurg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   const jobFolder = path.join(outputDir, jobId);
   fs.mkdirSync(jobFolder, { recursive: true });
+
+  if (textoDigitado) {
+    const caminhoTxt = path.join(jobFolder, 'anotacoes_digitadas.txt');
+    fs.writeFileSync(caminhoTxt, textoDigitado, 'utf8');
+  }
 
   const todosArquivos = [];
   if (docFile) todosArquivos.push(docFile.path);
@@ -857,7 +863,10 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 
   try {
     console.log(`🔪 [WEB - CIRURGIA] [Usuário: ${req.usuario.email}] Analisando procedimento cirúrgico...`);
-    const resultadoIA = await analisarCirurgiaComIA(todosArquivos, apiKey, { usuario: req.usuario });
+    const resultadoIA = await analisarCirurgiaComIA(todosArquivos, apiKey, {
+      usuario: req.usuario,
+      textoDigitado: textoDigitado || null
+    });
 
     const cir = resultadoIA.cirurgia;
     const textoProcedimento = (cir.procedimento || '').trim();
