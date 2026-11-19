@@ -111,4 +111,33 @@ describe('Recompilação e Edição de Laudos e Cirurgias (motor_laudo.js e moto
     const statsDocx = fs.statSync(docs.caminhoDocx);
     expect(statsDocx.size).toBeGreaterThan(1000);
   });
+
+  test('deve extrair texto e órgãos de um arquivo DOCX gerado utilizando JSZip', async () => {
+    const JSZip = require('jszip');
+    const pastaSaida = path.join(tmpDir, 'ultrassom_recompilado');
+    const docxPath = path.join(pastaSaida, 'Laudo_Thor_da_Silva.docx');
+    expect(fs.existsSync(docxPath)).toBe(true);
+
+    const zip = await JSZip.loadAsync(fs.readFileSync(docxPath));
+    const xml = await zip.file('word/document.xml').async('text');
+    expect(xml).toContain('BEXIGA');
+    expect(xml).toContain('FÍGADO');
+    expect(xml).toContain('Thor da Silva');
+  });
+
+  test('arquivos de favicon oficial existem e possuem tamanhos válidos', () => {
+    const pubIco = path.resolve(__dirname, '../frontend/public/favicon.ico');
+    const pubPng = path.resolve(__dirname, '../frontend/public/favicon.png');
+    const pubSvg = path.resolve(__dirname, '../frontend/public/favicon.svg');
+    const distIco = path.resolve(__dirname, '../frontend/dist/favicon.ico');
+
+    expect(fs.existsSync(pubIco)).toBe(true);
+    expect(fs.existsSync(pubPng)).toBe(true);
+    expect(fs.existsSync(pubSvg)).toBe(true);
+    expect(fs.existsSync(distIco)).toBe(true);
+
+    expect(fs.statSync(pubIco).size).toBeGreaterThan(100);
+    expect(fs.statSync(pubPng).size).toBeGreaterThan(100);
+    expect(fs.statSync(pubSvg).size).toBeGreaterThan(100);
+  });
 });

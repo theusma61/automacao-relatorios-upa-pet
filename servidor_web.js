@@ -365,11 +365,223 @@ app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
   if (req.query.inline === '1' || req.query.preview === '1') {
     const isPdf = safeFilename.toLowerCase().endsWith('.pdf');
     res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(safeFilename)}"`);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     return res.sendFile(path.resolve(filePath));
   }
 
   res.download(filePath, safeFilename);
+});
+
+// Endpoint para carregar os dados estruturados completos do exame para o editor
+app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
+  try {
+    const safeJobId = path.basename(req.params.jobId);
+    const jobFolder = path.join(outputDir, safeJobId);
+
+    let paciente = null;
+    let laudo = [];
+    let pdfUrl = '';
+    let docxUrl = '';
+
+    // 1. Tenta carregar do PostgreSQL
+    const exame = await prisma.exameLaudo.findFirst({
+      where: {
+        pdfArquivo: { contains: safeJobId }
+      }
+    });
+
+    if (exame) {
+      if (req.usuario.role !== 'admin' && exame.usuarioId && exame.usuarioId !== req.usuario.id) {
+        return res.status(403).json({ error: 'Você não tem permissão para acessar este exame.' });
+      }
+
+      paciente = {
+        nome: exame.pacienteNome || '',
+        especie: exame.pacienteEspecie || 'Canina',
+        sexo: exame.pacienteSexo || 'Macho',
+        idade: exame.pacienteIdade || '',
+        tutor: exame.tutorNome || '',
+        requisitante: '',
+        data: exame.dataExame || ''
+      };
+
+      if (Array.isArray(exame.laudoEstruturado) && exame.laudoEstruturado.length > 0) {
+        laudo = exame.laudoEstruturado;
+      } else if (typeof exame.laudoEstruturado === 'string') {
+        try {
+          const parsed = JSON.parse(exame.laudoEstruturado);
+          if (Array.isArray(parsed)) laudo = parsed;
+        } catch (_) {}
+      }
+
+      pdfUrl = exame.pdfArquivo || '';
+      docxUrl = exame.docxArquivo || '';
+    }
+
+    // 2. Se laudo ainda estiver vazio, tenta meta_exame.json na pasta do job
+    const metaPath = path.join(jobFolder, 'meta_exame.json');
+    if ((!laudo || laudo.length === 0) && fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (!paciente && meta.paciente) paciente = meta.paciente;
+        if (Array.isArray(meta.laudo) && meta.laudo.length > 0) {
+          laudo = meta.laudo;
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback inteligente: se ainda assim não tiver os órgãos, mas existir o .docx,
+    // extrai o texto do document.xml com JSZip
+    if ((!laudo || laudo.length === 0) && fs.existsSync(jobFolder)) {
+      try {
+        const JSZip = require('jszip');
+        const files = fs.readdirSync(jobFolder);
+        const docxFile = files.find(f => f.endsWith('.docx'));
+        if (docxFile) {
+          const zip = await JSZip.loadAsync(fs.readFileSync(path.join(jobFolder, docxFile)));
+          const docXml = zip.file('word/document.xml');
+          if (docXml) {
+            const xml = await docXml.async('text');
+            const cleanText = xml
+              .replace(/<\/w:p>/g, '\n')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"');
+
+            const listaOrgaosChave = [
+              'BEXIGA', 'RINS', 'RIM ESQUERDO', 'RIM DIREITO', 'BAÇO',
+              'ESTOMAGO', 'ESTÔMAGO', 'FÍGADO', 'FIGADO', 'VESICULA BILIAR',
+              'VESÍCULA BILIAR', 'ALÇAS INTESTINAIS', 'GLANDULA ADRENAL',
+              'GLÂNDULA ADRENAL', 'ADRENAIS', 'ÚTERO', 'UTERO', 'OVÁRIOS',
+              'OVARIOS', 'PANCREAS', 'PÂNCREAS', 'CAVIDADE ABDOMINAL',
+              'CONSIDERAÇÕES', 'CONSIDERACOES'
+            ];
+
+            const linhas = cleanText.split('\n').map(l => l.trim()).filter(Boolean);
+            const orgaosExtraidos = [];
+            for (const linha of linhas) {
+              const match = linha.match(/^([A-ZÁÉÍÓÚÂÊÔÃÕÇ\s]{3,35}):\s*(.*)$/i);
+              if (match) {
+                const orgaoNome = match[1].trim().toUpperCase();
+                const textoAchados = match[2].trim();
+                if (listaOrgaosChave.some(k => orgaoNome.includes(k) || k.includes(orgaoNome))) {
+                  orgaosExtraidos.push({
+                    orgao: orgaoNome,
+                    texto: textoAchados,
+                    diagDif: ''
+                  });
+                }
+              }
+            }
+            if (orgaosExtraidos.length > 0) {
+              laudo = orgaosExtraidos;
+            }
+          }
+        }
+      } catch (zipErr) {
+        logger.warn('Aviso ao extrair texto do docx de fallback', { error: zipErr.message });
+      }
+    }
+
+    if (!pdfUrl && fs.existsSync(jobFolder)) {
+      const files = fs.readdirSync(jobFolder);
+      const pdf = files.find(f => f.endsWith('.pdf'));
+      const docx = files.find(f => f.endsWith('.docx'));
+      if (pdf) pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdf)}`;
+      if (docx) docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docx)}`;
+    }
+
+    res.json({
+      sucesso: true,
+      jobId: safeJobId,
+      paciente: paciente || {
+        nome: 'Paciente',
+        especie: 'Canina',
+        raca: 'SRD',
+        idade: '',
+        sexo: 'Macho',
+        tutor: '',
+        data: ''
+      },
+      laudo: laudo || [],
+      pdfUrl,
+      docxUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar dados do exame: ' + err.message });
+  }
+});
+
+// Endpoint para carregar dados de cirurgia para o editor
+app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
+  try {
+    const safeJobId = path.basename(req.params.jobId);
+    const jobFolder = path.join(outputDir, safeJobId);
+
+    let paciente = null;
+    let cirurgia = null;
+    let pdfUrl = '';
+    let docxUrl = '';
+
+    const relatorio = await prisma.relatorioCirurgico.findFirst({
+      where: {
+        pdfArquivo: { contains: safeJobId }
+      }
+    });
+
+    if (relatorio) {
+      if (req.usuario.role !== 'admin' && relatorio.usuarioId && relatorio.usuarioId !== req.usuario.id) {
+        return res.status(403).json({ error: 'Você não tem permissão para acessar este relatório.' });
+      }
+
+      paciente = {
+        nome: relatorio.pacienteNome || '',
+        especie: relatorio.pacienteEspecie || 'Canina'
+      };
+
+      cirurgia = relatorio.dadosCirurgia || {
+        procedimento: relatorio.procedimento || '',
+        diagnosticoPreCirurgico: relatorio.diagnostico || '',
+        descricaoProcedimento: '',
+        evolucaoConsideracoes: ''
+      };
+
+      pdfUrl = relatorio.pdfArquivo || '';
+      docxUrl = relatorio.docxArquivo || '';
+    }
+
+    const metaPath = path.join(jobFolder, 'meta_cirurgia.json');
+    if ((!cirurgia || !cirurgia.descricaoProcedimento) && fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (!paciente && meta.paciente) paciente = meta.paciente;
+        if (meta.cirurgia) cirurgia = meta.cirurgia;
+      } catch (_) {}
+    }
+
+    if (!pdfUrl && fs.existsSync(jobFolder)) {
+      const files = fs.readdirSync(jobFolder);
+      const pdf = files.find(f => f.endsWith('.pdf'));
+      const docx = files.find(f => f.endsWith('.docx'));
+      if (pdf) pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdf)}`;
+      if (docx) docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docx)}`;
+    }
+
+    res.json({
+      sucesso: true,
+      jobId: safeJobId,
+      paciente: paciente || { nome: 'Paciente', especie: 'Canina' },
+      cirurgia: cirurgia || {},
+      pdfUrl,
+      docxUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar dados da cirurgia: ' + err.message });
+  }
 });
 
 app.get('/api/modelos-cirurgicos', async (req, res) => {
@@ -1220,6 +1432,44 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
     res.status(500).json({ error: err.message || 'Erro ao recompilar relatório cirúrgico.' });
   }
 });
+
+// =========================================================================
+// FAVICONS OFICIAIS VETARO (SEM FALLBACK PARA INDEX.HTML)
+// =========================================================================
+app.get('/favicon.ico', (req, res) => {
+  const icoDist = path.join(__dirname, 'frontend', 'dist', 'favicon.ico');
+  const icoPub = path.join(__dirname, 'frontend', 'public', 'favicon.ico');
+  const target = fs.existsSync(icoDist) ? icoDist : (fs.existsSync(icoPub) ? icoPub : null);
+  if (target) {
+    res.setHeader('Content-Type', 'image/x-icon');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(target);
+  }
+  res.status(204).end();
+});
+
+app.get('/favicon.png', (req, res) => {
+  const pngDist = path.join(__dirname, 'frontend', 'dist', 'favicon.png');
+  const pngPub = path.join(__dirname, 'frontend', 'public', 'favicon.png');
+  const target = fs.existsSync(pngDist) ? pngDist : (fs.existsSync(pngPub) ? pngPub : null);
+  if (target) {
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(target);
+  }
+  res.status(204).end();
+});
+
+app.get('/favicon.svg', (req, res) => {
+  const svgDist = path.join(__dirname, 'frontend', 'dist', 'favicon.svg');
+  const svgPub = path.join(__dirname, 'frontend', 'public', 'favicon.svg');
+  const target = fs.existsSync(svgDist) ? svgDist : (fs.existsSync(svgPub) ? svgPub : null);
+  if (target) {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(target);
+  }
+  res.status(204).end();
 });
 
 // =========================================================================

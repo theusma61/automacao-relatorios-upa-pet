@@ -21,6 +21,71 @@ import {
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
 
+function extrairOrgaosDeRelatorio(rep) {
+  if (!rep) return [];
+  let arr = null;
+  if (Array.isArray(rep.laudo) && rep.laudo.length > 0) {
+    arr = rep.laudo;
+  } else if (Array.isArray(rep.laudoEstruturado) && rep.laudoEstruturado.length > 0) {
+    arr = rep.laudoEstruturado;
+  } else if (typeof rep.laudo === 'string') {
+    try {
+      const p = JSON.parse(rep.laudo);
+      if (Array.isArray(p) && p.length > 0) arr = p;
+    } catch (_) {}
+  } else if (typeof rep.laudoEstruturado === 'string') {
+    try {
+      const p = JSON.parse(rep.laudoEstruturado);
+      if (Array.isArray(p) && p.length > 0) arr = p;
+    } catch (_) {}
+  }
+
+  if (arr) {
+    return arr.map((item) => ({
+      orgao: (item.orgao || 'ÓRGÃO').trim().toUpperCase(),
+      texto: item.texto || item.achados || '',
+      diagDif: item.diagDif || ''
+    }));
+  }
+
+  if (rep.summary && typeof rep.summary === 'string') {
+    const linhas = rep.summary.split('\n').filter((l) => l.trim().length > 0);
+    const orgaosDetectados = [];
+    for (const linha of linhas) {
+      const match = linha.match(/^[•\s-]*([^:]+):(.*)$/);
+      if (match && match[1]) {
+        const nome = match[1].trim().toUpperCase();
+        const texto = match[2].trim();
+        const ignorar = [
+          'PACIENTE',
+          'TUTOR',
+          'RESPONSÁVEL',
+          'RESPONSAVEL',
+          'ESPÉCIE',
+          'ESPECIE',
+          'RAÇA',
+          'RACA',
+          'DATA',
+          'RESPONSÁVEL TÉCNICO',
+          'RESPONSAVEL TECNICO',
+          'PROCEDIMENTO',
+          'DIAGNÓSTICO'
+        ];
+        if (!ignorar.some((ig) => nome === ig || nome.includes(ig))) {
+          orgaosDetectados.push({
+            orgao: nome,
+            texto: texto,
+            diagDif: ''
+          });
+        }
+      }
+    }
+    if (orgaosDetectados.length > 0) return orgaosDetectados;
+  }
+
+  return [];
+}
+
 export default function ReportPreviewModal({
   report,
   darkMode,
@@ -46,10 +111,13 @@ export default function ReportPreviewModal({
   const [dadosPacienteAbertos, setDadosPacienteAbertos] = useState(false);
   const [novoOrgaoNome, setNovoOrgaoNome] = useState('');
   const [adicionandoOrgao, setAdicionandoOrgao] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
 
   // URLs dinâmicas dos arquivos (com cache busting para o iframe)
   const [pdfUrlLive, setPdfUrlLive] = useState(report.pdfUrl || '');
   const [docxUrlLive, setDocxUrlLive] = useState(report.docxUrl || '');
+  const [blobPdfUrl, setBlobPdfUrl] = useState('');
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   // Estado dos dados do Paciente
   const [pacienteForm, setPacienteForm] = useState(() => {
@@ -65,7 +133,6 @@ export default function ReportPreviewModal({
         data: report.paciente.data || ''
       };
     }
-    // Fallback: tenta extrair do título ou paciente string
     return {
       nome: report.patient ? report.patient.split('(')[0].trim() : 'Paciente',
       especie: report.patient && report.patient.includes('Felina') ? 'Felina' : 'Canina',
@@ -80,30 +147,8 @@ export default function ReportPreviewModal({
 
   // Estado dos órgãos do laudo (Ultrassom)
   const [laudoForm, setLaudoForm] = useState(() => {
-    if (Array.isArray(report.laudo) && report.laudo.length > 0) {
-      return report.laudo.map((item) => ({
-        orgao: item.orgao || 'ÓRGÃO',
-        texto: item.texto || item.achados || '',
-        diagDif: item.diagDif || ''
-      }));
-    }
-    // Se não tiver o array estruturado, tenta dividir o summary por linhas
-    if (report.summary && typeof report.summary === 'string') {
-      const linhas = report.summary.split('\n').filter((l) => l.trim().length > 0);
-      const orgaosDetectados = [];
-      for (const linha of linhas) {
-        const match = linha.match(/^[•\s-]*([^:]+):(.*)$/);
-        if (match && match[1] && !match[1].toLowerCase().includes('paciente') && !match[1].toLowerCase().includes('tutor') && !match[1].toLowerCase().includes('responsável')) {
-          orgaosDetectados.push({
-            orgao: match[1].trim().toUpperCase(),
-            texto: match[2].trim(),
-            diagDif: ''
-          });
-        }
-      }
-      if (orgaosDetectados.length > 0) return orgaosDetectados;
-    }
-    // Fallback padrão se nada for encontrado
+    const extraidos = extrairOrgaosDeRelatorio(report);
+    if (extraidos.length > 0) return extraidos;
     return [
       { orgao: 'BEXIGA', texto: 'Repleta, paredes finas e regulares, conteúdo anecogênico límpido.', diagDif: '' },
       { orgao: 'FÍGADO', texto: 'Dimensões normais, contornos regulares, parênquima homogêneo.', diagDif: '' }
@@ -122,13 +167,165 @@ export default function ReportPreviewModal({
   });
 
   // Backup para restaurar caso o usuário queira descartar
-  const backupOriginal = useMemo(() => {
-    return {
-      paciente: JSON.parse(JSON.stringify(pacienteForm)),
-      laudo: JSON.parse(JSON.stringify(laudoForm)),
-      cirurgia: JSON.parse(JSON.stringify(cirurgiaForm))
+  const [backupOriginal, setBackupOriginal] = useState(null);
+
+  // Efeito para sincronizar e carregar dados estruturados completos do exame
+  useEffect(() => {
+    if (!report) return;
+
+    setPdfUrlLive(report.pdfUrl || '');
+    setDocxUrlLive(report.docxUrl || '');
+
+    // 1. Dados do Paciente
+    let pac = {
+      nome: report.patient ? report.patient.split('(')[0].trim() : 'Paciente',
+      especie: report.patient && report.patient.includes('Felina') ? 'Felina' : 'Canina',
+      raca: 'SRD',
+      idade: '',
+      sexo: 'Macho',
+      tutor: report.tutor || '',
+      requisitante: '',
+      data: report.date || ''
     };
-  }, []);
+    if (report.paciente && typeof report.paciente === 'object') {
+      pac = {
+        nome: report.paciente.nome || pac.nome,
+        especie: report.paciente.especie || pac.especie,
+        raca: report.paciente.raca || pac.raca,
+        idade: report.paciente.idade || pac.idade,
+        sexo: report.paciente.sexo || pac.sexo,
+        tutor: report.paciente.tutor || report.tutor || pac.tutor,
+        requisitante: report.paciente.requisitante || pac.requisitante,
+        data: report.paciente.data || pac.data
+      };
+    }
+    setPacienteForm(pac);
+
+    // 2. Dados do Ultrassom / Cirurgia
+    if (isSurgery) {
+      const c = report.cirurgia || {};
+      const cirForm = {
+        procedimento: c.procedimento || report.title?.replace('Relatório Cirúrgico — ', '') || 'Procedimento Cirúrgico',
+        diagnosticoPreCirurgico: c.diagnosticoPreCirurgico || '',
+        descricaoProcedimento: c.descricaoProcedimento || (typeof report.summary === 'string' ? report.summary : ''),
+        evolucaoConsideracoes: c.evolucaoConsideracoes || ''
+      };
+      setCirurgiaForm(cirForm);
+
+      if (initialJobId && (!cirForm.descricaoProcedimento || cirForm.descricaoProcedimento.length < 10)) {
+        setLoadingData(true);
+        api.getCirurgiaDados(initialJobId)
+          .then((dados) => {
+            if (dados && dados.cirurgia) {
+              setCirurgiaForm((prev) => ({
+                procedimento: dados.cirurgia.procedimento || prev.procedimento,
+                diagnosticoPreCirurgico: dados.cirurgia.diagnosticoPreCirurgico || prev.diagnosticoPreCirurgico,
+                descricaoProcedimento: dados.cirurgia.descricaoProcedimento || prev.descricaoProcedimento,
+                evolucaoConsideracoes: dados.cirurgia.evolucaoConsideracoes || prev.evolucaoConsideracoes
+              }));
+            }
+            if (dados && dados.paciente) {
+              setPacienteForm((prev) => ({
+                ...prev,
+                nome: dados.paciente.nome || prev.nome,
+                especie: dados.paciente.especie || prev.especie
+              }));
+            }
+          })
+          .catch((err) => console.warn('Aviso ao carregar dados de cirurgia:', err))
+          .finally(() => setLoadingData(false));
+      }
+    } else {
+      // Ultrassom
+      const orgaosIniciais = extrairOrgaosDeRelatorio(report);
+      if (orgaosIniciais.length > 0) {
+        setLaudoForm(orgaosIniciais);
+      } else if (initialJobId) {
+        setLoadingData(true);
+        api.getExameDados(initialJobId)
+          .then((dados) => {
+            if (dados && Array.isArray(dados.laudo) && dados.laudo.length > 0) {
+              const orgaosServidor = dados.laudo.map((item) => ({
+                orgao: (item.orgao || 'ÓRGÃO').trim().toUpperCase(),
+                texto: item.texto || item.achados || '',
+                diagDif: item.diagDif || ''
+              }));
+              setLaudoForm(orgaosServidor);
+            }
+            if (dados && dados.paciente) {
+              setPacienteForm((prev) => ({
+                ...prev,
+                nome: dados.paciente.nome || prev.nome,
+                especie: dados.paciente.especie || prev.especie,
+                raca: dados.paciente.raca || prev.raca,
+                idade: dados.paciente.idade || prev.idade,
+                sexo: dados.paciente.sexo || prev.sexo,
+                tutor: dados.paciente.tutor || prev.tutor,
+                requisitante: dados.paciente.requisitante || prev.requisitante,
+                data: dados.paciente.data || prev.data
+              }));
+            }
+            if (dados && dados.pdfUrl) setPdfUrlLive(dados.pdfUrl);
+            if (dados && dados.docxUrl) setDocxUrlLive(dados.docxUrl);
+          })
+          .catch((err) => console.warn('Aviso ao carregar dados do ultrassom:', err))
+          .finally(() => setLoadingData(false));
+      }
+    }
+    setHasUnsavedChanges(false);
+  }, [report, initialJobId, isSurgery]);
+
+  // Efeito para criar Blob URL e carregar o PDF inline de forma segura e confiável (sem disparar download)
+  useEffect(() => {
+    let cancelado = false;
+    let urlCriada = null;
+
+    if (!pdfUrlLive) {
+      setBlobPdfUrl('');
+      setLoadingPdf(false);
+      return;
+    }
+
+    setLoadingPdf(true);
+    const urlRequisicao = pdfUrlLive.includes('?') ? `${pdfUrlLive}&inline=1` : `${pdfUrlLive}?inline=1`;
+
+    fetch(urlRequisicao, { credentials: 'include' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelado) return;
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+        urlCriada = URL.createObjectURL(pdfBlob);
+        setBlobPdfUrl(urlCriada);
+      })
+      .catch((err) => {
+        console.warn('Fallback para visualização direta do PDF:', err);
+        if (!cancelado) setBlobPdfUrl(urlRequisicao);
+      })
+      .finally(() => {
+        if (!cancelado) setLoadingPdf(false);
+      });
+
+    return () => {
+      cancelado = true;
+      if (urlCriada) {
+        URL.revokeObjectURL(urlCriada);
+      }
+    };
+  }, [pdfUrlLive]);
+
+  // Atualiza backup original quando os dados são carregados e não há alterações pendentes
+  useEffect(() => {
+    if (!hasUnsavedChanges && (laudoForm.length > 0 || cirurgiaForm.descricaoProcedimento)) {
+      setBackupOriginal({
+        paciente: JSON.parse(JSON.stringify(pacienteForm)),
+        laudo: JSON.parse(JSON.stringify(laudoForm)),
+        cirurgia: JSON.parse(JSON.stringify(cirurgiaForm))
+      });
+    }
+  }, [hasUnsavedChanges, laudoForm.length, cirurgiaForm.descricaoProcedimento]);
 
   const handlePacienteChange = (campo, valor) => {
     setPacienteForm((prev) => ({ ...prev, [campo]: valor }));
@@ -376,41 +573,27 @@ export default function ReportPreviewModal({
         </div>
 
         {/* CORPO DO MODAL (CONTEÚDO DINÂMICO CONFORME ABA) */}
-        <div className="flex-1 overflow-hidden relative">
-          {/* MODO PREVIEW REALISTA DO PDF */}
-          {(activeTab === 'preview' || activeTab === 'split') && (
-            <div
-              className={`h-full flex flex-col ${
-                activeTab === 'split' ? 'w-1/2 border-r border-slate-700/50 float-right' : 'w-full'
-              }`}
-            >
-              {pdfUrlLive ? (
-                <iframe
-                  title="Pré-visualização do Laudo PDF"
-                  src={iframePdfSrc}
-                  className="w-full flex-1 border-0 bg-slate-900"
-                />
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                  <FileText className="w-12 h-12 mb-3 text-slate-500 opacity-60" />
-                  <p className="text-sm font-bold">Arquivo PDF ainda não gerado nesta sessão.</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Edite as informações na aba "Editar Texto" e clique em "Salvar e Gerar Novo PDF".
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* MODO EDITOR DE TEXTO / ÓRGÃOS */}
+        <div
+          className={`flex-1 overflow-hidden relative ${
+            activeTab === 'split' ? 'flex flex-row' : ''
+          }`}
+        >
+          {/* MODO EDITOR DE TEXTO / ÓRGÃOS (ESQUERDA NO MODO SPLIT) */}
           {(activeTab === 'edit' || activeTab === 'split') && (
             <div
               className={`h-full overflow-y-auto p-4 sm:p-6 space-y-4 ${
                 activeTab === 'split'
-                  ? 'w-1/2 float-left border-r border-slate-800/80'
+                  ? 'w-1/2 border-r border-slate-800/80'
                   : 'w-full max-w-4xl mx-auto'
               }`}
             >
+              {loadingData && (
+                <div className="p-3 rounded-xl bg-teal-500/15 border border-[#00D296]/30 flex items-center gap-2.5 text-xs text-[#00D296] animate-pulse">
+                  <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                  <span>Carregando órgãos e dados completos do exame direto do banco de dados...</span>
+                </div>
+              )}
+
               {/* Card Colapsável: Dados do Paciente e Tutor */}
               <div
                 className={`rounded-2xl border transition ${
@@ -844,6 +1027,84 @@ export default function ReportPreviewModal({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MODO PREVIEW REALISTA DO PDF (DIREITA NO MODO SPLIT OU TELA CHEIA NO PREVIEW) */}
+          {(activeTab === 'preview' || activeTab === 'split') && (
+            <div
+              className={`h-full flex flex-col bg-slate-900 ${
+                activeTab === 'split' ? 'w-1/2' : 'w-full'
+              }`}
+            >
+              {pdfUrlLive ? (
+                <div className="w-full h-full flex flex-col relative">
+                  {/* Barra de utilidades do PDF */}
+                  <div
+                    className={`px-4 py-2 border-b flex items-center justify-between gap-2 shrink-0 ${
+                      darkMode ? 'bg-[#0E1A24] border-slate-800' : 'bg-slate-100 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                      <FileText className="w-3.5 h-3.5 text-[#00D296]" />
+                      <span className="text-[11px] truncate">
+                        Documento Oficial ({pacienteForm.nome || 'Paciente'})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={pdfUrlLive}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-700 hover:border-[#00D296] text-slate-300 hover:text-white transition inline-flex items-center gap-1"
+                      >
+                        <span>Abrir em Nova Aba</span>
+                        <span className="text-[10px]">↗</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {loadingPdf ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                      <RefreshCw className="w-7 h-7 mb-3 text-[#00D296] animate-spin" />
+                      <p className="text-xs sm:text-sm font-bold">Carregando visualização do PDF...</p>
+                    </div>
+                  ) : blobPdfUrl ? (
+                    <object
+                      data={blobPdfUrl}
+                      type="application/pdf"
+                      className="w-full flex-1 border-0"
+                    >
+                      <iframe
+                        title="Pré-visualização do Laudo PDF"
+                        src={blobPdfUrl}
+                        className="w-full flex-1 border-0 bg-slate-900"
+                      />
+                    </object>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                      <FileText className="w-10 h-10 mb-2 text-slate-500 opacity-60" />
+                      <p className="text-xs font-bold">PDF gerado no servidor.</p>
+                      <a
+                        href={pdfUrlLive}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 text-xs text-[#00D296] underline font-bold"
+                      >
+                        Clique para abrir em nova aba
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                  <FileText className="w-12 h-12 mb-3 text-slate-500 opacity-60" />
+                  <p className="text-sm font-bold">Arquivo PDF ainda não gerado nesta sessão.</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Edite as informações na aba "Editar Texto" e clique em "Salvar e Gerar Novo PDF".
+                  </p>
                 </div>
               )}
             </div>

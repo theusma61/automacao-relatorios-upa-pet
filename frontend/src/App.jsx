@@ -108,6 +108,7 @@ export default function App() {
             data: ex.dataExame || ''
           },
           laudo: ex.laudoEstruturado || [],
+          laudoEstruturado: ex.laudoEstruturado || [],
           summary: Array.isArray(ex.laudoEstruturado)
             ? ex.laudoEstruturado
                 .map((item) => `• ${item.orgao || ''}: ${item.texto || item.achados || ''}`)

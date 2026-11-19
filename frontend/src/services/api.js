@@ -133,6 +133,10 @@ export const api = {
     }),
 
   // Recompilação e Edição em Tempo Real de Laudos e Cirurgias
+  getExameDados: (jobId) =>
+    requestJson(`/api/ultrassom/${encodeURIComponent(jobId)}/dados`),
+  getCirurgiaDados: (jobId) =>
+    requestJson(`/api/cirurgia/${encodeURIComponent(jobId)}/dados`),
   recompilarUltrassom: (payload) =>
     requestJson('/api/ultrassom/recompilar', {
       method: 'POST',
