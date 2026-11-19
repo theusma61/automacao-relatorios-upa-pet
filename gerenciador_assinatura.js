@@ -52,6 +52,26 @@ const TABELA_PLANOS = {
     descricao: 'Ideal para clínicas com setor de imagem e hospitais 24h (Até 500 laudos/mês)',
     excedentePermitido: true,
     custoExcedente: 1.00
+  },
+  ILIMITADO: {
+    chave: 'ILIMITADO',
+    nome: 'Licença Administrador (Ilimitado)',
+    cotaLimite: 999999,
+    precoMensal: 0.0,
+    precoAnualMensalizado: 0.0,
+    descricao: 'Acesso total e irrestrito para administradores com laudos e cirurgias ilimitados',
+    excedentePermitido: true,
+    custoExcedente: 0.0
+  },
+  ADMIN: {
+    chave: 'ILIMITADO',
+    nome: 'Licença Administrador (Ilimitado)',
+    cotaLimite: 999999,
+    precoMensal: 0.0,
+    precoAnualMensalizado: 0.0,
+    descricao: 'Acesso total e irrestrito para administradores com laudos e cirurgias ilimitados',
+    excedentePermitido: true,
+    custoExcedente: 0.0
   }
 };
 
@@ -305,20 +325,29 @@ async function atualizarPlanoAssinatura(usuarioId, novoPlano, ciclo = 'mensal') 
 async function verificarLimiteCotaUltrassom(usuarioId) {
   if (!usuarioId) throw new Error('ID do usuário é obrigatório.');
 
-  const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioId },
+    include: { assinatura: true }
+  });
   if (!usuario) throw new Error('Usuário não encontrado.');
 
-  if (usuario.role === 'admin') {
+  const planoAtivo = (usuario.assinatura?.plano || '').toUpperCase();
+  const isAdmin = usuario.role === 'admin';
+  const isIlimitado = planoAtivo === 'ILIMITADO' || planoAtivo === 'ADMIN';
+
+  // Administradores e usuários com licença Ilimitada possuem emissão 100% liberada
+  if (isAdmin || isIlimitado) {
     return {
       bloqueado: false,
       motivo: null,
-      admin: true,
+      admin: isAdmin,
+      ilimitado: true,
       limite: Infinity,
       consumido: 0,
       disponivel: Infinity,
       porcentagem: 0,
-      plano: 'ADMIN',
-      planoNome: 'Administrador (Ilimitado)'
+      plano: isAdmin ? 'ADMIN' : planoAtivo,
+      planoNome: isAdmin ? 'Administrador (Ilimitado)' : 'Licença Administrador (Ilimitado)'
     };
   }
 

@@ -35,6 +35,10 @@ const adminSchemas = {
     email: baseSchemas.email,
     role: baseSchemas.role
   }),
+  updatePlano: z.object({
+    email: baseSchemas.email,
+    plano: z.string().min(2).max(50)
+  }),
   createUser: z.object({
     email: baseSchemas.email,
     nome: baseSchemas.nome,

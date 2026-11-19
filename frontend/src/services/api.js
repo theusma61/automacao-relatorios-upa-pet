@@ -104,6 +104,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role })
     }),
+  updateAdminUserPlano: (email, plano) =>
+    requestJson('/api/admin/usuarios/plano', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, plano })
+    }),
 
   // Controle de Gastos, Cotas e Assinatura
   getUsoAssinatura: () => requestJson('/api/assinatura/uso'),

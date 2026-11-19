@@ -48,6 +48,7 @@ const {
   temPermissao,
   listarUsuarios,
   atualizarCargoUsuario,
+  atualizarPlanoUsuario,
   obterTemaUsuario,
   atualizarTemaUsuario,
   atualizarPerfilProfissional
@@ -308,6 +309,19 @@ app.post('/api/admin/usuarios/role', exigirAutenticacao, validate(adminSchemas.u
   const { email, role } = req.body;
   try {
     const usuarioAtualizado = await atualizarCargoUsuario(email, role);
+    res.json({ sucesso: true, usuario: usuarioAtualizado });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/usuarios/plano', exigirAutenticacao, validate(adminSchemas.updatePlano, 'body'), async (req, res) => {
+  if (req.usuario.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores podem alterar licenças e planos de usuários.' });
+  }
+  const { email, plano } = req.body;
+  try {
+    const usuarioAtualizado = await atualizarPlanoUsuario(email, plano);
     res.json({ sucesso: true, usuario: usuarioAtualizado });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -988,34 +1002,42 @@ app.post('/api/assinatura/trocar-plano', exigirAutenticacao, async (req, res) =>
 app.get('/api/assinatura/status-cota', exigirAutenticacao, async (req, res) => {
   try {
     const status = await verificarLimiteCotaUltrassom(req.usuario.id);
-    res.json({ sucesso: true, ...status });
+    res.json({
+      sucesso: true,
+      ...status,
+      limite: status.limite === Infinity ? 999999 : status.limite,
+      disponivel: status.disponivel === Infinity ? 999999 : status.disponivel
+    });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao verificar cota: ' + err.message });
   }
 });
 
 app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('imagens', 25), async (req, res) => {
-  // TRAVA DE LIMITES DA COTA MENSAL DE ULTRASSOM
-  try {
-    const checagemCota = await verificarLimiteCotaUltrassom(req.usuario.id);
-    if (checagemCota.bloqueado) {
-      if (Array.isArray(req.files)) {
-        req.files.forEach((f) => {
-          try { fs.unlinkSync(f.path); } catch (_) {}
+  // TRAVA DE LIMITES DA COTA MENSAL DE ULTRASSOM (ADMINS E PLANOS ILIMITADOS NUNCA SÃO BLOQUEADOS)
+  const isAdmin = req.usuario && (req.usuario.role === 'admin' || req.usuario.plano === 'ILIMITADO' || req.usuario.plano === 'ADMIN');
+  if (!isAdmin) {
+    try {
+      const checagemCota = await verificarLimiteCotaUltrassom(req.usuario.id);
+      if (checagemCota.bloqueado) {
+        if (Array.isArray(req.files)) {
+          req.files.forEach((f) => {
+            try { fs.unlinkSync(f.path); } catch (_) {}
+          });
+        }
+        return res.status(403).json({
+          error: checagemCota.motivo,
+          codigo: 'COTA_ATINGIDA',
+          limite: checagemCota.limite,
+          consumido: checagemCota.consumido,
+          disponivel: checagemCota.disponivel,
+          plano: checagemCota.plano,
+          planoNome: checagemCota.planoNome
         });
       }
-      return res.status(403).json({
-        error: checagemCota.motivo,
-        codigo: 'COTA_ATINGIDA',
-        limite: checagemCota.limite,
-        consumido: checagemCota.consumido,
-        disponivel: checagemCota.disponivel,
-        plano: checagemCota.plano,
-        planoNome: checagemCota.planoNome
-      });
+    } catch (errCota) {
+      logger.warn('Aviso ao checar limite de cota de ultrassom', { error: errCota.message });
     }
-  } catch (errCota) {
-    logger.warn('Aviso ao checar limite de cota de ultrassom', { error: errCota.message });
   }
 
   if (!apiKey) {

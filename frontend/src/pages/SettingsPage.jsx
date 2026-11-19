@@ -107,15 +107,23 @@ export default function SettingsPage({
     }
   }, [settingsTab]);
 
-  const handleTrocarPlano = (novoPlano) => {
-    const nomes = {
-      SOLO: 'Solo / Volante (R$ 79/mês)',
-      PRO: 'Especialista Pro (R$ 149/mês)',
-      CLINICA: 'Clínica & Hospital 24h (R$ 297/mês)'
-    };
-    const planoEscolhido = nomes[novoPlano] || novoPlano;
-    onToast(`Integração de pagamento em homologação (Pix e Cartão). Em breve você poderá assinar o plano ${planoEscolhido} diretamente pela plataforma!`);
-    setModalPlanoAberto(false);
+  const handleTrocarPlano = async (novoPlano) => {
+    setTrocandoPlano(true);
+    try {
+      const res = await api.trocarPlanoAssinatura(novoPlano);
+      if (res && res.sucesso) {
+        setUsageData(res);
+        onToast(`Plano alterado com sucesso para: ${res.plano?.nome || novoPlano}!`);
+      } else {
+        onToast('Plano alterado com sucesso!');
+        await carregarMetricasUso();
+      }
+      setModalPlanoAberto(false);
+    } catch (err) {
+      onToast(`Erro ao trocar de plano: ${err.message}`);
+    } finally {
+      setTrocandoPlano(false);
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -824,7 +832,7 @@ export default function SettingsPage({
               >
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className={`w-full max-w-2xl rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl relative ${
+                  className={`w-full max-w-3xl rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl relative ${
                     darkMode
                       ? 'bg-[#0F1C26] border-slate-800 text-white'
                       : 'bg-white border-slate-200 text-[#0A141D]'
@@ -839,17 +847,50 @@ export default function SettingsPage({
                   </button>
 
                   <div>
-                    <h3 className="text-xl font-extrabold">Alterar Plano da Assinatura</h3>
+                    <h3 className="text-xl font-extrabold">Alterar Plano e Licença da Assinatura</h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      Escolha a franquia mensal que melhor se adequa ao seu volume atual de exames:
+                      Escolha a franquia mensal que melhor se adequa ao seu volume atual de exames ou ative a licença total:
                     </p>
-                    <div className="mt-3 p-3 rounded-xl bg-[#00D296]/10 border border-[#00D296]/30 text-xs text-[#00D296] flex items-center gap-2 font-medium">
-                      <Sparkles className="w-4 h-4 shrink-0 text-[#00D296]" />
-                      <span>O módulo de checkout e pagamento seguro (Pix e Cartão) está em fase final de homologação.</span>
-                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Licença Administrador (Ilimitado) */}
+                    <div
+                      className={`p-5 rounded-2xl border flex flex-col justify-between sm:col-span-3 transition ${
+                        p.chave === 'ILIMITADO' || p.chave === 'ADMIN'
+                          ? 'border-emerald-500 bg-emerald-500/10'
+                          : darkMode
+                          ? 'border-emerald-500/40 bg-[#0E2822]'
+                          : 'border-emerald-300 bg-emerald-50/70'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500 text-[#062E2B]">
+                              ADMIN / ILIMITADO
+                            </span>
+                            <h4 className="text-sm font-extrabold text-emerald-400">Licença Administrador (Ilimitado)</h4>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Acesso completo com emissão irrestrita de laudos de ultrassom e cirurgias sem nenhuma trava de cota.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={trocandoPlano || p.chave === 'ILIMITADO' || p.chave === 'ADMIN'}
+                          onClick={() => handleTrocarPlano('ILIMITADO')}
+                          className={`px-5 py-2.5 rounded-xl text-xs font-black transition shrink-0 ${
+                            p.chave === 'ILIMITADO' || p.chave === 'ADMIN'
+                              ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 cursor-default'
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-[#062E2B]'
+                          }`}
+                        >
+                          {p.chave === 'ILIMITADO' || p.chave === 'ADMIN' ? '✓ Licença Ativa' : 'Ativar Licença Admin'}
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Solo */}
                     <div
                       className={`p-5 rounded-2xl border flex flex-col justify-between ${
@@ -919,6 +960,20 @@ export default function SettingsPage({
                         className="mt-4 w-full py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:border-[#00D296] transition"
                       >
                         {p.chave === 'CLINICA' ? 'Plano Atual' : 'Escolher Clínica'}
+                      </button>
+                    </div>
+
+                    {/* Modo Degustação / Teste */}
+                    <div className="sm:col-span-3 pt-2 text-center">
+                      <button
+                        type="button"
+                        disabled={trocandoPlano || p.chave === 'GRATUITO'}
+                        onClick={() => handleTrocarPlano('GRATUITO')}
+                        className="text-xs text-slate-400 hover:text-slate-200 underline font-medium transition"
+                      >
+                        {p.chave === 'GRATUITO'
+                          ? 'Atualmente na Degustação Gratuita (10 laudos)'
+                          : 'Simular Modo Degustação Gratuita (10 laudos / Teste de Cota)'}
                       </button>
                     </div>
                   </div>

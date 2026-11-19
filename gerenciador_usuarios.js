@@ -120,7 +120,7 @@ function temPermissao(usuario, permissao) {
 async function listarUsuarios() {
   const lista = await prisma.usuario.findMany({
     orderBy: { email: 'asc' },
-    include: { clinica: true }
+    include: { clinica: true, assinatura: true }
   });
   return lista.map(perfilParaResposta);
 }
@@ -136,9 +136,29 @@ async function atualizarCargoUsuario(email, novoRole) {
   const atualizado = await prisma.usuario.update({
     where: { email: emailNorm },
     data: { role: novoRole },
-    include: { clinica: true }
+    include: { clinica: true, assinatura: true }
   });
 
+  return perfilParaResposta(atualizado);
+}
+
+async function atualizarPlanoUsuario(email, novoPlano, ciclo = 'mensal') {
+  const emailNorm = (email || '').toLowerCase().trim();
+  const usuario = await prisma.usuario.findUnique({
+    where: { email: emailNorm },
+    include: { clinica: true, assinatura: true }
+  });
+  if (!usuario) {
+    throw new Error(`Usuário não encontrado: ${email}`);
+  }
+
+  const { atualizarPlanoAssinatura } = require('./gerenciador_assinatura');
+  await atualizarPlanoAssinatura(usuario.id, novoPlano, ciclo);
+
+  const atualizado = await prisma.usuario.findUnique({
+    where: { email: emailNorm },
+    include: { clinica: true, assinatura: true }
+  });
   return perfilParaResposta(atualizado);
 }
 
@@ -200,6 +220,7 @@ module.exports = {
   temPermissao,
   listarUsuarios,
   atualizarCargoUsuario,
+  atualizarPlanoUsuario,
   obterTemaUsuario,
   atualizarTemaUsuario,
   atualizarPerfilProfissional

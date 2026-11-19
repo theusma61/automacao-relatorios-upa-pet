@@ -63,7 +63,11 @@ export default function UltrasoundGenerator({
     carregarStatusCota();
   }, []);
 
-  const isCotaBloqueada = cotaInfo?.bloqueado === true;
+  const isCotaBloqueada =
+    cotaInfo?.bloqueado === true &&
+    !cotaInfo?.admin &&
+    !cotaInfo?.ilimitado &&
+    userProfile?.role !== 'admin';
 
   const podeEmitir =
     userProfile?.podeGerarLaudos ||
@@ -192,7 +196,7 @@ export default function UltrasoundGenerator({
             {cotaInfo && (
               <div
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition ${
-                  cotaInfo.admin
+                  cotaInfo.admin || cotaInfo.ilimitado || userProfile?.role === 'admin'
                     ? darkMode
                       ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
                       : 'bg-emerald-50 border-emerald-300 text-emerald-800'
@@ -205,15 +209,15 @@ export default function UltrasoundGenerator({
                     : 'bg-slate-100 border-slate-200 text-slate-700'
                 }`}
                 title={
-                  cotaInfo.admin
+                  cotaInfo.admin || cotaInfo.ilimitado || userProfile?.role === 'admin'
                     ? 'Acesso Administrativo: Cota ilimitada'
                     : `Cota mensal: ${cotaInfo.consumido}/${cotaInfo.limite} laudos utilizados`
                 }
               >
-                {cotaInfo.admin ? (
+                {cotaInfo.admin || cotaInfo.ilimitado || userProfile?.role === 'admin' ? (
                   <>
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Cota: Ilimitada (Admin)</span>
+                    <span>Cota: Ilimitada {userProfile?.role === 'admin' || cotaInfo.admin ? '(Admin)' : '(Total)'}</span>
                   </>
                 ) : isCotaBloqueada ? (
                   <>
