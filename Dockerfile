@@ -2,19 +2,41 @@ FROM node:20-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Configura APT resiliente e instala Chromium, poppler-utils e fontes essenciais
+# 1. Configura repositórios oficiais com espelho brasileiro (UFPR / C3SL) e HTTPS seguro
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
-    && echo 'Acquire::http::Timeout "45";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::https::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::http::Pipeline-Depth "0";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::https::Pipeline-Depth "0";' >> /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::http::No-Cache "true";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::https::No-Cache "true";' >> /etc/apt/apt.conf.d/80-retries \
     && echo 'Acquire::ForceIPv4 "true";' >> /etc/apt/apt.conf.d/80-retries \
-    && apt-get update && apt-get install -y --no-install-recommends --fix-missing \
-        chromium \
-        poppler-utils \
-        fonts-liberation \
-        fonts-crosextra-carlito \
-        ca-certificates \
-        openssl \
+    && truncate -s 0 /etc/apt/sources.list 2>/dev/null || true \
+    && printf '%s\n' \
+        'Types: deb' \
+        'URIs: https://debian.c3sl.ufpr.br/debian https://ftp.br.debian.org/debian https://deb.debian.org/debian' \
+        'Suites: bookworm bookworm-updates' \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+        '' \
+        'Types: deb' \
+        'URIs: https://security.debian.org/debian-security https://deb.debian.org/debian-security' \
+        'Suites: bookworm-security' \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+        > /etc/apt/sources.list.d/debian.sources \
+    && for i in 1 2 3 4 5; do \
+        apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+            chromium \
+            poppler-utils \
+            fonts-liberation \
+            fonts-crosextra-carlito \
+            ca-certificates \
+            openssl && break || { \
+            echo "Tentativa $i falhou na instalação de pacotes APT. Retentando em 3s..."; \
+            sleep 3; \
+        }; \
+    done \
     && ln -sf /usr/bin/chromium /usr/bin/google-chrome \
     && ln -sf /usr/bin/chromium /usr/bin/chromium-browser \
     && apt-get clean \
