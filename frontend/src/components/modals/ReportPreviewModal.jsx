@@ -105,7 +105,9 @@ export default function ReportPreviewModal({
     return '';
   }, [report]);
 
-  const [activeTab, setActiveTab] = useState('preview'); // 'preview', 'edit', 'split'
+  const [activeTab, setActiveTab] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth >= 1024 ? 'split' : 'edit'
+  );
   const [isRecompiling, setIsRecompiling] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [dadosPacienteAbertos, setDadosPacienteAbertos] = useState(false);
@@ -113,11 +115,14 @@ export default function ReportPreviewModal({
   const [adicionandoOrgao, setAdicionandoOrgao] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
-  // URLs dinâmicas dos arquivos (com cache busting para o iframe)
+  // URLs dinâmicas dos arquivos
   const [pdfUrlLive, setPdfUrlLive] = useState(report.pdfUrl || '');
   const [docxUrlLive, setDocxUrlLive] = useState(report.docxUrl || '');
-  const [blobPdfUrl, setBlobPdfUrl] = useState('');
-  const [loadingPdf, setLoadingPdf] = useState(false);
+
+  const pdfDirectUrl = useMemo(() => {
+    if (!pdfUrlLive) return '';
+    return `${pdfUrlLive}${pdfUrlLive.includes('?') ? '&' : '?'}inline=1#toolbar=0`;
+  }, [pdfUrlLive]);
 
   // Estado dos dados do Paciente
   const [pacienteForm, setPacienteForm] = useState(() => {
@@ -151,7 +156,16 @@ export default function ReportPreviewModal({
     if (extraidos.length > 0) return extraidos;
     return [
       { orgao: 'BEXIGA', texto: 'Repleta, paredes finas e regulares, conteúdo anecogênico límpido.', diagDif: '' },
-      { orgao: 'FÍGADO', texto: 'Dimensões normais, contornos regulares, parênquima homogêneo.', diagDif: '' }
+      { orgao: 'RIM ESQUERDO', texto: 'Dimensões normais, contornos regulares, relação corticomedular preservada.', diagDif: '' },
+      { orgao: 'RIM DIREITO', texto: 'Dimensões normais, contornos regulares, relação corticomedular preservada.', diagDif: '' },
+      { orgao: 'BAÇO', texto: 'Dimensões normais, contornos regulares, parênquima homogêneo e ecotextura habitual.', diagDif: '' },
+      { orgao: 'ESTÔMAGO', texto: 'Paredes preservadas, estratificação parietal evidente, conteúdo mucoso habitual.', diagDif: '' },
+      { orgao: 'FÍGADO', texto: 'Dimensões normais, contornos regulares, parênquima homogêneo e ecogenicidade mantida.', diagDif: '' },
+      { orgao: 'VESÍCULA BILIAR', texto: 'Repleta, paredes finas e regulares, conteúdo anecogênico límpido.', diagDif: '' },
+      { orgao: 'ALÇAS INTESTINAIS', texto: 'Espessura parietal conservada, motilidade preservada nos segmentos avaliados.', diagDif: '' },
+      { orgao: 'PÂNCREAS', texto: 'Região pancreática sem alterações ecográficas evidentes.', diagDif: '' },
+      { orgao: 'ADRENAIS', texto: 'Dimensões e arquitetura habituais para a espécie.', diagDif: '' },
+      { orgao: 'CAVIDADE ABDOMINAL', texto: 'Ausência de líquido livre cavitário.', diagDif: '' }
     ];
   });
 
@@ -274,47 +288,6 @@ export default function ReportPreviewModal({
     }
     setHasUnsavedChanges(false);
   }, [report, initialJobId, isSurgery]);
-
-  // Efeito para criar Blob URL e carregar o PDF inline de forma segura e confiável (sem disparar download)
-  useEffect(() => {
-    let cancelado = false;
-    let urlCriada = null;
-
-    if (!pdfUrlLive) {
-      setBlobPdfUrl('');
-      setLoadingPdf(false);
-      return;
-    }
-
-    setLoadingPdf(true);
-    const urlRequisicao = pdfUrlLive.includes('?') ? `${pdfUrlLive}&inline=1` : `${pdfUrlLive}?inline=1`;
-
-    fetch(urlRequisicao, { credentials: 'include' })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Status ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        if (cancelado) return;
-        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-        urlCriada = URL.createObjectURL(pdfBlob);
-        setBlobPdfUrl(urlCriada);
-      })
-      .catch((err) => {
-        console.warn('Fallback para visualização direta do PDF:', err);
-        if (!cancelado) setBlobPdfUrl(urlRequisicao);
-      })
-      .finally(() => {
-        if (!cancelado) setLoadingPdf(false);
-      });
-
-    return () => {
-      cancelado = true;
-      if (urlCriada) {
-        URL.revokeObjectURL(urlCriada);
-      }
-    };
-  }, [pdfUrlLive]);
 
   // Atualiza backup original quando os dados são carregados e não há alterações pendentes
   useEffect(() => {
@@ -574,8 +547,8 @@ export default function ReportPreviewModal({
 
         {/* CORPO DO MODAL (CONTEÚDO DINÂMICO CONFORME ABA) */}
         <div
-          className={`flex-1 overflow-hidden relative ${
-            activeTab === 'split' ? 'flex flex-row' : ''
+          className={`flex-1 overflow-hidden relative flex ${
+            activeTab === 'split' ? 'flex-row' : 'flex-col'
           }`}
         >
           {/* MODO EDITOR DE TEXTO / ÓRGÃOS (ESQUERDA NO MODO SPLIT) */}
@@ -1066,23 +1039,13 @@ export default function ReportPreviewModal({
                     </div>
                   </div>
 
-                  {loadingPdf ? (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                      <RefreshCw className="w-7 h-7 mb-3 text-[#00D296] animate-spin" />
-                      <p className="text-xs sm:text-sm font-bold">Carregando visualização do PDF...</p>
-                    </div>
-                  ) : blobPdfUrl ? (
-                    <object
-                      data={blobPdfUrl}
-                      type="application/pdf"
-                      className="w-full flex-1 border-0"
-                    >
-                      <iframe
-                        title="Pré-visualização do Laudo PDF"
-                        src={blobPdfUrl}
-                        className="w-full flex-1 border-0 bg-slate-900"
-                      />
-                    </object>
+                  {pdfDirectUrl ? (
+                    <iframe
+                      key={pdfDirectUrl}
+                      title="Pré-visualização do Laudo PDF"
+                      src={pdfDirectUrl}
+                      className="w-full flex-1 border-0 bg-slate-900"
+                    />
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
                       <FileText className="w-10 h-10 mb-2 text-slate-500 opacity-60" />
