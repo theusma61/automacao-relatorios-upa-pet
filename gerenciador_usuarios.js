@@ -2,6 +2,7 @@
  * Gerenciador de usuários e perfis médicos — Camada Prisma PostgreSQL Multi-Tenant
  */
 
+const path = require('path');
 const { prisma } = require('./db');
 const { obterOuCriarAssinatura } = require('./gerenciador_assinatura');
 
@@ -32,12 +33,27 @@ function emailsDeEnv(prefixo) {
     .filter(Boolean);
 }
 
-function normalizarUrlWeb(url) {
-  if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
-  const semApp = url.replace(/^\/app\//, '/');
+/**
+ * Normaliza caminhos de upload salvos no banco (ex: caminho físico absoluto no Docker ou Windows)
+ * para a URL pública relativa `/uploads/...` para uso consistente no frontend e backend.
+ */
+function normalizarUrlUploadPublica(valor) {
+  if (!valor || typeof valor !== 'string') return null;
+  const limpo = valor.trim().replace(/\\/g, '/');
+  if (!limpo) return null;
+  if (/^https?:\/\//i.test(limpo) || /^data:image\//i.test(limpo)) return limpo;
+  const semApp = limpo.replace(/^\/app\//, '/');
   if (semApp.startsWith('/uploads/')) return semApp;
-  if (semApp.startsWith('uploads/')) return '/' + semApp;
+  const idxUploads = semApp.toLowerCase().lastIndexOf('/uploads/');
+  if (idxUploads !== -1) {
+    return semApp.slice(idxUploads);
+  }
+  if (semApp.toLowerCase().startsWith('uploads/')) {
+    return '/' + semApp;
+  }
+  const base = path.basename(semApp);
+  if (/^logo_/i.test(base)) return `/uploads/logos/${base}`;
+  if (/^assinatura_/i.test(base)) return `/uploads/assinaturas/${base}`;
   return semApp.startsWith('/') ? semApp : `/${semApp}`;
 }
 
@@ -56,8 +72,8 @@ function perfilParaResposta(usuario) {
     crmv: usuario.crmv || null,
     clinicaId: usuario.clinicaId || null,
     nomeClinica: (/upa\s*pet/i.test(usuario.nomeClinica || '') ? 'Vetaro' : (usuario.nomeClinica || (usuario.clinica && usuario.clinica.nome) || 'Vetaro')),
-    logoUrl: normalizarUrlWeb(usuario.logoUrl),
-    assinaturaUrl: normalizarUrlWeb(usuario.assinaturaUrl),
+    logoUrl: normalizarUrlUploadPublica(usuario.logoUrl),
+    assinaturaUrl: normalizarUrlUploadPublica(usuario.assinaturaUrl),
     temaPreferencia: usuario.temaPreferencia || 'system',
     plano: usuario.assinatura ? usuario.assinatura.plano : 'GRATUITO'
   };
@@ -208,16 +224,16 @@ async function atualizarPerfilProfissional(usuarioId, dados = {}) {
     dataUpdate.nomeClinica = String(dados.nomeClinica).trim() || null;
   }
   if (dados.logoUrl !== undefined) {
-    dataUpdate.logoUrl = dados.logoUrl || null;
+    dataUpdate.logoUrl = normalizarUrlUploadPublica(dados.logoUrl);
   }
   if (dados.assinaturaUrl !== undefined) {
-    dataUpdate.assinaturaUrl = dados.assinaturaUrl || null;
+    dataUpdate.assinaturaUrl = normalizarUrlUploadPublica(dados.assinaturaUrl);
   }
 
   const atualizado = await prisma.usuario.update({
     where: { id: usuarioId },
     data: dataUpdate,
-    include: { clinica: true }
+    include: { clinica: true, assinatura: true }
   });
 
   return perfilParaResposta(atualizado);
@@ -225,6 +241,7 @@ async function atualizarPerfilProfissional(usuarioId, dados = {}) {
 
 module.exports = {
   ROLES,
+  normalizarUrlUploadPublica,
   obterPerfilUsuario,
   temPermissao,
   listarUsuarios,

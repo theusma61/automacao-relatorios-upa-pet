@@ -13,13 +13,19 @@ echo "========================================================"
 
 cd /var/www/vetaro
 
-# 1. Guarda commit anterior para detecção de mudanças
-PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+# 1. Guarda commit anterior para detecção de mudanças (ou usa PREV_COMMIT vindo do CI)
+PREV_COMMIT="${PREV_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo "")}"
 
-# 2. Atualiza o repositório Git com a branch main de forma limpa
-echo "📥 1. Atualizando repositório Git (branch main)..."
-git fetch origin main || echo "⚠️ Aviso: git fetch falhou ou sem credenciais, usando arquivos sincronizados via SCP."
-git reset --hard origin/main 2>/dev/null || true
+# 2. Só executa git reset se não tiver sido feito previamente pelo GitHub Actions
+#    (evita sobrescrever o frontend/dist recém-compilado enviado via SCP)
+if [ "${SKIP_GIT_RESET:-false}" != "true" ]; then
+  echo "📥 1. Atualizando repositório Git (branch main)..."
+  git fetch origin main || echo "⚠️ Aviso: git fetch falhou ou sem credenciais, usando arquivos locais."
+  git reset --hard origin/main 2>/dev/null || true
+else
+  echo "📥 1. Repositório já sincronizado pelo CI/CD (preservando novo frontend/dist)."
+fi
+
 NEW_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "$PREV_COMMIT")
 echo "📌 Commit atualizado: $PREV_COMMIT -> $NEW_COMMIT"
 
@@ -48,7 +54,6 @@ if [ "$NEED_IMAGE_REBUILD" = true ]; then
   docker compose up -d
 else
   echo "⚡ 2. Nenhuma alteração em Dockerfile. Mantendo imagem base e atualizando volumes..."
-  # Garante que os containers estejam de pé
   docker compose up -d
 fi
 
@@ -60,25 +65,30 @@ if [ -n "$PREV_COMMIT" ] && [ "$PREV_COMMIT" != "$NEW_COMMIT" ]; then
   fi
 fi
 
-# 6. Sincroniza arquivos de código backend diretamente no container upa_app
-echo "📦 4. Sincronizando código atualizado do backend no container upa_app..."
+# 6. Sincroniza código backend, prisma, scripts e frontend/dist no container upa_app
+echo "📦 4. Sincronizando código backend e frontend/dist no container upa_app..."
 for f in /var/www/vetaro/*.js; do
   [ -f "$f" ] && docker cp "$f" upa_app:/app/ 2>/dev/null || true
 done
 docker cp /var/www/vetaro/prisma upa_app:/app/ 2>/dev/null || true
 docker cp /var/www/vetaro/scripts upa_app:/app/ 2>/dev/null || true
+if [ -d "/var/www/vetaro/frontend/dist" ]; then
+  docker compose exec -T app sh -c "rm -rf /app/frontend/dist && mkdir -p /app/frontend/dist" 2>/dev/null || true
+  docker cp /var/www/vetaro/frontend/dist/. upa_app:/app/frontend/dist/ 2>/dev/null || true
+fi
 
-# 7. Sincroniza schema do banco de dados (Prisma)
-echo "🛡️ 5. Sincronizando schema do banco de dados PostgreSQL..."
+# 7. Gera Prisma Client e sincroniza schema do banco de dados (PostgreSQL)
+echo "🛡️ 5. Atualizando Prisma Client e schema do PostgreSQL..."
+docker compose exec -T app npx prisma generate || true
 docker compose exec -T app npx prisma migrate deploy || true
 docker compose exec -T app node scripts/ensure-schema.js || true
 
 # 8. Reinicia a aplicação Node.js para carregar o novo código
-echo "🔄 6. Reiniciando container upa_app (deploy instantâneo)..."
+echo "🔄 6. Reiniciando container upa_app..."
 docker compose restart app
 
-# 8. Verificação de Saúde (Healthcheck)
-echo "🩺 6. Verificando integridade da aplicação na porta 3000..."
+# 9. Verificação de Saúde (Healthcheck)
+echo "🩺 7. Verificando integridade da aplicação na porta 3000..."
 sleep 3
 
 SUCCESS=false

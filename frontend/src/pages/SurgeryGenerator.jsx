@@ -188,7 +188,9 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
         pdfUrl: res.pdfUrl,
         docxUrl: res.docxUrl,
         paciente: res.paciente,
-        cirurgia: res.cirurgia
+        cirurgia: res.cirurgia,
+        fotos: Array.isArray(res.fotos) ? res.fotos : [],
+        legendasFotos: Array.isArray(res.legendasFotos) ? res.legendasFotos : []
       };
       setReportParaEdicao(novoRelatorio);
       onAddActivity(novoRelatorio);
@@ -249,14 +251,28 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenProfile}
-            className="self-start px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 bg-[#E3FAF2] text-[#0D5C56] border border-[#00D296]/40 shrink-0"
-          >
-            <User className="w-4 h-4 text-[#00A878]" />
-            <span>Timbre: {userProfile.crmv}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
+            <button
+              type="button"
+              onClick={() => onOpenProfile && onOpenProfile('estilo_cirurgia')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 border transition ${
+                darkMode
+                  ? 'bg-[#0A141D] text-[#00D296] border-[#00D296]/40 hover:bg-[#00D296]/15'
+                  : 'bg-slate-50 text-[#0D5C56] border-slate-300 hover:border-[#00D296]'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-[#00D296]" />
+              <span>Copiar Padrão Cirúrgico</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenProfile && onOpenProfile('perfil')}
+              className="px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 bg-[#E3FAF2] text-[#0D5C56] border border-[#00D296]/40"
+            >
+              <User className="w-4 h-4 text-[#00A878]" />
+              <span>Timbre: {userProfile.crmv}</span>
+            </button>
+          </div>
         </div>
 
         {/* Inputs ocultos */}
@@ -539,8 +555,16 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
           }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-700/40">
-            <div className="flex items-center gap-2">
-              <VetaroLogo size={22} dark={darkMode} textSize="text-base" />
+            <div className="flex items-center gap-2.5">
+              {userProfile?.logoUrl ? (
+                <img
+                  src={userProfile.logoUrl}
+                  alt={userProfile.clinicName || "Logo da Clínica"}
+                  className="h-7 max-w-[110px] object-contain rounded bg-white px-1.5 py-0.5"
+                />
+              ) : (
+                <VetaroLogo size={22} dark={darkMode} textSize="text-base" />
+              )}
               <span className="text-xs font-bold text-[#00D296]">
                 • Relatório Cirúrgico Concluído!
               </span>
@@ -610,6 +634,9 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
                     )}
                   </div>
                   <p className="text-[11px] font-bold truncate">{img.name}</p>
+                  <p className="text-[10px] text-slate-400 italic line-clamp-2 mt-0.5">
+                    {reportParaEdicao?.fotos?.[i]?.legenda || `Figura ${i + 1} - Registro fotográfico intraoperatório / peça cirúrgica`}
+                  </p>
                 </div>
               ))}
             </div>

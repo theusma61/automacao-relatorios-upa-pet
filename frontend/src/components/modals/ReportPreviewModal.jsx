@@ -16,7 +16,8 @@ import {
   Undo2,
   CheckCircle2,
   X,
-  Columns
+  Columns,
+  Camera
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
@@ -180,6 +181,19 @@ export default function ReportPreviewModal({
     };
   });
 
+  // Estado das fotos intraoperatórias e legendas editáveis (Cirurgia)
+  const [fotosCirurgia, setFotosCirurgia] = useState(() => {
+    if (Array.isArray(report.fotos) && report.fotos.length > 0) {
+      return report.fotos.map((f, idx) => ({
+        index: f.index ?? idx,
+        nome: f.nome || `foto_${idx + 1}.jpg`,
+        url: f.url || f.previewUrl || '',
+        legenda: f.legenda || `Figura ${idx + 1} - Registro fotográfico intraoperatório / peça cirúrgica`
+      }));
+    }
+    return [];
+  });
+
   // Backup para restaurar caso o usuário queira descartar
   const [backupOriginal, setBackupOriginal] = useState(null);
 
@@ -226,7 +240,20 @@ export default function ReportPreviewModal({
       };
       setCirurgiaForm(cirForm);
 
-      if (initialJobId && (!cirForm.descricaoProcedimento || cirForm.descricaoProcedimento.length < 10)) {
+      if (Array.isArray(report.fotos) && report.fotos.length > 0) {
+        setFotosCirurgia(
+          report.fotos.map((f, idx) => ({
+            index: f.index ?? idx,
+            nome: f.nome || `foto_${idx + 1}.jpg`,
+            url: f.url || f.previewUrl || '',
+            legenda: f.legenda || `Figura ${idx + 1} - Registro fotográfico intraoperatório / peça cirúrgica`
+          }))
+        );
+      } else {
+        setFotosCirurgia([]);
+      }
+
+      if (initialJobId) {
         setLoadingData(true);
         api.getCirurgiaDados(initialJobId)
           .then((dados) => {
@@ -242,9 +269,18 @@ export default function ReportPreviewModal({
               setPacienteForm((prev) => ({
                 ...prev,
                 nome: dados.paciente.nome || prev.nome,
-                especie: dados.paciente.especie || prev.especie
+                especie: dados.paciente.especie || prev.especie,
+                sexo: dados.paciente.sexo || prev.sexo,
+                idade: dados.paciente.idade || prev.idade,
+                tutor: dados.paciente.tutor || prev.tutor,
+                data: dados.paciente.data || prev.data
               }));
             }
+            if (dados && Array.isArray(dados.fotos)) {
+              setFotosCirurgia(dados.fotos);
+            }
+            if (dados && dados.pdfUrl) setPdfUrlLive(dados.pdfUrl);
+            if (dados && dados.docxUrl) setDocxUrlLive(dados.docxUrl);
           })
           .catch((err) => console.warn('Aviso ao carregar dados de cirurgia:', err))
           .finally(() => setLoadingData(false));
@@ -295,10 +331,11 @@ export default function ReportPreviewModal({
       setBackupOriginal({
         paciente: JSON.parse(JSON.stringify(pacienteForm)),
         laudo: JSON.parse(JSON.stringify(laudoForm)),
-        cirurgia: JSON.parse(JSON.stringify(cirurgiaForm))
+        cirurgia: JSON.parse(JSON.stringify(cirurgiaForm)),
+        fotosCirurgia: JSON.parse(JSON.stringify(fotosCirurgia))
       });
     }
-  }, [hasUnsavedChanges, laudoForm.length, cirurgiaForm.descricaoProcedimento]);
+  }, [hasUnsavedChanges, laudoForm.length, cirurgiaForm.descricaoProcedimento, fotosCirurgia.length]);
 
   const handlePacienteChange = (campo, valor) => {
     setPacienteForm((prev) => ({ ...prev, [campo]: valor }));
@@ -359,11 +396,19 @@ export default function ReportPreviewModal({
     setHasUnsavedChanges(true);
   };
 
+  const handleAlterarLegendaFoto = (index, novaLegenda) => {
+    setFotosCirurgia((prev) =>
+      prev.map((foto, i) => (i === index ? { ...foto, legenda: novaLegenda } : foto))
+    );
+    setHasUnsavedChanges(true);
+  };
+
   const handleRestaurar = () => {
     if (window.confirm('Deseja descartar as alterações feitas e voltar ao texto original da IA?')) {
       setPacienteForm(JSON.parse(JSON.stringify(backupOriginal.paciente)));
       setLaudoForm(JSON.parse(JSON.stringify(backupOriginal.laudo)));
       setCirurgiaForm(JSON.parse(JSON.stringify(backupOriginal.cirurgia)));
+      if (backupOriginal.fotosCirurgia) setFotosCirurgia(JSON.parse(JSON.stringify(backupOriginal.fotosCirurgia)));
       setHasUnsavedChanges(false);
       if (onToast) onToast('Alterações descartadas.');
     }
@@ -379,11 +424,16 @@ export default function ReportPreviewModal({
     try {
       let res;
       if (isSurgery) {
+        const legendasFotos = fotosCirurgia.map((f) => f.legenda || '');
         res = await api.recompilarCirurgia({
           jobId: initialJobId,
           paciente: pacienteForm,
-          cirurgia: cirurgiaForm
+          cirurgia: { ...cirurgiaForm, legendasFotos },
+          legendasFotos
         });
+        if (Array.isArray(res.fotos)) {
+          setFotosCirurgia(res.fotos);
+        }
       } else {
         res = await api.recompilarUltrassom({
           jobId: initialJobId,
@@ -404,6 +454,7 @@ export default function ReportPreviewModal({
           paciente: res.paciente,
           laudo: res.laudo,
           cirurgia: res.cirurgia,
+          fotos: res.fotos || fotosCirurgia,
           patient: `${res.paciente?.nome || pacienteForm.nome} (${res.paciente?.especie || pacienteForm.especie})`,
           tutor: res.paciente?.tutor || pacienteForm.tutor
         });
@@ -829,6 +880,67 @@ export default function ReportPreviewModal({
                       }`}
                     />
                   </div>
+
+                  {/* 4. Edição de Legendas das Imagens Intraoperatórias (Página 2) */}
+                  {fotosCirurgia.length > 0 && (
+                    <div
+                      className={`p-4 sm:p-5 rounded-2xl border space-y-3 ${
+                        darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs font-extrabold uppercase text-[#00D296] flex items-center gap-1.5">
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>4. Legendas das Imagens Intraoperatórias ({fotosCirurgia.length})</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400">
+                          Atualiza o PDF e o Word na página de registro fotográfico
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {fotosCirurgia.map((foto, idx) => (
+                          <div
+                            key={foto.nome || idx}
+                            className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center gap-3 ${
+                              darkMode
+                                ? 'bg-[#0A141D] border-slate-800'
+                                : 'bg-slate-50 border-slate-200'
+                            }`}
+                          >
+                            {foto.url && (
+                              <img
+                                src={foto.url}
+                                alt={`Figura ${idx + 1}`}
+                                className="w-20 h-16 object-cover rounded-lg border border-slate-700/50 shrink-0 bg-slate-900"
+                              />
+                            )}
+                            <div className="flex-1 w-full space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-extrabold text-[#00D296]">
+                                  Figura {idx + 1}
+                                </span>
+                                <span className="text-[10px] text-slate-500 truncate max-w-[160px]">
+                                  {foto.nome}
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                value={foto.legenda || ''}
+                                onChange={(e) => handleAlterarLegendaFoto(idx, e.target.value)}
+                                placeholder={`Figura ${idx + 1} - Descreva a imagem intraoperatória...`}
+                                className={`w-full px-3 py-2 rounded-lg border text-xs font-medium ${
+                                  darkMode
+                                    ? 'bg-[#0F1C26] border-slate-700 text-slate-100 focus:border-[#00D296]'
+                                    : 'bg-white border-slate-300 text-slate-800 focus:border-[#0D5C56]'
+                                }`}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* LISTA DE ÓRGÃOS DO LAUDO DE ULTRASSOM */

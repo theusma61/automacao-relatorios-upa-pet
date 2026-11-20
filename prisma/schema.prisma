@@ -49,6 +49,7 @@ model Usuario {
   cirurgiasEmitidas RelatorioCirurgico[]
   assinatura        Assinatura?
   perfilLaudo       PerfilLaudo?
+  perfilCirurgico   PerfilCirurgico?
 
   criadoEm          DateTime             @default(now()) @map("criado_em")
   atualizadoEm      DateTime             @updatedAt @map("atualizado_em")
@@ -242,4 +243,32 @@ model PerfilLaudo {
 
   @@index([usuarioId])
   @@map("perfis_laudo")
+}
+
+model PerfilCirurgico {
+  id                    String    @id @default(cuid())
+  usuarioId             String    @unique @map("usuario_id")
+  usuario               Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  ativo                 Boolean   @default(true)
+  status                String    @default("aprendido")
+  quantidadeAmostras    Int       @default(0) @map("quantidade_amostras")
+  arquivosAmostras      Json?     @map("arquivos_amostras")
+
+  ordemSecoes           String[]  @default([]) @map("ordem_secoes")
+  estiloRedacao         Json?     @map("estilo_redacao")
+  vocabularioPreferido  Json?     @map("vocabulario_preferido")
+  observacoesEstilo     String?   @db.Text @map("observacoes_estilo")
+
+  nomeDetectado         String?   @map("nome_detectado")
+  crmvDetectado         String?   @map("crmv_detectado")
+  clinicaDetectada      String?   @map("clinica_detectada")
+  layoutDetectado       Json?     @map("layout_detectado")
+  templateVisual        Json?     @map("template_visual")
+
+  criadoEm              DateTime  @default(now()) @map("criado_em")
+  atualizadoEm          DateTime  @updatedAt @map("atualizado_em")
+
+  @@index([usuarioId])
+  @@map("perfis_cirurgia")
 }

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { UltrasoundIcon } from '../components/icons/VetaroIcons';
 import EstiloLaudoTab from '../components/EstiloLaudoTab';
+import EstiloCirurgiaTab from '../components/EstiloCirurgiaTab';
 import { api } from '../services/api';
 
 export default function SettingsPage({
@@ -221,23 +222,32 @@ export default function SettingsPage({
 
       const res = await api.updatePerfilProfissional(fd);
       if (res && res.usuario) {
+        const ts = Date.now();
+        const logoUrlAtualizada = res.usuario.logoUrl
+          ? `${res.usuario.logoUrl.split("?")[0]}?v=${ts}`
+          : userProfile.logoUrl;
+        const assinaturaUrlAtualizada = res.usuario.assinaturaUrl
+          ? `${res.usuario.assinaturaUrl.split("?")[0]}?v=${ts}`
+          : userProfile.assinaturaUrl;
         setUserProfile({
           ...userProfile,
           ...res.usuario,
           name: res.usuario.nome || userProfile.name,
           clinicName: res.usuario.nomeClinica || userProfile.clinicName,
-          logoUrl: res.usuario.logoUrl || userProfile.logoUrl,
-          assinaturaUrl: res.usuario.assinaturaUrl || userProfile.assinaturaUrl
+          logoUrl: logoUrlAtualizada,
+          assinaturaUrl: assinaturaUrlAtualizada
         });
         setLogoFile(null);
         setLogoPreview(null);
         setAssinaturaFile(null);
         setAssinaturaPreview(null);
       }
-      onToast(`Perfil e logotipo (${userProfile.name}) salvos com sucesso!`);
+      setLogoFile(null);
+      setAssinaturaFile(null);
+      onToast(`Dados do perfil (${userProfile.name}) salvos com sucesso!`);
     } catch (err) {
       console.error('Erro ao atualizar perfil profissional:', err);
-      onToast(`Erro ao salvar perfil: ${err.message || 'Falha de comunicação'}`);
+      onToast(`Erro ao salvar perfil/logo: ${err.message || "tente novamente"}`);
     } finally {
       setSavingProfile(false);
     }
@@ -250,7 +260,8 @@ export default function SettingsPage({
         <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'perfil', label: `Meu perfil (${userProfile.greetingName})`, icon: User },
-            { id: 'estilo', label: 'Estilo & Padrão de Laudo', icon: Sparkles },
+            { id: 'estilo', label: 'Padrão de Ultrassom', icon: Sparkles },
+            { id: 'estilo_cirurgia', label: 'Padrão Cirúrgico', icon: Stethoscope },
             { id: 'assinatura', label: 'Plano e assinatura', icon: CreditCard },
             { id: 'preferencias', label: 'Configurações & IA', icon: Settings }
           ].map((tab) => {
@@ -600,6 +611,17 @@ export default function SettingsPage({
       {/* ABA: ESTILO & PADRÃO DE LAUDO (APRENDIZADO POR IA) */}
       {settingsTab === 'estilo' && (
         <EstiloLaudoTab
+          darkMode={darkMode}
+          isMobileLayout={isMobileLayout}
+          onToast={onToast}
+          userProfile={userProfile}
+          setUserProfile={setUserProfile}
+        />
+      )}
+
+      {/* ABA: COPIAR PADRÃO DE RELATÓRIO CIRÚRGICO */}
+      {settingsTab === 'estilo_cirurgia' && (
+        <EstiloCirurgiaTab
           darkMode={darkMode}
           isMobileLayout={isMobileLayout}
           onToast={onToast}

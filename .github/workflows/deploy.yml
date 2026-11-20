@@ -67,13 +67,17 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p $SSH_PORT $SSH_HOST >> ~/.ssh/known_hosts 2>/dev/null
 
-          echo "📦 Sincronizando código backend, prisma e scripts para a VPS..."
+          echo "📥 1. Atualizando Git na VPS e limpando frontend/dist antigo ANTES do upload..."
+          PREV_COMMIT=$(ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "cd /var/www/vetaro && git rev-parse HEAD 2>/dev/null || echo ''")
+          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "cd /var/www/vetaro && (git fetch origin main && git reset --hard origin/main || true) && rm -rf frontend/dist && mkdir -p frontend/dist uploads output"
+
+          echo "📦 2. Sincronizando código backend, prisma e scripts para a VPS..."
           scp -P $SSH_PORT -r *.js prisma scripts $SSH_USER@$SSH_HOST:/var/www/vetaro/
 
-          echo "📦 Sincronizando novo frontend/dist compilado para a VPS..."
+          echo "📦 3. Sincronizando novo frontend/dist compilado para a VPS..."
           scp -P $SSH_PORT -r frontend/dist/* $SSH_USER@$SSH_HOST:/var/www/vetaro/frontend/dist/
 
-          echo "📡 Executando script de deploy e reload dos containers na VPS..."
-          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "bash -s" < scripts/deploy-vps.sh
+          echo "📡 4. Executando script de deploy e reload dos containers na VPS..."
+          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "SKIP_GIT_RESET=true PREV_COMMIT='${PREV_COMMIT}' bash -s" < scripts/deploy-vps.sh
 
           echo "🎉 SUCESSO: Aplicação Vetaro atualizada e no ar!"
