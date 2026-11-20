@@ -22,6 +22,27 @@ const {
 const { obterLayout, converterParaDocx, medidaParaTwips, ptParaHalfPoints } = require('./gerenciador_layout');
 const { normalizarRotuloResponsavel } = require('./extrator_padrao_laudo');
 
+function resolverCaminhoArquivo(caminho) {
+  if (!caminho || typeof caminho !== 'string') return null;
+  const limpo = caminho.trim();
+  if (!limpo) return null;
+
+  if (fs.existsSync(limpo)) return path.resolve(limpo);
+
+  const semApp = limpo.replace(/^\/app\//, '').replace(/^app\//, '');
+  if (fs.existsSync(semApp)) return path.resolve(semApp);
+  if (fs.existsSync(path.join(__dirname, semApp))) return path.resolve(path.join(__dirname, semApp));
+
+  const semBarra = limpo.replace(/^\/+/, '');
+  if (fs.existsSync(semBarra)) return path.resolve(semBarra);
+  if (fs.existsSync(path.join(__dirname, semBarra))) return path.resolve(path.join(__dirname, semBarra));
+
+  const resolvidoCwd = path.resolve(process.cwd(), semBarra);
+  if (fs.existsSync(resolvidoCwd)) return resolvidoCwd;
+
+  return null;
+}
+
 const A4_WIDTH_TWIPS = 11906;  // 210mm
 const A4_HEIGHT_TWIPS = 16838; // 297mm
 const MM_TO_TWIPS = 56.6929;
@@ -651,10 +672,20 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
     : cfgDocx.spacingAfter;
   const lineSpacingCorpo = Math.round((parseFloat(bTypo.lineHeight || layout.line_height) || 1.35) * 240);
 
-  const headerLogoPath = layout?.header_logo_url || visual?.headerLogoUrl || logoPath || null;
-  const headerBannerPath = layout?.header_banner_url || visual?.headerBannerUrl || null;
-  const footerLogoPath = layout?.footer_logo_url || visual?.footerLogoUrl || null;
-  const assinaturaPath = opcoes.assinaturaPath || layout?.assinatura_extraida_url || visual?.assinaturaUrl || usuario.assinaturaUrl || null;
+  const headerLogoPath = resolverCaminhoArquivo(layout?.header_logo_url) ||
+    resolverCaminhoArquivo(visual?.headerLogoUrl) ||
+    resolverCaminhoArquivo(usuario?.logoUrl) ||
+    resolverCaminhoArquivo(logoPath) ||
+    resolverCaminhoArquivo(opcoes.perfilLaudo?.templateVisual?.headerLogoUrl) ||
+    null;
+  const headerBannerPath = resolverCaminhoArquivo(layout?.header_banner_url) || resolverCaminhoArquivo(visual?.headerBannerUrl) || null;
+  const footerLogoPath = resolverCaminhoArquivo(layout?.footer_logo_url) || resolverCaminhoArquivo(visual?.footerLogoUrl) || null;
+  const assinaturaPath = resolverCaminhoArquivo(opcoes.assinaturaPath) ||
+    resolverCaminhoArquivo(layout?.assinatura_extraida_url) ||
+    resolverCaminhoArquivo(visual?.assinaturaUrl) ||
+    resolverCaminhoArquivo(usuario?.assinaturaUrl) ||
+    resolverCaminhoArquivo(opcoes.perfilLaudo?.templateVisual?.assinaturaUrl) ||
+    null;
 
   const ehInlineLogoHeader = Boolean(
     usarModoClonado &&

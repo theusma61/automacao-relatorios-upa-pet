@@ -12,11 +12,41 @@ const {
 } = require('./renderizador_layout_laudo');
 const { normalizarRotuloResponsavel } = require('./extrator_padrao_laudo');
 
+/**
+ * Normaliza e resolve caminhos de arquivos de imagem no sistema de arquivos,
+ * suportando caminhos relativos, absolutos, URLs locais (/uploads/...) e
+ * referências de volumes Docker (/app/uploads/...).
+ */
+function resolverCaminhoArquivo(caminho) {
+  if (!caminho || typeof caminho !== 'string') return null;
+  const limpo = caminho.trim();
+  if (!limpo) return null;
+
+  // 1. Caminho direto se existir
+  if (fs.existsSync(limpo)) return path.resolve(limpo);
+
+  // 2. Se for caminho relativo/absoluto de container Docker (/app/...)
+  const semApp = limpo.replace(/^\/app\//, '').replace(/^app\//, '');
+  if (fs.existsSync(semApp)) return path.resolve(semApp);
+  if (fs.existsSync(path.join(__dirname, semApp))) return path.resolve(path.join(__dirname, semApp));
+
+  // 3. Se começar com barra web (/uploads/...)
+  const semBarra = limpo.replace(/^\/+/, '');
+  if (fs.existsSync(semBarra)) return path.resolve(semBarra);
+  if (fs.existsSync(path.join(__dirname, semBarra))) return path.resolve(path.join(__dirname, semBarra));
+
+  const resolvidoCwd = path.resolve(process.cwd(), semBarra);
+  if (fs.existsSync(resolvidoCwd)) return resolvidoCwd;
+
+  return null;
+}
+
 function lerImagemDataUri(caminhoImg) {
-  if (!caminhoImg || !fs.existsSync(caminhoImg)) return '';
-  const ext = path.extname(caminhoImg).toLowerCase();
-  const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
-  const b64 = fs.readFileSync(caminhoImg).toString('base64');
+  const resolvido = resolverCaminhoArquivo(caminhoImg);
+  if (!resolvido || !fs.existsSync(resolvido)) return '';
+  const ext = path.extname(resolvido).toLowerCase();
+  const mime = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : 'image/jpeg');
+  const b64 = fs.readFileSync(resolvido).toString('base64');
   return `data:${mime};base64,${b64}`;
 }
 
@@ -104,11 +134,79 @@ function parseMmNumber(val, fallback) {
 function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layout, opcoes = {}) {
   const visual = layout.visual_config_json || {};
   const escrita = layout.writing_style_json || {};
+  const usuario = opcoes.usuario || {};
 
   const pageBackgroundPath = layout.page_background_url || visual.pageBackgroundUrl || null;
-  const headerBannerPath = layout.header_banner_url || visual.headerBannerUrl || null;
-  const headerLogoPath = layout.header_logo_url || visual.headerLogoUrl || null;
-  const sigPath = layout.assinatura_extraida_url || visual.assinaturaUrl || opcoes.usuario?.assinaturaUrl || null;
+  const headerBannerPath = layout.header_banner_url || layout.headerBannerUrl || visual.headerBannerUrl || null;
+
+  const logoCandidatos = [
+    opcoes.logoPath,
+    opcoes.logoUrl,
+    usuario.logoUrl,
+    layout.header_logo_url,
+    layout.header_banner_url,
+    layout.headerBannerUrl,
+    visual.headerLogoUrl,
+    visual.headerBannerUrl,
+    opcoes.perfilLaudo?.templateVisual?.headerLogoUrl,
+    opcoes.perfilLaudo?.templateVisual?.headerBannerUrl,
+    opcoes.perfilLaudo?.headerLogoUrl,
+    usuario.clinica?.logoUrl
+  ];
+
+  let headerLogoPath = null;
+  for (const cand of logoCandidatos) {
+    const resolvido = resolverCaminhoArquivo(cand);
+    if (resolvido) {
+      headerLogoPath = resolvido;
+      break;
+    }
+  }
+
+  // Fallback nos diretórios de uploads por ID do usuário
+  if (!headerLogoPath && usuario.id) {
+    const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
+    const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR || path.join(__dirname, 'uploads');
+    const pastaTemplates = path.join(uploadsDir, 'templates', idLimpo);
+    if (fs.existsSync(pastaTemplates)) {
+      for (const arq of ['header_logo.png', 'header_logo.jpg', 'header_logo.jpeg']) {
+        const cand = path.join(pastaTemplates, arq);
+        if (fs.existsSync(cand)) { headerLogoPath = cand; break; }
+      }
+    }
+    if (!headerLogoPath) {
+      const pastaLogos = path.join(uploadsDir, 'logos');
+      if (fs.existsSync(pastaLogos)) {
+        try {
+          const arqs = fs.readdirSync(pastaLogos).filter(f => f.includes(idLimpo)).sort().reverse();
+          if (arqs.length > 0) {
+            const cand = path.join(pastaLogos, arqs[0]);
+            if (fs.existsSync(cand)) headerLogoPath = cand;
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  const sigCandidatos = [
+    opcoes.assinaturaPath,
+    opcoes.assinaturaUrl,
+    usuario.assinaturaUrl,
+    layout.assinatura_extraida_url,
+    layout.assinaturaExtraidaUrl,
+    visual.assinaturaUrl,
+    opcoes.perfilLaudo?.templateVisual?.assinaturaUrl
+  ];
+
+  let sigPath = null;
+  for (const cand of sigCandidatos) {
+    const resolvido = resolverCaminhoArquivo(cand);
+    if (resolvido) {
+      sigPath = resolvido;
+      break;
+    }
+  }
+
   const footerLogoPath = layout.footer_logo_url || visual.footerLogoUrl || null;
 
   const pageBackgroundUri = lerImagemDataUri(pageBackgroundPath);
@@ -913,9 +1011,10 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     });
   } else {
     // Modo Padrão Vetaro (sem logo nem referência a UPA PET)
-    const caminhoLogoEfetivo = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
-      ? usuario.logoUrl
-      : null;
+    const caminhoLogoEfetivo = resolverCaminhoArquivo(usuario.logoUrl) ||
+      resolverCaminhoArquivo(opcoes.perfilLaudo?.templateVisual?.headerLogoUrl) ||
+      resolverCaminhoArquivo(layout?.header_logo_url) ||
+      null;
 
     const logoBase64 = (caminhoLogoEfetivo && fs.existsSync(caminhoLogoEfetivo))
       ? fs.readFileSync(caminhoLogoEfetivo).toString('base64')
@@ -1095,9 +1194,10 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     } catch (e) {}
   }
 
-  const caminhoLogoEfetivo = (layoutEfetivo?.header_logo_url && fs.existsSync(layoutEfetivo.header_logo_url))
-    ? layoutEfetivo.header_logo_url
-    : ((usuario.logoUrl && fs.existsSync(usuario.logoUrl)) ? usuario.logoUrl : null);
+  const caminhoLogoEfetivo = resolverCaminhoArquivo(layoutEfetivo?.header_logo_url) ||
+    resolverCaminhoArquivo(visualClonadoPerfil?.headerLogoUrl) ||
+    resolverCaminhoArquivo(usuario.logoUrl) ||
+    null;
   const templateVisual = perfilLaudo?.templateVisual || layoutEfetivo?.visual_config_json || {};
 
   await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layoutEfetivo, {

@@ -1073,7 +1073,9 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
       ...req.usuario,
       nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
       crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
-      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica,
+      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null,
+      assinaturaUrl: req.usuario?.assinaturaUrl || perfilDoUsuario?.templateVisual?.assinaturaUrl || layoutUsuario?.assinatura_extraida_url || layoutUsuario?.visual_config_json?.assinaturaUrl || null
     };
 
     const resultadoIA = await analisarExameComIA(caminhosArquivos, apiKey, {
@@ -1358,7 +1360,9 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
       ...req.usuario,
       nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
       crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
-      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica,
+      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null,
+      assinaturaUrl: req.usuario?.assinaturaUrl || perfilDoUsuario?.templateVisual?.assinaturaUrl || layoutUsuario?.assinatura_extraida_url || layoutUsuario?.visual_config_json?.assinaturaUrl || null
     };
 
     const docs = await gerarDocumentosExame(
