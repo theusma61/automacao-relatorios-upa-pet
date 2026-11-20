@@ -33,9 +33,31 @@ function normalizarModoTemplate(modo) {
   return modo;
 }
 
+const DISCLAIMER_CANONICO_PADRAO = 'O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.';
+
+function sanitizarVisualConfigClonado(vc) {
+  if (!vc || typeof vc !== 'object') return vc;
+  const clone = JSON.parse(JSON.stringify(vc));
+  if (clone.footerConfig) {
+    const fc = clone.footerConfig;
+    if (fc.disclaimerText && (/Camila\s*Bastos/i.test(fc.disclaimerText) || !/ultrassom|exame/i.test(fc.disclaimerText) || fc.disclaimerText.startsWith('os achados'))) {
+      fc.disclaimerText = DISCLAIMER_CANONICO_PADRAO;
+    }
+    if (Array.isArray(fc.contactLines)) {
+      fc.contactLines = fc.contactLines.filter(l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l));
+    }
+  }
+  if (clone.headerMode === 'inline_logo_beside_patient' || clone.stationeryMode === 'inline_logo_header') {
+    clone.repeatPatientHeaderOnImagePages = true;
+    clone.repeatHeaderOnImagePages = true;
+  }
+  return clone;
+}
+
 function prismaParaSnakeCase(row) {
   if (!row) return { ...LAYOUT_PADRAO };
-  const visualJson = row.visualConfigJson || row.visual_config_json || null;
+  const rawVisual = row.visualConfigJson || row.visual_config_json || null;
+  const visualJson = sanitizarVisualConfigClonado(rawVisual);
   return {
     id: row.id || 'padrao',
     usuario_id: row.usuarioId || null,
@@ -134,7 +156,7 @@ async function salvarLayout(dadosNovos = {}, usuario = null) {
   if (dadosNovos.assinatura_extraida_url !== undefined) payloadPrisma.assinaturaExtraidaUrl = dadosNovos.assinatura_extraida_url;
   else if (atual.assinatura_extraida_url) payloadPrisma.assinaturaExtraidaUrl = atual.assinatura_extraida_url;
   if (dadosNovos.visual_config_json !== undefined) {
-    payloadPrisma.visualConfigJson = dadosNovos.visual_config_json;
+    payloadPrisma.visualConfigJson = sanitizarVisualConfigClonado(dadosNovos.visual_config_json);
   } else if (atual.visual_config_json && typeof atual.visual_config_json === 'object') {
     // Propaga edições manuais do editor (espaçamento entre categorias, entrelinha, fonte, margens) para o template clonado
     const vc = JSON.parse(JSON.stringify(atual.visual_config_json));
@@ -155,7 +177,7 @@ async function salvarLayout(dadosNovos = {}, usuario = null) {
       ...(dadosNovos.margin_left ? { left: dadosNovos.margin_left } : {}),
       ...(dadosNovos.margin_right ? { right: dadosNovos.margin_right } : {})
     };
-    payloadPrisma.visualConfigJson = vc;
+    payloadPrisma.visualConfigJson = sanitizarVisualConfigClonado(vc);
   }
   if (dadosNovos.writing_style_json !== undefined) payloadPrisma.writingStyleJson = dadosNovos.writing_style_json;
   if (dadosNovos.pdfs_referencia_qtd !== undefined) payloadPrisma.pdfsReferenciaQtd = Number(dadosNovos.pdfs_referencia_qtd) || 0;

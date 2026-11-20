@@ -49,6 +49,35 @@ function calcularDimensoesDocx(origWidth, origHeight, maxWidth = 480, maxHeight 
   return { width: w, height: h };
 }
 
+/**
+ * Normaliza e resolve caminhos de arquivos de imagem no sistema de arquivos,
+ * suportando caminhos relativos, absolutos, URLs locais (/uploads/...) e
+ * referências de volumes Docker (/app/uploads/...).
+ */
+function resolverCaminhoArquivo(caminho) {
+  if (!caminho || typeof caminho !== 'string') return null;
+  const limpo = caminho.trim();
+  if (!limpo) return null;
+
+  // 1. Caminho direto se existir
+  if (fs.existsSync(limpo)) return path.resolve(limpo);
+
+  // 2. Se for caminho relativo/absoluto de container Docker (/app/...)
+  const semApp = limpo.replace(/^\/app\//, '').replace(/^app\//, '');
+  if (fs.existsSync(semApp)) return path.resolve(semApp);
+  if (fs.existsSync(path.join(__dirname, semApp))) return path.resolve(path.join(__dirname, semApp));
+
+  // 3. Se começar com barra web (/uploads/...)
+  const semBarra = limpo.replace(/^\/+/, '');
+  if (fs.existsSync(semBarra)) return path.resolve(semBarra);
+  if (fs.existsSync(path.join(__dirname, semBarra))) return path.resolve(path.join(__dirname, semBarra));
+
+  const resolvidoCwd = path.resolve(process.cwd(), semBarra);
+  if (fs.existsSync(resolvidoCwd)) return resolvidoCwd;
+
+  return null;
+}
+
 function resolverContextoCirurgico(opcoes = {}) {
   const usuario = opcoes.usuario || {};
   const layout = opcoes.layout || LAYOUT_PADRAO;
@@ -58,16 +87,98 @@ function resolverContextoCirurgico(opcoes = {}) {
   const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
   const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'Vetaro';
 
-  const logoPath = (usuario.logoUrl && fs.existsSync(usuario.logoUrl))
-    ? usuario.logoUrl
-    : LOGO_PATH;
+  const logoCandidatos = [
+    opcoes.logoPath,
+    opcoes.logoUrl,
+    usuario.logoUrl,
+    layout.header_logo_url,
+    layout.header_banner_url,
+    layout.headerBannerUrl,
+    layout.visual_config_json?.headerLogoUrl,
+    layout.visualConfigJson?.headerLogoUrl,
+    layout.visual_config_json?.headerBannerUrl,
+    layout.visualConfigJson?.headerBannerUrl,
+    opcoes.perfilLaudo?.templateVisual?.headerLogoUrl,
+    opcoes.perfilLaudo?.templateVisual?.headerBannerUrl,
+    opcoes.perfilLaudo?.headerLogoUrl,
+    usuario.clinica?.logoUrl
+  ];
+
+  let logoPath = null;
+  for (const cand of logoCandidatos) {
+    const resolvido = resolverCaminhoArquivo(cand);
+    if (resolvido) {
+      logoPath = resolvido;
+      break;
+    }
+  }
+
+  // Se o usuário tiver logo salva no diretório uploads/logos com seu ID
+  if (!logoPath && usuario.id) {
+    const logosDir = path.join(__dirname, 'uploads', 'logos');
+    if (fs.existsSync(logosDir)) {
+      try {
+        const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
+        const arquivos = fs.readdirSync(logosDir);
+        const logosDoUsuario = arquivos
+          .filter(f => f.includes(idLimpo) && /\.(jpe?g|png|webp)$/i.test(f))
+          .sort()
+          .reverse();
+        if (logosDoUsuario.length > 0) {
+          const achado = path.join(logosDir, logosDoUsuario[0]);
+          if (fs.existsSync(achado)) logoPath = achado;
+        }
+      } catch (_) {}
+    }
+  }
 
   const isDraCamila = !usuario.id || (usuario.email || '').toLowerCase().includes('camila');
-  const assinaturaPath = (usuario.assinaturaUrl && fs.existsSync(usuario.assinaturaUrl))
-    ? usuario.assinaturaUrl
-    : (isDraCamila ? ASSINATURA_PATH : null);
+  const assinaturaCandidatos = [
+    opcoes.assinaturaPath,
+    opcoes.assinaturaUrl,
+    usuario.assinaturaUrl,
+    layout.assinatura_extraida_url,
+    layout.assinaturaExtraidaUrl,
+    layout.visual_config_json?.assinaturaUrl,
+    layout.visualConfigJson?.assinaturaUrl,
+    opcoes.perfilLaudo?.templateVisual?.assinaturaUrl
+  ];
+
+  let assinaturaPath = null;
+  for (const cand of assinaturaCandidatos) {
+    const resolvido = resolverCaminhoArquivo(cand);
+    if (resolvido) {
+      assinaturaPath = resolvido;
+      break;
+    }
+  }
+
+  // Se o usuário tiver assinatura salva no diretório uploads/assinaturas com seu ID
+  if (!assinaturaPath && usuario.id) {
+    const assinaturasDir = path.join(__dirname, 'uploads', 'assinaturas');
+    if (fs.existsSync(assinaturasDir)) {
+      try {
+        const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
+        const arquivos = fs.readdirSync(assinaturasDir);
+        const assDoUsuario = arquivos
+          .filter(f => f.includes(idLimpo) && /\.(jpe?g|png|webp)$/i.test(f))
+          .sort()
+          .reverse();
+        if (assDoUsuario.length > 0) {
+          const achado = path.join(assinaturasDir, assDoUsuario[0]);
+          if (fs.existsSync(achado)) assinaturaPath = achado;
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (!assinaturaPath && isDraCamila) {
+    assinaturaPath = ASSINATURA_PATH;
+  }
 
   return {
+    ...opcoes,
+    usuario,
     nomeMedico,
     crmvMedico,
     clinicaNome,
@@ -102,26 +213,37 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
     right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
   };
 
-  const celulaLogoChildren = logoBytes
-    ? [
-        new Paragraph({
-          alignment: AlignmentType.LEFT,
-          children: [
-            new ImageRun({
-              data: logoBytes,
-              transformation: { width: 130, height: 65 }
-            })
-          ]
-        })
-      ]
-    : [
-        new Paragraph({
-          alignment: AlignmentType.LEFT,
-          children: [
-            new TextRun({ text: ctx.clinicaNome, bold: true, font: fonte, size: 32, color: corPrimariaHex })
-          ]
-        })
-      ];
+  let celulaLogoChildren = [];
+  if (logoBytes) {
+    let logoDims = { width: 130, height: 65 };
+    try {
+      const dimsOrig = obterDimensoesImagem(logoBytes);
+      if (dimsOrig && dimsOrig.width && dimsOrig.height) {
+        logoDims = calcularDimensoesDocx(dimsOrig.width, dimsOrig.height, 140, 70);
+      }
+    } catch (_) {}
+
+    celulaLogoChildren = [
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        children: [
+          new ImageRun({
+            data: logoBytes,
+            transformation: logoDims
+          })
+        ]
+      })
+    ];
+  } else {
+    celulaLogoChildren = [
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        children: [
+          new TextRun({ text: ctx.clinicaNome, bold: true, font: fonte, size: 32, color: corPrimariaHex })
+        ]
+      })
+    ];
+  }
 
   const tabelaCabecalho = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -517,6 +639,8 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     }
     .logo-img {
       width: ${logoWidth};
+      max-height: 70px;
+      object-fit: contain;
       height: auto;
       display: block;
     }
@@ -686,8 +810,15 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
 async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDestino, imagens = [], opcoes = {}) {
   const usuario = opcoes.usuario || {};
   const layout = opcoes.layout || await obterLayout(usuario.id || null);
-  const cfgDocx = converterParaDocx(layout);
-  const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, cfgDocx });
+  const cfgDocx = opcoes.cfgDocx || converterParaDocx(layout);
+  let perfilLaudo = opcoes.perfilLaudo;
+  if (!perfilLaudo && usuario.id) {
+    try {
+      const { obterPerfilLaudo } = require('./gerenciador_perfil_laudo');
+      perfilLaudo = await obterPerfilLaudo(usuario.id);
+    } catch (_) {}
+  }
+  const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, cfgDocx, perfilLaudo });
 
   const nomeLimpo = (dadosPaciente.nome || 'PACIENTE')
     .toUpperCase()

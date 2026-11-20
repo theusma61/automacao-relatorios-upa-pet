@@ -315,4 +315,66 @@ describe('Motor 100% Agnóstico de Clonagem Visual e Textual de Laudos (1 a 10 P
     expect(contactBlockMatch[1]).not.toContain('CRMV');
     expect(contactBlockMatch[1]).not.toContain('Camila Bastos');
   });
+
+  test('gerarHtmlTemplateClonado nunca renderiza literal "null" ou "undefined" na assinatura quando crmvMedico ou nome é null/vazio', () => {
+    const layoutSemTextoAssinatura = {
+      modo_template: 'clonado_pdf',
+      visual_config_json: {
+        stationeryMode: 'inline_logo_header',
+        signatureConfig: {
+          textLines: []
+        },
+        footerConfig: {
+          disclaimerText: 'Aviso legal'
+        }
+      }
+    };
+
+    const html = gerarHtmlTemplateClonado(
+      { nome: 'Thor', sexo: 'Macho' },
+      [{ orgao: 'BEXIGA', texto: 'Normal' }],
+      [],
+      layoutSemTextoAssinatura,
+      {
+        nomeMedico: 'Dr. Teste',
+        crmvMedico: null
+      }
+    );
+
+    expect(html).toContain('Dr. Teste');
+    expect(html).not.toContain('<p class="sig-line">null</p>');
+    expect(html).not.toContain('>null<');
+    expect(html).not.toContain('>undefined<');
+  });
+
+  test('gerarHtmlTemplateClonado repete cabeçalho inline do paciente e logo nas páginas de fotos de ultrassom', () => {
+    const layoutInline = {
+      modo_template: 'clonado_pdf',
+      visual_config_json: {
+        headerMode: 'inline_logo_beside_patient',
+        stationeryMode: 'inline_logo_header',
+        repeatPatientHeaderOnImagePages: true,
+        patientHeader: {
+          rows: [[{ key: 'nome', label: 'Nome:', widthPct: 50 }, { key: 'tutor', label: 'Responsável:', widthPct: 50 }]]
+        },
+        footerConfig: {
+          disclaimerText: 'Aviso legal',
+          showOnImagePages: true
+        }
+      }
+    };
+
+    const html = gerarHtmlTemplateClonado(
+      { nome: 'GEMEOS', tutor: 'SILVANA' },
+      [{ orgao: 'BEXIGA', texto: 'Normal' }],
+      ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='],
+      layoutInline
+    );
+
+    // Deve conter inline-page-header tanto na página de texto quanto na página de imagens
+    const headersCount = (html.match(/<div class="inline-page-header"/g) || []).length;
+    expect(headersCount).toBe(2);
+    expect(html).toContain('GEMEOS');
+    expect(html).toContain('SILVANA');
+  });
 });

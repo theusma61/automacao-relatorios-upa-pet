@@ -355,12 +355,15 @@ function renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml) {
     ? `<div style="width: 220px; border-top: 1px solid #444; margin: 0 auto 3px auto; display: inline-block;"></div><br>`
     : '';
 
+  const nomeLimpo = (nomeMedico && nomeMedico !== 'null' && nomeMedico !== 'undefined') ? String(nomeMedico).trim() : '';
+  const crmvLimpo = (crmvMedico && crmvMedico !== 'null' && crmvMedico !== 'undefined') ? String(crmvMedico).trim() : '';
+
   return `
     <div class="signature-section" style="text-align: ${alinhamentoAssinatura}; margin-top: 6px; padding: 0 10px;">
       ${assinaturaImgHtml}
       ${linhaHtml}
-      <p style="margin: 0; font-weight: bold; font-size: 10pt; color: #111;">${nomeMedico}</p>
-      <p style="margin: 1px 0 0 0; font-size: 9pt; color: ${template.corSecundaria};">${crmvMedico}</p>
+      ${nomeLimpo ? `<p style="margin: 0; font-weight: bold; font-size: 10pt; color: #111;">${nomeLimpo}</p>` : ''}
+      ${crmvLimpo ? `<p style="margin: 1px 0 0 0; font-size: 9pt; color: ${template.corSecundaria};">${crmvLimpo}</p>` : ''}
     </div>
     <div class="footer-legal" style="font-size: 7.2pt; font-style: italic; color: #666; text-align: center; border-top: 1px solid ${template.corBordaTabelas || '#ccc'}; padding-top: 3px; margin-top: 6px;">
       ${template.textoAvisoLegal}
@@ -569,7 +572,7 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
 
   const clinicaNome = opcoes.clinicaNome || perfilLaudo?.clinicaDetectada || usuario.nomeClinica || 'Serviço Veterinário';
   const nomeMedico = opcoes.nomeMedico || perfilLaudo?.nomeDetectado || usuario.nome || 'Médico Veterinário';
-  const crmvMedico = opcoes.crmvMedico || perfilLaudo?.crmvDetectado || usuario.crmv || 'CRMV';
+  const crmvMedico = opcoes.crmvMedico || perfilLaudo?.crmvDetectado || usuario.crmv || '';
 
   // Logotipo: Se o usuário tem perfil customizado e NÃO tem logoUrl própria, NÃO usa o logo UPA PET!
   let logoBase64 = '';
