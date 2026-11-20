@@ -34,14 +34,14 @@ jobs:
           npm ci || npm install
           npx puppeteer browsers install chrome
 
-      - name: 🧪 4. Executar testes automatizados (Jest)
-        run: npm run test:ci
-
-      - name: 🎨 5. Compilar Frontend (Vite + React)
+      - name: 🎨 4. Compilar Frontend (Vite + React)
         run: |
           cd frontend
           npm ci || npm install
           npm run build
+
+      - name: 🧪 5. Executar testes automatizados (Jest)
+        run: npm run test:ci
 
       - name: 🚀 6. Executar Deploy na VPS via SSH
         env:
