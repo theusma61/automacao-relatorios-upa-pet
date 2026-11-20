@@ -20,7 +20,8 @@ import {
   Sparkles,
   FileText,
   Calendar,
-  Zap
+  Zap,
+  Image as ImageIcon
 } from 'lucide-react';
 import { UltrasoundIcon } from '../components/icons/VetaroIcons';
 import EstiloLaudoTab from '../components/EstiloLaudoTab';
@@ -41,8 +42,90 @@ export default function SettingsPage({
   const logoInputRef = useRef(null);
   const assinaturaInputRef = useRef(null);
   const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
   const [assinaturaFile, setAssinaturaFile] = useState(null);
+  const [assinaturaPreview, setAssinaturaPreview] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  const getMediaUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+    const semApp = url.replace(/^\/app\//, '/');
+    if (semApp.startsWith('/uploads/')) return semApp;
+    if (semApp.startsWith('uploads/')) return '/' + semApp;
+    return semApp.startsWith('/') ? semApp : `/${semApp}`;
+  };
+
+  const compressImageFile = async (file, maxDimension = 1200, quality = 0.92) => {
+    if (!file || !file.type.startsWith('image/')) return file;
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width <= maxDimension && height <= maxDimension && file.size < 400 * 1024) {
+            return resolve(file);
+          }
+          if (width > height) {
+            if (width > maxDimension) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            }
+          } else {
+            if (height > maxDimension) {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const isPng = file.type === 'image/png';
+          const mime = isPng ? 'image/png' : 'image/jpeg';
+          canvas.toBlob((blob) => {
+            if (!blob) return resolve(file);
+            const safeName = file.name.replace(/\.[^.]+$/, '') + (isPng ? '.png' : '.jpg');
+            const compressed = new File([blob], safeName, { type: mime, lastModified: Date.now() });
+            resolve(compressed);
+          }, mime, quality);
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLogoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file, 1200, 0.92);
+      setLogoFile(compressed);
+      setLogoPreview(URL.createObjectURL(compressed));
+    } catch (_) {
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleAssinaturaSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file, 1200, 0.92);
+      setAssinaturaFile(compressed);
+      setAssinaturaPreview(URL.createObjectURL(compressed));
+    } catch (_) {
+      setAssinaturaFile(file);
+      setAssinaturaPreview(URL.createObjectURL(file));
+    }
+  };
 
   const [usageData, setUsageData] = useState(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
@@ -142,12 +225,19 @@ export default function SettingsPage({
           ...userProfile,
           ...res.usuario,
           name: res.usuario.nome || userProfile.name,
-          clinicName: res.usuario.nomeClinica || userProfile.clinicName
+          clinicName: res.usuario.nomeClinica || userProfile.clinicName,
+          logoUrl: res.usuario.logoUrl || userProfile.logoUrl,
+          assinaturaUrl: res.usuario.assinaturaUrl || userProfile.assinaturaUrl
         });
+        setLogoFile(null);
+        setLogoPreview(null);
+        setAssinaturaFile(null);
+        setAssinaturaPreview(null);
       }
-      onToast(`Dados do perfil (${userProfile.name}) salvos com sucesso!`);
-    } catch (_) {
-      onToast(`Dados do perfil da ${userProfile.name} atualizados!`);
+      onToast(`Perfil e logotipo (${userProfile.name}) salvos com sucesso!`);
+    } catch (err) {
+      console.error('Erro ao atualizar perfil profissional:', err);
+      onToast(`Erro ao salvar perfil: ${err.message || 'Falha de comunicação'}`);
     } finally {
       setSavingProfile(false);
     }
@@ -340,56 +430,154 @@ export default function SettingsPage({
               />
             </div>
 
-            {/* Uploads Multi-Médico de Logotipo e Assinatura Digital */}
+            {/* Uploads Multi-Médico de Logotipo e Assinatura Digital com Pré-visualização Instantânea */}
             <div className={`grid ${isMobileLayout ? 'grid-cols-1' : 'grid-cols-2'} gap-4 pt-1`}>
-              <div>
+              {/* Card de Logotipo */}
+              <div className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 ${
+                darkMode ? 'bg-[#0A141D] border-slate-700/70' : 'bg-slate-50 border-slate-200'
+              }`}>
                 <input
                   ref={logoInputRef}
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
                   className="hidden"
-                  onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                  onChange={handleLogoSelect}
                 />
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                    <ImageIcon className="w-3.5 h-3.5 text-[#00D296]" />
+                    <span>Logotipo da Clínica</span>
+                  </div>
+                  {logoPreview ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Alteração pendente
+                    </span>
+                  ) : userProfile.logoUrl ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] border border-[#00D296]/30">
+                      Ativo no sistema
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-semibold">
+                      Não configurado
+                    </span>
+                  )}
+                </div>
+
+                {(logoPreview || userProfile.logoUrl) ? (
+                  <div className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-slate-700/40">
+                    <div className="w-20 h-12 bg-white rounded flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-inner">
+                      <img
+                        src={logoPreview || getMediaUrl(userProfile.logoUrl)}
+                        alt="Logotipo Clínica"
+                        className="max-h-full max-w-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold truncate text-slate-200">
+                        {logoFile ? logoFile.name : (userProfile.clinicName || 'Logotipo Oficial')}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Exibido nos cabeçalhos de cirurgia e laudos
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400">
+                    Faça o upload da imagem da sua clínica (PNG, JPG ou WEBP).
+                  </p>
+                )}
+
                 <button
                   type="button"
                   onClick={() => logoInputRef.current && logoInputRef.current.click()}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
+                  className={`w-full py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                     darkMode
-                      ? 'bg-[#0A141D] border-slate-700 text-slate-300 hover:border-[#00D296]'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-[#0D5C56]'
+                      ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:border-[#00D296]'
+                      : 'bg-white border-slate-300 text-slate-700 hover:border-[#0D5C56]'
                   }`}
                 >
-                  <Upload className="w-4 h-4 text-[#00D296]" />
-                  <span className="truncate">
-                    {logoFile ? logoFile.name : 'Enviar Logotipo da Clínica (PNG/JPG)'}
+                  <Upload className="w-3.5 h-3.5 text-[#00D296]" />
+                  <span>
+                    {(logoPreview || userProfile.logoUrl) ? 'Substituir Logotipo' : 'Selecionar Logotipo (PNG/JPG)'}
                   </span>
                 </button>
               </div>
 
-              <div>
+              {/* Card de Assinatura Digital */}
+              <div className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 ${
+                darkMode ? 'bg-[#0A141D] border-slate-700/70' : 'bg-slate-50 border-slate-200'
+              }`}>
                 <input
                   ref={assinaturaInputRef}
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
                   className="hidden"
-                  onChange={(e) => setAssinaturaFile(e.target.files?.[0] || null)}
+                  onChange={handleAssinaturaSelect}
                 />
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#00D296]" />
+                    <span>Assinatura / Carimbo</span>
+                  </div>
+                  {assinaturaPreview ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Alteração pendente
+                    </span>
+                  ) : userProfile.assinaturaUrl ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#00D296]/20 text-[#00D296] border border-[#00D296]/30">
+                      Ativa no sistema
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-semibold">
+                      Não configurada
+                    </span>
+                  )}
+                </div>
+
+                {(assinaturaPreview || userProfile.assinaturaUrl) ? (
+                  <div className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-slate-700/40">
+                    <div className="w-20 h-12 bg-white rounded flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-inner">
+                      <img
+                        src={assinaturaPreview || getMediaUrl(userProfile.assinaturaUrl)}
+                        alt="Assinatura Digital"
+                        className="max-h-full max-w-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold truncate text-slate-200">
+                        {assinaturaFile ? assinaturaFile.name : (userProfile.name || 'Assinatura Médica')}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Exibida com CRMV no rodapé dos documentos
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400">
+                    Faça o upload do seu carimbo ou assinatura escaneada.
+                  </p>
+                )}
+
                 <button
                   type="button"
-                  onClick={() =>
-                    assinaturaInputRef.current && assinaturaInputRef.current.click()
-                  }
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
+                  onClick={() => assinaturaInputRef.current && assinaturaInputRef.current.click()}
+                  className={`w-full py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                     darkMode
-                      ? 'bg-[#0A141D] border-slate-700 text-slate-300 hover:border-[#00D296]'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-[#0D5C56]'
+                      ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:border-[#00D296]'
+                      : 'bg-white border-slate-300 text-slate-700 hover:border-[#0D5C56]'
                   }`}
                 >
-                  <Upload className="w-4 h-4 text-[#00D296]" />
-                  <span className="truncate">
-                    {assinaturaFile
-                      ? assinaturaFile.name
-                      : 'Enviar Assinatura / Carimbo (PNG/JPG)'}
+                  <Upload className="w-3.5 h-3.5 text-[#00D296]" />
+                  <span>
+                    {(assinaturaPreview || userProfile.assinaturaUrl) ? 'Substituir Assinatura' : 'Selecionar Assinatura (PNG/JPG)'}
                   </span>
                 </button>
               </div>

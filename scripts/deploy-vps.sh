@@ -26,6 +26,14 @@ echo "📌 Commit atualizado: $PREV_COMMIT -> $NEW_COMMIT"
 # 3. Garante que os diretórios necessários existem
 mkdir -p frontend/dist uploads output
 
+# 3.1 Garante que o Nginx do host aceite uploads de arquivos maiores (até 50MB)
+if command -v nginx >/dev/null 2>&1; then
+  echo "🌐 1.1 Configurando client_max_body_size 50M no Nginx do host..."
+  mkdir -p /etc/nginx/conf.d
+  echo "client_max_body_size 50M;" > /etc/nginx/conf.d/vetaro_upload_size.conf 2>/dev/null || true
+  nginx -t 2>/dev/null && (nginx -s reload 2>/dev/null || systemctl reload nginx 2>/dev/null || true)
+fi
+
 # 4. Verifica se houve alteração em Dockerfile ou docker-compose.yml
 NEED_IMAGE_REBUILD=false
 if [ -n "$PREV_COMMIT" ] && [ "$PREV_COMMIT" != "$NEW_COMMIT" ]; then

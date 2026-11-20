@@ -78,6 +78,19 @@ function resolverCaminhoArquivo(caminho) {
   return null;
 }
 
+function lerImagemDataUri(caminho) {
+  const resolvido = resolverCaminhoArquivo(caminho);
+  if (!resolvido || !fs.existsSync(resolvido)) return '';
+  try {
+    const ext = path.extname(resolvido).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : (ext === '.svg' ? 'image/svg+xml' : 'image/jpeg'));
+    const buf = fs.readFileSync(resolvido);
+    return `data:${mime};base64,${buf.toString('base64')}`;
+  } catch (_) {
+    return '';
+  }
+}
+
 function resolverContextoCirurgico(opcoes = {}) {
   const usuario = opcoes.usuario || {};
   const layout = opcoes.layout || LAYOUT_PADRAO;
@@ -119,7 +132,7 @@ function resolverContextoCirurgico(opcoes = {}) {
     const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR || path.join(__dirname, 'uploads');
     const pastaTemplates = path.join(uploadsDir, 'templates', idLimpo);
     if (fs.existsSync(pastaTemplates)) {
-      for (const arq of ['header_logo.png', 'header_logo.jpg', 'header_logo.jpeg']) {
+      for (const arq of ['header_logo.png', 'header_logo.jpg', 'header_logo.jpeg', 'header_logo.webp']) {
         const cand = path.join(pastaTemplates, arq);
         if (fs.existsSync(cand)) { logoPath = cand; break; }
       }
@@ -517,11 +530,8 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
 
 async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, imagens = [], opcoes = {}) {
   const ctx = resolverContextoCirurgico(opcoes);
-  const logoBase64 = (ctx.logoPath && fs.existsSync(ctx.logoPath))
-    ? fs.readFileSync(ctx.logoPath).toString('base64')
-    : '';
-  const logoExt = (ctx.logoPath && path.extname(ctx.logoPath).toLowerCase() === '.png') ? 'png' : 'jpeg';
-  const logoSrc = logoBase64 ? `data:image/${logoExt};base64,${logoBase64}` : '';
+  const logoSrc = lerImagemDataUri(ctx.logoPath);
+  const assinaturaSrc = lerImagemDataUri(ctx.assinaturaPath);
 
   const textoTotal = (dadosCirurgia.descricaoProcedimento || '') + (dadosCirurgia.evolucaoConsideracoes || '');
   const ehTextoLongo = textoTotal.length > 1750;
@@ -538,12 +548,9 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   const marginAssinatura = ehTextoMuitoLongo ? '14px' : '22px';
   const assinaturaMaxHeight = ehTextoMuitoLongo ? '50px' : '65px';
 
-  let assinaturaHtml = '';
-  if (ctx.assinaturaPath && fs.existsSync(ctx.assinaturaPath)) {
-    const assExt = path.extname(ctx.assinaturaPath).toLowerCase() === '.png' ? 'png' : 'jpeg';
-    const assBase64 = fs.readFileSync(ctx.assinaturaPath).toString('base64');
-    assinaturaHtml = `<img src="data:image/${assExt};base64,${assBase64}" class="assinatura-img" alt="Assinatura" />`;
-  }
+  const assinaturaHtml = assinaturaSrc
+    ? `<img src="${assinaturaSrc}" class="assinatura-img" alt="Assinatura" />`
+    : '';
 
   const descParagrafos = (dadosCirurgia.descricaoProcedimento || '')
     .split(/\n\s*\n/)

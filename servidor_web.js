@@ -113,6 +113,7 @@ const outputDir = process.env.OUTPUT_PERSISTENT_DIR
 });
 
 app.use('/uploads', express.static(persistentUploadDir));
+app.use('/app/uploads', express.static(persistentUploadDir));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -136,7 +137,15 @@ const storagePerfil = multer.diskStorage({
 });
 const uploadPerfil = multer({
   storage: storagePerfil,
-  limits: { fileSize: 3 * 1024 * 1024 }
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (/\.(png|jpe?g|webp|svg)$/i.test(ext) || (file.mimetype && file.mimetype.startsWith('image/'))) {
+      cb(null, true);
+    } else {
+      cb(new Error('Formato de imagem inválido. Formatos suportados: PNG, JPG, JPEG ou WEBP.'));
+    }
+  }
 });
 
 const storagePdfsPadrao = multer.diskStorage({
@@ -328,10 +337,18 @@ app.post('/api/admin/usuarios/plano', exigirAutenticacao, validate(adminSchemas.
   }
 });
 
-app.post('/api/perfil/profissional', exigirAutenticacao, uploadPerfil.fields([
-  { name: 'logo', maxCount: 1 },
-  { name: 'assinatura', maxCount: 1 }
-]), async (req, res) => {
+app.post('/api/perfil/profissional', exigirAutenticacao, (req, res, next) => {
+  uploadPerfil.fields([
+    { name: 'logo', maxCount: 1 },
+    { name: 'assinatura', maxCount: 1 }
+  ])(req, res, (err) => {
+    if (err) {
+      logger.error('Erro de upload de arquivo no perfil profissional', { error: err.message });
+      return res.status(400).json({ error: `Erro ao enviar arquivo: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     const logoFile = req.files && req.files.logo ? req.files.logo[0] : null;
     const assinaturaFile = req.files && req.files.assinatura ? req.files.assinatura[0] : null;
@@ -345,6 +362,65 @@ app.post('/api/perfil/profissional', exigirAutenticacao, uploadPerfil.fields([
     if (assinaturaFile) dados.assinaturaUrl = assinaturaFile.path;
 
     const atualizado = await atualizarPerfilProfissional(req.usuario.id, dados);
+
+    // Espelhamento para diretório de templates do usuário para redundância máxima
+    const userIdSafe = String(req.usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
+    const pastaTemplatesUsuario = path.join(templatesDir, userIdSafe);
+    if (!fs.existsSync(pastaTemplatesUsuario)) {
+      try { fs.mkdirSync(pastaTemplatesUsuario, { recursive: true }); } catch (_) {}
+    }
+
+    if (logoFile && fs.existsSync(logoFile.path)) {
+      const ext = path.extname(logoFile.path).toLowerCase() || '.png';
+      try {
+        fs.copyFileSync(logoFile.path, path.join(pastaTemplatesUsuario, `header_logo${ext}`));
+        if (ext !== '.png') {
+          fs.copyFileSync(logoFile.path, path.join(pastaTemplatesUsuario, 'header_logo.png'));
+        }
+      } catch (_) {}
+
+      try {
+        const layoutUsuario = await prisma.configuracaoLayout.findFirst({
+          where: { usuarioId: req.usuario.id }
+        });
+        if (layoutUsuario) {
+          await prisma.configuracaoLayout.update({
+            where: { id: layoutUsuario.id },
+            data: { headerLogoUrl: logoFile.path }
+          });
+        }
+      } catch (_) {}
+    }
+
+    if (assinaturaFile && fs.existsSync(assinaturaFile.path)) {
+      const ext = path.extname(assinaturaFile.path).toLowerCase() || '.png';
+      try {
+        fs.copyFileSync(assinaturaFile.path, path.join(pastaTemplatesUsuario, `signature${ext}`));
+        if (ext !== '.png') {
+          fs.copyFileSync(assinaturaFile.path, path.join(pastaTemplatesUsuario, 'signature.png'));
+        }
+      } catch (_) {}
+
+      try {
+        const layoutUsuario = await prisma.configuracaoLayout.findFirst({
+          where: { usuarioId: req.usuario.id }
+        });
+        if (layoutUsuario) {
+          await prisma.configuracaoLayout.update({
+            where: { id: layoutUsuario.id },
+            data: { assinaturaExtraidaUrl: assinaturaFile.path }
+          });
+        }
+      } catch (_) {}
+    }
+
+    logger.info({
+      usuarioId: req.usuario.id,
+      email: req.usuario.email,
+      logoSalva: dados.logoUrl || null,
+      assinaturaSalva: dados.assinaturaUrl || null
+    }, 'Perfil profissional e identidade visual atualizados com sucesso');
+
     res.json({ sucesso: true, usuario: atualizado });
   } catch (err) {
     logger.error('Erro ao atualizar perfil profissional', { error: err.message });
