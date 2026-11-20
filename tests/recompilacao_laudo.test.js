@@ -112,6 +112,46 @@ describe('Recompilação e Edição de Laudos e Cirurgias (motor_laudo.js e moto
     expect(statsDocx.size).toBeGreaterThan(1000);
   }, 90000);
 
+  test('deve puxar a logo customizada do usuario e incorporar no relatorio cirurgico', async () => {
+    const JSZip = require('jszip');
+    const pastaSaida = path.join(tmpDir, 'cirurgia_com_logo_customizada');
+    fs.mkdirSync(pastaSaida, { recursive: true });
+
+    // Cria um PNG temporário de teste como se fosse upload de logo
+    const fakeLogoPath = path.join(pastaSaida, 'logo_custom_teste.png');
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    fs.writeFileSync(fakeLogoPath, Buffer.from(pngBase64, 'base64'));
+
+    const cirurgia = {
+      procedimento: 'Cesariana de Emergência',
+      diagnosticoPreCirurgico: 'Distocia Fetal',
+      descricaoProcedimento: 'Celiotomia mediana retro-umbilical. Histerotomia e extração de 3 fetos viáveis.',
+      evolucaoConsideracoes: 'Mãe e filhotes passam bem.'
+    };
+
+    const docs = await gerarDocumentosCirurgicos(
+      { nome: 'Luna', especie: 'Canina', tutor: 'Mariana' },
+      cirurgia,
+      pastaSaida,
+      [],
+      {
+        usuario: {
+          nome: 'Dr. Lucas Ribeiro',
+          crmv: 'CRMV/SP: 12345',
+          nomeClinica: 'Centro Veterinário São Lucas',
+          logoUrl: fakeLogoPath
+        }
+      }
+    );
+
+    expect(fs.existsSync(docs.caminhoDocx)).toBe(true);
+    expect(fs.existsSync(docs.caminhoPdf)).toBe(true);
+
+    const zip = await JSZip.loadAsync(fs.readFileSync(docs.caminhoDocx));
+    const mediaFiles = Object.keys(zip.files).filter(k => k.startsWith('word/media/'));
+    expect(mediaFiles.length).toBeGreaterThan(0);
+  }, 90000);
+
   test('deve extrair texto e órgãos de um arquivo DOCX gerado utilizando JSZip', async () => {
     const JSZip = require('jszip');
     const pastaSaida = path.join(tmpDir, 'ultrassom_recompilado');

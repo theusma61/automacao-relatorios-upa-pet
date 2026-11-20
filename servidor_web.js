@@ -1200,8 +1200,19 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 
   try {
     console.log(`🔪 [WEB - CIRURGIA] [Usuário: ${req.usuario.email}] Analisando procedimento cirúrgico...`);
+    const layoutUsuario = await obterLayout(req.usuario?.id || null);
+    const perfilDoUsuario = await obterPerfilLaudo(req.usuario?.id || null);
+    const usuarioEfetivo = {
+      ...req.usuario,
+      nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
+      crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica,
+      logoUrl: perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_logo_url || req.usuario.logoUrl,
+      assinaturaUrl: perfilDoUsuario?.templateVisual?.assinaturaUrl || layoutUsuario?.assinatura_extraida_url || req.usuario.assinaturaUrl
+    };
+
     const resultadoIA = await analisarCirurgiaComIA(todosArquivos, apiKey, {
-      usuario: req.usuario,
+      usuario: usuarioEfetivo,
       textoDigitado: textoDigitado || null
     });
 
@@ -1235,7 +1246,11 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
       resultadoIA.cirurgia,
       jobFolder,
       fotosCaminhos,
-      { usuario: req.usuario }
+      {
+        usuario: usuarioEfetivo,
+        layout: layoutUsuario,
+        perfilLaudo: perfilDoUsuario
+      }
     );
 
     const pdfNome = path.basename(docs.caminhoPdf);
@@ -1447,12 +1462,27 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
       }
     }
 
+    const layoutUsuario = await obterLayout(req.usuario?.id || null);
+    const perfilDoUsuario = await obterPerfilLaudo(req.usuario?.id || null);
+    const usuarioEfetivo = {
+      ...req.usuario,
+      nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
+      crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
+      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica,
+      logoUrl: perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_logo_url || req.usuario.logoUrl,
+      assinaturaUrl: perfilDoUsuario?.templateVisual?.assinaturaUrl || layoutUsuario?.assinatura_extraida_url || req.usuario.assinaturaUrl
+    };
+
     const docs = await gerarDocumentosCirurgicos(
       paciente || {},
       cirurgia,
       jobFolder,
       fotosCaminhos,
-      { usuario: req.usuario }
+      {
+        usuario: usuarioEfetivo,
+        layout: layoutUsuario,
+        perfilLaudo: perfilDoUsuario
+      }
     );
 
     const pdfNome = path.basename(docs.caminhoPdf);
