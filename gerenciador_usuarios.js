@@ -32,15 +32,6 @@ function emailsDeEnv(prefixo) {
     .filter(Boolean);
 }
 
-function normalizarUrlWeb(url) {
-  if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
-  const semApp = url.replace(/^\/app\//, '/');
-  if (semApp.startsWith('/uploads/')) return semApp;
-  if (semApp.startsWith('uploads/')) return '/' + semApp;
-  return semApp.startsWith('/') ? semApp : `/${semApp}`;
-}
-
 function perfilParaResposta(usuario) {
   const roleDef = ROLES[usuario.role] || ROLES.pendente;
   return {
@@ -56,8 +47,8 @@ function perfilParaResposta(usuario) {
     crmv: usuario.crmv || null,
     clinicaId: usuario.clinicaId || null,
     nomeClinica: (/upa\s*pet/i.test(usuario.nomeClinica || '') ? 'Vetaro' : (usuario.nomeClinica || (usuario.clinica && usuario.clinica.nome) || 'Vetaro')),
-    logoUrl: normalizarUrlWeb(usuario.logoUrl),
-    assinaturaUrl: normalizarUrlWeb(usuario.assinaturaUrl),
+    logoUrl: usuario.logoUrl || null,
+    assinaturaUrl: usuario.assinaturaUrl || null,
     temaPreferencia: usuario.temaPreferencia || 'system',
     plano: usuario.assinatura ? usuario.assinatura.plano : 'GRATUITO'
   };
