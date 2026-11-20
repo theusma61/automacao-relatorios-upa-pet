@@ -5,6 +5,8 @@
 const { prisma } = require('./db');
 const { salvarLayout, obterLayout, LAYOUT_PADRAO } = require('./gerenciador_layout');
 
+const DISCLAIMER_CANONICO = 'O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.';
+
 /**
  * Obtém o perfil de laudo ativo para o usuário.
  * Retorna null se não houver perfil customizado cadastrado.
@@ -18,6 +20,29 @@ async function obterPerfilLaudo(usuarioId) {
     });
 
     if (!perfil || !perfil.ativo) return null;
+
+    // Sanitiza qualquer contaminação histórica de disclaimer corrompido ou CRMV em contato
+    if (perfil.templateVisual) {
+      const tv = perfil.templateVisual;
+      if (tv.textoAvisoLegal && (/Camila\s*Bastos/i.test(tv.textoAvisoLegal) || !/ultrassom|exame/i.test(tv.textoAvisoLegal) || tv.textoAvisoLegal.startsWith('os achados'))) {
+        tv.textoAvisoLegal = DISCLAIMER_CANONICO;
+      }
+      if (tv.visualConfigClonado?.footerConfig) {
+        const fc = tv.visualConfigClonado.footerConfig;
+        if (fc.disclaimerText && (/Camila\s*Bastos/i.test(fc.disclaimerText) || !/ultrassom|exame/i.test(fc.disclaimerText) || fc.disclaimerText.startsWith('os achados'))) {
+          fc.disclaimerText = DISCLAIMER_CANONICO;
+        }
+        if (Array.isArray(fc.contactLines)) {
+          fc.contactLines = fc.contactLines.filter(l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l));
+        }
+      }
+      if (tv.visualConfigClonado && tv.visualConfigClonado.headerMode === 'inline_logo_beside_patient') {
+        if (tv.visualConfigClonado.repeatPatientHeaderOnImagePages !== false) {
+          tv.visualConfigClonado.repeatPatientHeaderOnImagePages = true;
+          tv.visualConfigClonado.repeatHeaderOnImagePages = true;
+        }
+      }
+    }
 
     return perfil;
   } catch (err) {
@@ -41,10 +66,13 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
     ? dados.quantidadeAmostras
     : (Array.isArray(arquivosAmostras) ? arquivosAmostras.length : 0);
 
-  // 1. Limpa contaminação de CRMV do rodapé de contato
+  // 1. Limpa contaminação de CRMV do rodapé de contato e sanitiza disclaimer
   const tVis = dados.templateVisual || dados.layoutDetectado || {};
   if (tVis.rodapeContato && /CRMV/i.test(tVis.rodapeContato)) {
     tVis.rodapeContato = tVis.rodapeContato.replace(/CRMV[^\s,;•]*/gi, '').replace(/^[\s,;•\-]+|[\s,;•\-]+$/g, '').trim();
+  }
+  if (tVis.textoAvisoLegal && (/Camila\s*Bastos/i.test(tVis.textoAvisoLegal) || !/ultrassom|exame/i.test(tVis.textoAvisoLegal) || tVis.textoAvisoLegal.startsWith('os achados'))) {
+    tVis.textoAvisoLegal = DISCLAIMER_CANONICO;
   }
 
   // 2. Sincroniza a sequência de órgãos e regras clínicas com writing_style_json
@@ -99,11 +127,23 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
     tVis.writingStyleClonado = writingEfetivo;
   }
 
-  // Remove linhas de CRMV de footerConfig.contactLines para evitar duplicação no rodapé
-  if (visualClonado?.footerConfig?.contactLines && Array.isArray(visualClonado.footerConfig.contactLines)) {
-    visualClonado.footerConfig.contactLines = visualClonado.footerConfig.contactLines.filter(
-      l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l)
-    );
+  // Remove linhas de CRMV de footerConfig.contactLines para evitar duplicação no rodapé e sanitiza disclaimer
+  if (visualClonado?.footerConfig) {
+    if (visualClonado.footerConfig.disclaimerText && (/Camila\s*Bastos/i.test(visualClonado.footerConfig.disclaimerText) || !/ultrassom|exame/i.test(visualClonado.footerConfig.disclaimerText) || visualClonado.footerConfig.disclaimerText.startsWith('os achados'))) {
+      visualClonado.footerConfig.disclaimerText = DISCLAIMER_CANONICO;
+    }
+    if (Array.isArray(visualClonado.footerConfig.contactLines)) {
+      visualClonado.footerConfig.contactLines = visualClonado.footerConfig.contactLines.filter(
+        l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l)
+      );
+    }
+  }
+
+  if (visualClonado && visualClonado.headerMode === 'inline_logo_beside_patient') {
+    if (visualClonado.repeatPatientHeaderOnImagePages !== false) {
+      visualClonado.repeatPatientHeaderOnImagePages = true;
+      visualClonado.repeatHeaderOnImagePages = true;
+    }
   }
 
   // 3. Atualizar ou criar o registro no modelo PerfilLaudo

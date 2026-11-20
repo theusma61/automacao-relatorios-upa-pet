@@ -122,8 +122,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   );
   const ehInlineLogoHeader = Boolean(
     !ehStationeryFullPage &&
-    (visual.stationeryMode === 'inline_logo_header' || visual.headerMode === 'inline_logo_beside_patient') &&
-    headerLogoUri
+    (visual.stationeryMode === 'inline_logo_header' || visual.headerMode === 'inline_logo_beside_patient' || headerLogoUri)
   );
 
   const margins = visual.margins || {
@@ -294,7 +293,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
 
     inlineHeaderHtml = `
       <div class="inline-page-header" style="height: ${inlineHeaderHeightMm}mm;">
-        <img src="${headerLogoUri}" class="inline-header-logo" style="left: ${logoBox.xMm}mm; top: ${logoBox.yMm}mm; width: ${logoBox.widthMm}mm; height: ${logoBox.heightMm}mm;" alt="Logo">
+        ${headerLogoUri ? `<img src="${headerLogoUri}" class="inline-header-logo" style="left: ${logoBox.xMm}mm; top: ${logoBox.yMm}mm; width: ${logoBox.widthMm}mm; height: ${logoBox.heightMm}mm;" alt="Logo">` : ''}
         ${colsPosHtml}
         ${temDivisorInferior ? `<div class="inline-header-divider" style="left: ${margins.left || '20mm'}; right: ${margins.right || '20mm'};"></div>` : ''}
       </div>
@@ -366,19 +365,27 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   const orgaosPag1 = usarDuasPaginasTexto ? paragrafosOrgaos.slice(0, cortePag1).join('\n') : paragrafosOrgaos.join('\n');
   const orgaosPag2 = usarDuasPaginasTexto ? paragrafosOrgaos.slice(cortePag1).join('\n') : '';
 
+  const nomeMedicoSanitizado = (opcoes.nomeMedico && opcoes.nomeMedico !== 'null' && opcoes.nomeMedico !== 'undefined')
+    ? String(opcoes.nomeMedico).trim()
+    : '';
+  const crmvMedicoSanitizado = (opcoes.crmvMedico && opcoes.crmvMedico !== 'null' && opcoes.crmvMedico !== 'undefined')
+    ? String(opcoes.crmvMedico).trim()
+    : '';
+
   const linhasAssinaturaConfig = (Array.isArray(sCfg.textLines) && sCfg.textLines.length > 0)
-    ? sCfg.textLines
+    ? sCfg.textLines.filter(l => l && l.text && String(l.text).trim() !== '' && l.text !== 'null' && l.text !== 'undefined')
     : [
-        ...(opcoes.nomeMedico ? [{ text: opcoes.nomeMedico, bold: true, italic: false }] : []),
-        ...(opcoes.crmvMedico ? [{ text: opcoes.crmvMedico, bold: false, italic: false }] : [])
+        ...(nomeMedicoSanitizado ? [{ text: nomeMedicoSanitizado, bold: true, italic: false }] : []),
+        ...(crmvMedicoSanitizado ? [{ text: crmvMedicoSanitizado, bold: false, italic: false }] : [])
       ];
 
   const linhasAssinaturaTexto = linhasAssinaturaConfig.map((l) => {
-    let conteudo = l.text || '';
+    let conteudo = (l.text || '').trim();
+    if (!conteudo || conteudo === 'null' || conteudo === 'undefined') return '';
     if (l.italic) conteudo = `<em>${conteudo}</em>`;
     if (l.bold) conteudo = `<strong>${conteudo}</strong>`;
     return `<p class="sig-line" ${l.fontSize ? `style="font-size: ${l.fontSize};"` : ''}>${conteudo}</p>`;
-  }).join('\n');
+  }).filter(Boolean).join('\n');
 
   const imgAssinaturaHtml = sigUri
     ? `<div class="sig-img-wrap"><img src="${sigUri}" class="sig-img" alt="Assinatura"></div>`
@@ -459,7 +466,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     : '';
 
   const repetirCabecalhoInlinePag2 = ehInlineLogoHeader && Boolean(visual.repeatPatientHeaderOnTextPages || visual.repeatHeaderOnTextPage2);
-  const repetirCabecalhoInlineFotos = ehInlineLogoHeader && Boolean(visual.repeatPatientHeaderOnImagePages || visual.repeatHeaderOnImagePages);
+  const repetirCabecalhoInlineFotos = ehInlineLogoHeader;
 
   // Calcula padding-top efetivo do corpo abaixo do cabeçalho inline (quando houver)
   const titleMarginTopNum = parseMmNumber(tCfg.marginTopMm, 5);

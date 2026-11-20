@@ -179,7 +179,11 @@ function mediana(nums, fallback) {
 function extrairAssinaturaLinhasCabecalho(lines, yMaxLimite) {
   return lines
     .filter(l => l.yMax <= yMaxLimite && l.text.includes(':'))
-    .map(l => l.text.split(':')[0].trim().toLowerCase())
+    .map(l => {
+      const rotuloBruto = l.text.split(':')[0].trim();
+      const rotuloNorm = normalizarRotuloResponsavel(rotuloBruto);
+      return mapearChaveCampoPaciente(rotuloNorm) || rotuloNorm.toLowerCase();
+    })
     .sort()
     .join('|');
 }
@@ -377,10 +381,13 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
   let repeatPatientHeaderOnImagePages = false;
 
   if (sigHeaderP1 && pagesBbox.length >= 2) {
+    const chavesP1 = sigHeaderP1.split('|').filter(Boolean);
     const p2 = pagesBbox[1];
     if (p2) {
       const sigP2 = extrairAssinaturaLinhasCabecalho(p2.lines, headerYCutoff);
-      if (sigP2 && sigP2 === sigHeaderP1) {
+      const chavesP2 = (sigP2 || '').split('|').filter(Boolean);
+      const emComumP2 = chavesP2.filter(k => chavesP1.includes(k));
+      if (sigP2 === sigHeaderP1 || emComumP2.length >= 2) {
         repeatPatientHeaderOnTextPages = true;
       }
     }
@@ -391,7 +398,9 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
     const checkIdx = mosaicPagesIndices.length > 0 ? mosaicPagesIndices[0] : (pagesBbox.length >= 3 ? 2 : -1);
     if (checkIdx >= 0 && pagesBbox[checkIdx]) {
       const sigImgPag = extrairAssinaturaLinhasCabecalho(pagesBbox[checkIdx].lines, headerYCutoff);
-      if (sigImgPag && sigImgPag === sigHeaderP1) {
+      const chavesImg = (sigImgPag || '').split('|').filter(Boolean);
+      const emComumImg = chavesImg.filter(k => chavesP1.includes(k));
+      if (sigImgPag === sigHeaderP1 || emComumImg.length >= 2) {
         repeatPatientHeaderOnImagePages = true;
       }
     }
@@ -496,11 +505,11 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
     });
   });
 
-  const crmvIdx = todasLinhasTexto.findIndex(l => /CRMV/i.test(l.text) && l.yMin < l.pageHeight * 0.88);
+  const crmvIdx = todasLinhasTexto.findIndex(l => /CRMV/i.test(l.text) && l.yMin < l.pageHeight * 0.94);
   const crmvLine = crmvIdx !== -1 ? todasLinhasTexto[crmvIdx] : null;
   const nomeMedLine = (crmvIdx > 0 &&
     todasLinhasTexto[crmvIdx - 1].page === crmvLine.page &&
-    Math.abs(todasLinhasTexto[crmvIdx].yMin - todasLinhasTexto[crmvIdx - 1].yMin) < 32)
+    Math.abs(todasLinhasTexto[crmvIdx].yMin - todasLinhasTexto[crmvIdx - 1].yMin) < 38)
     ? todasLinhasTexto[crmvIdx - 1]
     : null;
 
@@ -555,7 +564,8 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
 
   for (let i = Math.max(0, startBodyGlobalIdx); i < endBodyGlobalIdx; i++) {
     const l = todasLinhasTexto[i];
-    if (l.yMin > l.pageHeight * 0.88) continue;
+    if (crmvBlock && l.page === crmvBlock.page && l.yMin >= crmvBlock.yMin - 4) continue;
+    if (l.yMin > l.pageHeight * 0.92) continue;
 
     const m = l.text.match(organRegex);
     const ehCabecalhoRepetido = /^(Nome|Paciente|Data|Esp[eé]cie|Ra[cç]a|Sexo|Idade|Tutor|Respons[aá]vel|Propriet[aá]rio|Requisitante|M[eé]dico|E-mail|Obs\.?|Nota|AE|AD|RE|RD|OE|OD)\b/i.test(m ? m[1] : '');
@@ -568,6 +578,9 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
         linhas: [m[2].trim()]
       };
     } else if (atualOrgao) {
+      if (/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.|crmv)/i.test(l.text) || (nomeMedLine && l.text.includes(nomeMedLine.text))) {
+        continue;
+      }
       if (/^(-\s+|Obs\.?:|AE:|AD:|OE:|OD:)/i.test(l.text)) {
         atualOrgao.linhas.push('\n' + l.text);
       } else if (
@@ -632,7 +645,7 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
   const footerLinesP1 = getFooterLines(pagesBbox[0]);
   const sigPageNum = crmvLine ? crmvLine.page : (paginasTextoBbox.length || 1);
   const sigPageObj = pagesBbox[sigPageNum - 1];
-  const sigFooterYMin = crmvBlock ? Math.max(crmvBlock.yMax + 25, pageHeight * 0.72) : (pageHeight * 0.86);
+  const sigFooterYMin = crmvBlock ? Math.max(crmvBlock.yMax + 5, pageHeight * 0.78) : (pageHeight * 0.88);
   const footerLinesSig = (sigPageObj?.lines || []).filter(l => l.yMin >= sigFooterYMin);
   const footerLinesRef = footerLinesSig.length > 0 ? footerLinesSig : footerLinesP1;
 
@@ -641,6 +654,7 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
     !/CRMV/i.test(l.text) &&
     !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l.text) &&
     (crmvBlock ? (l.yMin > crmvBlock.yMax + 5 || l.page !== crmvBlock.page) : true) &&
+    (nomeMedLine ? (!l.text.includes(nomeMedLine.text)) : true) &&
     /@|outlook|gmail|tel|\(\d{2}\)|rua|av\.|avenida|alameda|rodovia|bairro|cep|fone|whatsapp/i.test(l.text)
   );
   const disclaimerLines = footerLinesRef.filter(l =>
@@ -648,8 +662,18 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
     !/CRMV/i.test(l.text) &&
     !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l.text) &&
     (crmvBlock ? (l.yMin > crmvBlock.yMax + 5 || l.page !== crmvBlock.page) : true) &&
+    (nomeMedLine ? (!l.text.includes(nomeMedLine.text)) : true) &&
     l.text.trim().length > 10
   );
+
+  let disclaimerLimpo = disclaimerLines.map(l => l.text).join(' ').replace(/\s+/g, ' ').trim();
+  if (nomeMedLine && disclaimerLimpo.includes(nomeMedLine.text)) {
+    disclaimerLimpo = disclaimerLimpo.replace(nomeMedLine.text, '').trim();
+  }
+  disclaimerLimpo = disclaimerLimpo.replace(/^[\s,;•\-]+|[\s,;•\-]+$/g, '').trim();
+  if (!disclaimerLimpo || !/ultrassom|exame/i.test(disclaimerLimpo) || disclaimerLimpo.startsWith('os achados')) {
+    disclaimerLimpo = 'O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.';
+  }
 
   const footerTextYMinPt = footerLinesRef.length > 0 ? Math.min(...footerLinesRef.map(l => l.yMin)) : null;
   const footerTextYMaxPt = footerLinesRef.length > 0 ? Math.max(...footerLinesRef.map(l => l.yMax)) : null;
@@ -740,7 +764,7 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
       ]
     },
     footerInfo: {
-      disclaimerText: disclaimerLines.map(l => l.text).join(' ').trim() || null,
+      disclaimerText: disclaimerLimpo || null,
       contactLines: contactLines.map(l => l.text.trim()),
       fontFamily: fontes.hasCourier ? "'Courier New', Courier, monospace" : fontes.headerFontFamily,
       fontSize: `${footerFontPt}pt`,
@@ -883,9 +907,9 @@ async function extrairPadraoCompletoDePdfs(caminhosPdfs, apiKey, usuario = {}, p
         headerLogoBoxMm: ativos.headerLogoBoxMm,
         headerBannerHeightMm: ativos.headerBannerHeightMm,
         repeatHeaderOnTextPage2: ehStationeryFullPage || geo.repeatPatientHeaderOnTextPages || parseInt(geo.margins.topContinuationPages, 10) >= 40,
-        repeatHeaderOnImagePages: ehStationeryFullPage || geo.repeatPatientHeaderOnImagePages,
+        repeatHeaderOnImagePages: ehStationeryFullPage || geo.repeatPatientHeaderOnImagePages || (headerMode === 'inline_logo_beside_patient'),
         repeatPatientHeaderOnTextPages: geo.repeatPatientHeaderOnTextPages,
-        repeatPatientHeaderOnImagePages: geo.repeatPatientHeaderOnImagePages,
+        repeatPatientHeaderOnImagePages: geo.repeatPatientHeaderOnImagePages || (headerMode === 'inline_logo_beside_patient'),
         margins: geo.margins,
         patientHeader: geo.patientHeader,
         titleConfig: geo.titleConfig,
