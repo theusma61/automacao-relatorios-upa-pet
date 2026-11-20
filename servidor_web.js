@@ -728,11 +728,12 @@ app.post('/api/layout-config/importar-pdfs', exigirAutenticacao, upload.array('p
 
     // Atualiza também o perfil profissional do médico (nome, CRMV, clínica, assinatura) se extraídos
     const idProf = perfilExtraido.identidadeProfissional || {};
-    if (req.usuario.id && (idProf.nomeMedico || idProf.crmv || idProf.nomeClinica)) {
+    if (req.usuario.id && (idProf.nomeMedico || idProf.crmv || idProf.nomeClinica || perfilExtraido.ativosVisuais?.headerLogoUrl || perfilExtraido.ativosVisuais?.assinaturaUrl)) {
       await atualizarPerfilProfissional(req.usuario.id, {
         nome: idProf.nomeMedico || req.usuario.nome,
         crmv: idProf.crmv || req.usuario.crmv,
         nomeClinica: idProf.nomeClinica || req.usuario.nomeClinica,
+        ...(perfilExtraido.ativosVisuais?.headerLogoUrl ? { logoUrl: perfilExtraido.ativosVisuais.headerLogoUrl } : {}),
         assinaturaUrl: perfilExtraido.ativosVisuais?.assinaturaUrl || req.usuario.assinaturaUrl
       }).catch(() => {});
     }
@@ -1230,12 +1231,23 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
       console.log('[inferência] Nenhum modelo detectado pelo texto; IA não escolheu modelo.');
     }
 
+    const layoutUsuario = await obterLayout(req.usuario?.id || null);
+    const perfilDoUsuario = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const usuarioEfetivo = {
+      ...(req.usuario || {}),
+      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null
+    };
+
     const docs = await gerarDocumentosCirurgicos(
       resultadoIA.paciente,
       resultadoIA.cirurgia,
       jobFolder,
       fotosCaminhos,
-      { usuario: req.usuario }
+      {
+        usuario: usuarioEfetivo,
+        layout: layoutUsuario,
+        perfilLaudo: perfilDoUsuario
+      }
     );
 
     const pdfNome = path.basename(docs.caminhoPdf);
@@ -1447,12 +1459,23 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
       }
     }
 
+    const layoutUsuario = await obterLayout(req.usuario?.id || null);
+    const perfilDoUsuario = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const usuarioEfetivo = {
+      ...(req.usuario || {}),
+      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null
+    };
+
     const docs = await gerarDocumentosCirurgicos(
       paciente || {},
       cirurgia,
       jobFolder,
       fotosCaminhos,
-      { usuario: req.usuario }
+      {
+        usuario: usuarioEfetivo,
+        layout: layoutUsuario,
+        perfilLaudo: perfilDoUsuario
+      }
     );
 
     const pdfNome = path.basename(docs.caminhoPdf);
