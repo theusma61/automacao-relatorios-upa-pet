@@ -7,6 +7,27 @@
 const fs = require('fs');
 const path = require('path');
 
+function resolverCaminhoArquivo(caminho) {
+  if (!caminho || typeof caminho !== 'string') return null;
+  const limpo = caminho.trim();
+  if (!limpo) return null;
+
+  if (fs.existsSync(limpo)) return path.resolve(limpo);
+
+  const semApp = limpo.replace(/^\/app\//, '').replace(/^app\//, '');
+  if (fs.existsSync(semApp)) return path.resolve(semApp);
+  if (fs.existsSync(path.join(__dirname, semApp))) return path.resolve(path.join(__dirname, semApp));
+
+  const semBarra = limpo.replace(/^\/+/, '');
+  if (fs.existsSync(semBarra)) return path.resolve(semBarra);
+  if (fs.existsSync(path.join(__dirname, semBarra))) return path.resolve(path.join(__dirname, semBarra));
+
+  const resolvidoCwd = path.resolve(process.cwd(), semBarra);
+  if (fs.existsSync(resolvidoCwd)) return resolvidoCwd;
+
+  return null;
+}
+
 const TEMPLATE_VISUAL_PADRAO = {
   tipoCabecalho: 'logo-esquerda-texto-direita', // logo-esquerda-texto-direita, logo-centro, banner-superior, duas-colunas-timbrado, sem-logo-tipografico
   tipoDadosPaciente: 'tabela-zebrada', // tabela-zebrada, tabela-borda-simples, grade-boxes, duas-colunas-limpo
@@ -578,9 +599,15 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
   let logoBase64 = '';
   let logoMime = 'image/png';
 
-  if (usuario.logoUrl && fs.existsSync(usuario.logoUrl)) {
-    logoBase64 = fs.readFileSync(usuario.logoUrl).toString('base64');
-    logoMime = path.extname(usuario.logoUrl).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+  const logoCandidato = resolverCaminhoArquivo(usuario.logoUrl) ||
+    resolverCaminhoArquivo(perfilLaudo?.templateVisual?.headerLogoUrl) ||
+    resolverCaminhoArquivo(template?.headerLogoUrl) ||
+    resolverCaminhoArquivo(templateVisualBruto?.headerLogoUrl) ||
+    null;
+
+  if (logoCandidato && fs.existsSync(logoCandidato)) {
+    logoBase64 = fs.readFileSync(logoCandidato).toString('base64');
+    logoMime = path.extname(logoCandidato).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
   } else if (!perfilLaudo || !perfilLaudo.ativo) {
     // Apenas se NÃO houver perfil customizado usa o logo padrão UPA PET oficial
     const assetsDir = path.join(__dirname, 'assets');
@@ -595,9 +622,14 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
 
   // Assinatura
   let assinaturaImgHtml = '';
-  if (usuario.assinaturaUrl && fs.existsSync(usuario.assinaturaUrl)) {
-    const assExt = path.extname(usuario.assinaturaUrl).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-    const assBase64 = fs.readFileSync(usuario.assinaturaUrl).toString('base64');
+  const assinaturaCandidato = resolverCaminhoArquivo(usuario.assinaturaUrl) ||
+    resolverCaminhoArquivo(perfilLaudo?.templateVisual?.assinaturaUrl) ||
+    resolverCaminhoArquivo(template?.assinaturaUrl) ||
+    null;
+
+  if (assinaturaCandidato && fs.existsSync(assinaturaCandidato)) {
+    const assExt = path.extname(assinaturaCandidato).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+    const assBase64 = fs.readFileSync(assinaturaCandidato).toString('base64');
     assinaturaImgHtml = `<img src="data:${assExt};base64,${assBase64}" style="max-height: 44px; display: inline-block; margin-bottom: 2px;" alt="Assinatura"><br>`;
   }
 

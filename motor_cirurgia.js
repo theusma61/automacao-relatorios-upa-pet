@@ -113,22 +113,32 @@ function resolverContextoCirurgico(opcoes = {}) {
     }
   }
 
-  // Se o usuário tiver logo salva no diretório uploads/logos com seu ID
+  // Se o usuário tiver logo salva no diretório uploads/templates ou uploads/logos com seu ID
   if (!logoPath && usuario.id) {
-    const logosDir = path.join(__dirname, 'uploads', 'logos');
-    if (fs.existsSync(logosDir)) {
-      try {
-        const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
-        const arquivos = fs.readdirSync(logosDir);
-        const logosDoUsuario = arquivos
-          .filter(f => f.includes(idLimpo) && /\.(jpe?g|png|webp)$/i.test(f))
-          .sort()
-          .reverse();
-        if (logosDoUsuario.length > 0) {
-          const achado = path.join(logosDir, logosDoUsuario[0]);
-          if (fs.existsSync(achado)) logoPath = achado;
-        }
-      } catch (_) {}
+    const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
+    const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR || path.join(__dirname, 'uploads');
+    const pastaTemplates = path.join(uploadsDir, 'templates', idLimpo);
+    if (fs.existsSync(pastaTemplates)) {
+      for (const arq of ['header_logo.png', 'header_logo.jpg', 'header_logo.jpeg']) {
+        const cand = path.join(pastaTemplates, arq);
+        if (fs.existsSync(cand)) { logoPath = cand; break; }
+      }
+    }
+    if (!logoPath) {
+      const logosDir = path.join(uploadsDir, 'logos');
+      if (fs.existsSync(logosDir)) {
+        try {
+          const arquivos = fs.readdirSync(logosDir);
+          const logosDoUsuario = arquivos
+            .filter(f => f.includes(idLimpo) && /\.(jpe?g|png|webp)$/i.test(f))
+            .sort()
+            .reverse();
+          if (logosDoUsuario.length > 0) {
+            const achado = path.join(logosDir, logosDoUsuario[0]);
+            if (fs.existsSync(achado)) logoPath = achado;
+          }
+        } catch (_) {}
+      }
     }
   }
 
