@@ -42,6 +42,12 @@ const {
   salvarPerfilLaudo,
   desativarPerfilLaudo
 } = require('./gerenciador_perfil_laudo');
+const { extrairPadraoDeCirurgias } = require('./identificador_padrao_cirurgia');
+const {
+  obterPerfilCirurgico,
+  salvarPerfilCirurgico,
+  desativarPerfilCirurgico
+} = require('./gerenciador_perfil_cirurgico');
 const {
   ROLES,
   obterPerfilUsuario,
@@ -103,12 +109,13 @@ const persistentUploadDir = process.env.UPLOAD_PERSISTENT_DIR
 const logosDir = path.join(persistentUploadDir, 'logos');
 const assinaturasDir = path.join(persistentUploadDir, 'assinaturas');
 const templatesDir = path.join(persistentUploadDir, 'templates');
+const templatesCirurgiaDir = path.join(persistentUploadDir, 'templates_cirurgia');
 const amostrasPadraoDir = path.join(persistentUploadDir, 'amostras_padrao');
 const outputDir = process.env.OUTPUT_PERSISTENT_DIR
   ? path.resolve(process.env.OUTPUT_PERSISTENT_DIR)
   : path.join(os.tmpdir(), 'upa_pet_outputs');
 
-[uploadDir, persistentUploadDir, logosDir, assinaturasDir, templatesDir, amostrasPadraoDir, outputDir].forEach((dir) => {
+[uploadDir, persistentUploadDir, logosDir, assinaturasDir, templatesDir, templatesCirurgiaDir, amostrasPadraoDir, outputDir].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -136,7 +143,7 @@ const storagePerfil = multer.diskStorage({
 });
 const uploadPerfil = multer({
   storage: storagePerfil,
-  limits: { fileSize: 3 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 const storagePdfsPadrao = multer.diskStorage({
@@ -341,8 +348,8 @@ app.post('/api/perfil/profissional', exigirAutenticacao, uploadPerfil.fields([
       crmv: req.body.crmv,
       nomeClinica: req.body.nomeClinica
     };
-    if (logoFile) dados.logoUrl = logoFile.path;
-    if (assinaturaFile) dados.assinaturaUrl = assinaturaFile.path;
+    if (logoFile) dados.logoUrl = `/uploads/logos/${logoFile.filename}`;
+    if (assinaturaFile) dados.assinaturaUrl = `/uploads/assinaturas/${assinaturaFile.filename}`;
 
     const atualizado = await atualizarPerfilProfissional(req.usuario.id, dados);
     res.json({ sucesso: true, usuario: atualizado });
@@ -378,6 +385,16 @@ app.get('/health', (req, res) => {
     frontend: 'react-vite',
     uptime: process.uptime()
   });
+});
+
+app.get('/downloads/:jobId/fotos/:filename', exigirAutenticacao, (req, res) => {
+  const safeJobId = path.basename(req.params.jobId);
+  const safeFilename = path.basename(req.params.filename);
+  const filePath = path.join(outputDir, safeJobId, 'fotos', safeFilename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Foto não encontrada.' });
+  }
+  return res.sendFile(filePath);
 });
 
 app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
@@ -584,14 +601,54 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
       docxUrl = relatorio.docxArquivo || '';
     }
 
+    let fotosCaminhos = [];
+    let legendasFotos = Array.isArray(cirurgia?.legendasFotos) ? cirurgia.legendasFotos : [];
     const metaPath = path.join(jobFolder, 'meta_cirurgia.json');
-    if ((!cirurgia || !cirurgia.descricaoProcedimento) && fs.existsSync(metaPath)) {
+    if (fs.existsSync(metaPath)) {
       try {
         const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-        if (!paciente && meta.paciente) paciente = meta.paciente;
-        if (meta.cirurgia) cirurgia = meta.cirurgia;
+        if (meta.paciente) {
+          paciente = { ...(paciente || {}), ...meta.paciente };
+        }
+        if ((!cirurgia || !cirurgia.descricaoProcedimento) && meta.cirurgia) {
+          cirurgia = meta.cirurgia;
+        }
+        if (Array.isArray(meta.fotosCaminhos)) {
+          fotosCaminhos = meta.fotosCaminhos;
+        }
+        if (Array.isArray(meta.legendasFotos) && meta.legendasFotos.length > 0) {
+          legendasFotos = meta.legendasFotos;
+        }
       } catch (_) {}
     }
+
+    if (fotosCaminhos.length === 0) {
+      const fotosDir = path.join(jobFolder, 'fotos');
+      if (fs.existsSync(fotosDir)) {
+        fotosCaminhos = fs.readdirSync(fotosDir)
+          .filter(f => /.(jpe?g|png|webp)$/i.test(f))
+          .sort()
+          .map(f => path.join(fotosDir, f));
+      }
+    }
+
+    const perfilCir = req.usuario?.id ? await obterPerfilCirurgico(req.usuario.id).catch(() => null) : null;
+    const legendaPadrao = perfilCir?.templateVisual?.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica';
+
+    const fotos = fotosCaminhos
+      .filter(p => fs.existsSync(p))
+      .map((p, idx) => {
+        const nomeArq = path.basename(p);
+        const leg = (typeof legendasFotos[idx] === 'string' && legendasFotos[idx].trim())
+          ? legendasFotos[idx].trim()
+          : `Figura ${idx + 1} - ${legendaPadrao}`;
+        return {
+          index: idx,
+          nome: nomeArq,
+          url: `/downloads/${safeJobId}/fotos/${encodeURIComponent(nomeArq)}`,
+          legenda: leg
+        };
+      });
 
     if (!pdfUrl && fs.existsSync(jobFolder)) {
       const files = fs.readdirSync(jobFolder);
@@ -606,6 +663,8 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
       jobId: safeJobId,
       paciente: paciente || { nome: 'Paciente', especie: 'Canina' },
       cirurgia: cirurgia || {},
+      fotos,
+      legendasFotos: fotos.map(f => f.legenda),
       pdfUrl,
       docxUrl
     });
@@ -959,6 +1018,179 @@ app.delete('/api/laudos/meu-perfil', exigirAutenticacao, async (req, res) => {
   }
 });
 
+// ==================== APRENDIZADO DE PADRÃO DE RELATÓRIO CIRÚRGICO (IA MULTIMODAL) ====================
+app.post('/api/cirurgia/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.array('pdfs', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Nenhum arquivo PDF foi enviado. Envie de 1 a 10 relatórios cirúrgicos em PDF.' });
+    }
+    if (req.files.length > 10) {
+      return res.status(400).json({ error: 'Limite máximo de 10 relatórios cirúrgicos em PDF excedido.' });
+    }
+
+    const key = process.env.GEMINI_API_KEY || apiKey || config.geminiApiKey;
+    if (!key) {
+      return res.status(500).json({ error: 'Chave de API do Gemini não configurada no servidor.' });
+    }
+
+    const caminhosPdfs = req.files.map(f => f.path);
+    logger.info({
+      usuario: req.usuario.email,
+      quantidadePdfs: caminhosPdfs.length
+    }, 'Iniciando extração e aprendizado de padrão de relatório cirúrgico por IA');
+
+    const userIdSafe = String(req.usuario?.id || 'default').replace(/[^a-zA-Z0-9_-]/g, '');
+    const pastaAtivosCirurgia = path.join(templatesCirurgiaDir, userIdSafe);
+
+    // Extrai ativos visuais reais (logo/assinatura) e padrão estrutural/redacional cirúrgico em paralelo
+    const [perfilGeoRes, perfilCirIaRes] = await Promise.allSettled([
+      extrairPadraoCompletoDePdfs(caminhosPdfs, key, req.usuario, pastaAtivosCirurgia),
+      extrairPadraoDeCirurgias(caminhosPdfs, key)
+    ]);
+
+    const perfilGeo = perfilGeoRes.status === 'fulfilled' ? perfilGeoRes.value : null;
+    const perfilIa = perfilCirIaRes.status === 'fulfilled' ? perfilCirIaRes.value : null;
+
+    if (!perfilGeo && !perfilIa) {
+      throw new Error(perfilCirIaRes.reason?.message || perfilGeoRes.reason?.message || 'Falha ao extrair padrão cirúrgico dos PDFs.');
+    }
+
+    const ativosRaw = perfilGeo?.ativosVisuais || {};
+    const ativos = {};
+    if (ativosRaw.headerLogoUrl) ativos.headerLogoUrl = ativosRaw.headerLogoUrl;
+    if (ativosRaw.headerBannerUrl) ativos.headerBannerUrl = ativosRaw.headerBannerUrl;
+    if (ativosRaw.assinaturaUrl) ativos.assinaturaUrl = ativosRaw.assinaturaUrl;
+
+    const lv = perfilGeo?.layoutVisual || null;
+    const basePerfil = perfilIa || {
+      sucesso: true,
+      nomeDetectado: perfilGeo?.identidadeProfissional?.nomeMedico || '',
+      crmvDetectado: perfilGeo?.identidadeProfissional?.crmv || '',
+      clinicaDetectada: perfilGeo?.identidadeProfissional?.nomeClinica || '',
+      layoutDetectado: {},
+      templateVisual: {},
+      ordemSecoes: [
+        'DATA DO PROCEDIMENTO CIRÚRGICO',
+        'PROCEDIMENTO',
+        'DIAGNÓSTICO PRÉ-CIRÚRGICO',
+        'DESCRIÇÃO DO PROCEDIMENTO CIRÚRGICO',
+        'EVOLUÇÃO E CONSIDERAÇÕES'
+      ],
+      estiloRedacao: {
+        frasePadraoAntissepsia: '',
+        frasePadraoEvolucao: '',
+        pessoaVerbal: 'impessoal / 3ª pessoa',
+        detalhamentoFios: 'detalhado por planos anatômicos'
+      },
+      vocabularioPreferido: {},
+      observacoesEstilo: 'Padrão cirúrgico extraído dos PDFs de referência.',
+      amostras: caminhosPdfs.map(f => ({ nome: path.basename(f), enviadoEm: new Date().toISOString() })),
+      quantidadeAmostras: caminhosPdfs.length
+    };
+
+    const layoutMedido = lv ? {
+      ...(basePerfil.layoutDetectado || {}),
+      fontFamily: lv.bodyTypography?.fontFamily || basePerfil.layoutDetectado?.fontFamily,
+      fontSizeBody: lv.bodyTypography?.fontSize || basePerfil.layoutDetectado?.fontSizeBody,
+      fontSizeTitulo: lv.titleConfig?.fontSize || basePerfil.layoutDetectado?.fontSizeTitulo,
+      marginTop: lv.margins?.topFirstPage || basePerfil.layoutDetectado?.marginTop,
+      marginBottom: lv.margins?.bottom || basePerfil.layoutDetectado?.marginBottom,
+      marginLeft: lv.margins?.left || basePerfil.layoutDetectado?.marginLeft,
+      marginRight: lv.margins?.right || basePerfil.layoutDetectado?.marginRight,
+      lineHeight: lv.bodyTypography?.lineHeight || basePerfil.layoutDetectado?.lineHeight
+    } : (basePerfil.layoutDetectado || {});
+
+    const perfilDetectado = {
+      ...basePerfil,
+      nomeDetectado: basePerfil.nomeDetectado || perfilGeo?.identidadeProfissional?.nomeMedico || '',
+      crmvDetectado: basePerfil.crmvDetectado || perfilGeo?.identidadeProfissional?.crmv || '',
+      clinicaDetectada: basePerfil.clinicaDetectada || perfilGeo?.identidadeProfissional?.nomeClinica || '',
+      layoutDetectado: layoutMedido,
+      templateVisual: {
+        ...(basePerfil.templateVisual || {}),
+        ...layoutMedido,
+        ...(Object.keys(ativos).length > 0 ? { ativosVisuais: ativos } : {})
+      }
+    };
+
+    if (req.usuario?.id && (ativos.headerLogoUrl || ativos.assinaturaUrl)) {
+      await atualizarPerfilProfissional(req.usuario.id, {
+        ...(ativos.headerLogoUrl ? { logoUrl: ativos.headerLogoUrl } : {}),
+        ...(ativos.assinaturaUrl ? { assinaturaUrl: ativos.assinaturaUrl } : {})
+      }).catch(() => {});
+    }
+
+    res.json({
+      sucesso: true,
+      mensagem: `Padrão cirúrgico identificado com sucesso a partir de ${caminhosPdfs.length} relatório(s)!`,
+      perfilDetectado
+    });
+  } catch (err) {
+    logger.error('Erro ao aprender padrão de relatórios cirúrgicos', { error: err.message, stack: err.stack });
+    res.status(500).json({ error: 'Erro ao analisar PDFs cirúrgicos: ' + err.message });
+  }
+});
+
+app.get('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
+  try {
+    const [perfil, layout, usuarioDb] = await Promise.all([
+      obterPerfilCirurgico(req.usuario.id),
+      obterLayout(req.usuario.id),
+      prisma.usuario.findUnique({
+        where: { id: req.usuario.id },
+        select: { id: true, nome: true, crmv: true, nomeClinica: true, email: true, logoUrl: true, assinaturaUrl: true }
+      })
+    ]);
+
+    res.json({
+      sucesso: true,
+      temPerfilPersonalizado: Boolean(perfil && perfil.ativo),
+      perfil,
+      layout,
+      usuario: usuarioDb
+    });
+  } catch (err) {
+    logger.error('Erro ao buscar perfil cirúrgico', { error: err.message });
+    res.status(500).json({ error: 'Erro ao carregar perfil cirúrgico: ' + err.message });
+  }
+});
+
+app.put('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
+  try {
+    const perfilSalvo = await salvarPerfilCirurgico(req.usuario.id, req.body);
+    logger.info({
+      usuario: req.usuario.email,
+      perfilId: perfilSalvo?.id
+    }, 'Perfil cirúrgico personalizado salvo com sucesso');
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Padrão de relatório cirúrgico salvo com sucesso! Seus próximos relatórios seguirão este formato.',
+      perfil: perfilSalvo
+    });
+  } catch (err) {
+    logger.error('Erro ao salvar perfil cirúrgico', { error: err.message });
+    res.status(400).json({ error: 'Erro ao salvar perfil cirúrgico: ' + err.message });
+  }
+});
+
+app.delete('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
+  try {
+    await desativarPerfilCirurgico(req.usuario.id);
+    logger.info({
+      usuario: req.usuario.email
+    }, 'Perfil cirúrgico personalizado removido');
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Padrão cirúrgico personalizado removido. Padrão oficial restabelecido.'
+    });
+  } catch (err) {
+    logger.error('Erro ao remover perfil cirúrgico', { error: err.message });
+    res.status(500).json({ error: 'Erro ao remover perfil cirúrgico: ' + err.message });
+  }
+});
+
 app.get('/api/historico', exigirAutenticacao, async (req, res) => {
   try {
     const filtroUsuario = req.usuario.role === 'admin' ? {} : { usuarioId: req.usuario.id };
@@ -1203,8 +1435,10 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 
   try {
     console.log(`🔪 [WEB - CIRURGIA] [Usuário: ${req.usuario.email}] Analisando procedimento cirúrgico...`);
+    const perfilCirurgicoUsuario = req.usuario?.id ? await obterPerfilCirurgico(req.usuario.id).catch(() => null) : null;
     const resultadoIA = await analisarCirurgiaComIA(todosArquivos, apiKey, {
       usuario: req.usuario,
+      perfilCirurgico: perfilCirurgicoUsuario,
       textoDigitado: textoDigitado || null
     });
 
@@ -1235,9 +1469,42 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 
     const layoutUsuario = await obterLayout(req.usuario?.id || null);
     const perfilDoUsuario = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const legendaPadraoCir = perfilCirurgicoUsuario?.templateVisual?.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica';
+
+    let legendasFotosIniciais = [];
+    if (req.body.legendasFotos) {
+      try {
+        const parsed = typeof req.body.legendasFotos === 'string' ? JSON.parse(req.body.legendasFotos) : req.body.legendasFotos;
+        if (Array.isArray(parsed)) legendasFotosIniciais = parsed;
+      } catch (_) {}
+    }
+    const legendasFotos = fotosCaminhos.map((_, idx) => {
+      const l = legendasFotosIniciais[idx];
+      return (typeof l === 'string' && l.trim()) ? l.trim() : `Figura ${idx + 1} - ${legendaPadraoCir}`;
+    });
+    resultadoIA.cirurgia.legendasFotos = legendasFotos;
+
     const usuarioEfetivo = {
       ...(req.usuario || {}),
-      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null
+      nome: perfilCirurgicoUsuario?.nomeDetectado || req.usuario?.nome,
+      crmv: perfilCirurgicoUsuario?.crmvDetectado || req.usuario?.crmv,
+      nomeClinica: perfilCirurgicoUsuario?.clinicaDetectada || req.usuario?.nomeClinica,
+      logoUrl: req.usuario?.logoUrl ||
+        perfilCirurgicoUsuario?.templateVisual?.ativosVisuais?.headerLogoUrl ||
+        perfilCirurgicoUsuario?.templateVisual?.headerLogoUrl ||
+        perfilDoUsuario?.templateVisual?.ativosVisuais?.headerLogoUrl ||
+        perfilDoUsuario?.templateVisual?.visualConfigClonado?.headerLogoUrl ||
+        perfilDoUsuario?.templateVisual?.headerLogoUrl ||
+        layoutUsuario?.header_logo_url ||
+        layoutUsuario?.visual_config_json?.headerLogoUrl ||
+        layoutUsuario?.header_banner_url ||
+        null,
+      assinaturaUrl: req.usuario?.assinaturaUrl ||
+        perfilCirurgicoUsuario?.templateVisual?.ativosVisuais?.assinaturaUrl ||
+        perfilDoUsuario?.templateVisual?.ativosVisuais?.assinaturaUrl ||
+        perfilDoUsuario?.templateVisual?.assinaturaUrl ||
+        layoutUsuario?.assinatura_extraida_url ||
+        null
     };
 
     const docs = await gerarDocumentosCirurgicos(
@@ -1248,7 +1515,9 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
       {
         usuario: usuarioEfetivo,
         layout: layoutUsuario,
-        perfilLaudo: perfilDoUsuario
+        perfilLaudo: perfilDoUsuario,
+        perfilCirurgico: perfilCirurgicoUsuario,
+        legendasFotos
       }
     );
 
@@ -1256,6 +1525,15 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
     const docxNome = path.basename(docs.caminhoDocx);
     const pdfUrl = `/downloads/${jobId}/${encodeURIComponent(pdfNome)}`;
     const docxUrl = `/downloads/${jobId}/${encodeURIComponent(docxNome)}`;
+    const fotosResposta = fotosCaminhos.map((p, idx) => {
+      const nomeArq = path.basename(p);
+      return {
+        index: idx,
+        nome: nomeArq,
+        url: `/downloads/${jobId}/fotos/${encodeURIComponent(nomeArq)}`,
+        legenda: legendasFotos[idx]
+      };
+    });
 
     // Salva metadados da cirurgia para recompilações
     try {
@@ -1266,6 +1544,7 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
           paciente: resultadoIA.paciente,
           cirurgia: resultadoIA.cirurgia,
           fotosCaminhos,
+          legendasFotos,
           usuarioId: req.usuario?.id,
           criadoEm: new Date().toISOString()
         }, null, 2),
@@ -1297,6 +1576,8 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
       jobId,
       paciente: resultadoIA.paciente,
       cirurgia: resultadoIA.cirurgia,
+      fotos: fotosResposta,
+      legendasFotos,
       pdfUrl,
       docxUrl,
       pdfNome,
@@ -1430,7 +1711,7 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
 });
 
 app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_cirurgia'), async (req, res) => {
-  const { jobId, paciente, cirurgia } = req.body;
+  const { jobId, paciente, cirurgia, legendasFotos: legendasReq } = req.body;
   if (!jobId || !cirurgia) {
     return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId e os dados da cirurgia.' });
   }
@@ -1465,20 +1746,52 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
 
     const layoutUsuario = await obterLayout(req.usuario?.id || null);
     const perfilDoUsuario = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const perfilCirurgicoUsuario = req.usuario?.id ? await obterPerfilCirurgico(req.usuario.id).catch(() => null) : null;
+    const legendaPadraoCir = perfilCirurgicoUsuario?.templateVisual?.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica';
+
+    const legendasBrutas = Array.isArray(legendasReq)
+      ? legendasReq
+      : (Array.isArray(cirurgia?.legendasFotos) ? cirurgia.legendasFotos : []);
+    const legendasFotos = fotosCaminhos.map((_, idx) => {
+      const l = legendasBrutas[idx];
+      return (typeof l === 'string' && l.trim()) ? l.trim() : `Figura ${idx + 1} - ${legendaPadraoCir}`;
+    });
+    const cirurgiaComLegendas = { ...cirurgia, legendasFotos };
+
     const usuarioEfetivo = {
       ...(req.usuario || {}),
-      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null
+      nome: perfilCirurgicoUsuario?.nomeDetectado || req.usuario?.nome,
+      crmv: perfilCirurgicoUsuario?.crmvDetectado || req.usuario?.crmv,
+      nomeClinica: perfilCirurgicoUsuario?.clinicaDetectada || req.usuario?.nomeClinica,
+      logoUrl: req.usuario?.logoUrl ||
+        perfilCirurgicoUsuario?.templateVisual?.ativosVisuais?.headerLogoUrl ||
+        perfilCirurgicoUsuario?.templateVisual?.headerLogoUrl ||
+        perfilDoUsuario?.templateVisual?.ativosVisuais?.headerLogoUrl ||
+        perfilDoUsuario?.templateVisual?.visualConfigClonado?.headerLogoUrl ||
+        perfilDoUsuario?.templateVisual?.headerLogoUrl ||
+        layoutUsuario?.header_logo_url ||
+        layoutUsuario?.visual_config_json?.headerLogoUrl ||
+        layoutUsuario?.header_banner_url ||
+        null,
+      assinaturaUrl: req.usuario?.assinaturaUrl ||
+        perfilCirurgicoUsuario?.templateVisual?.ativosVisuais?.assinaturaUrl ||
+        perfilDoUsuario?.templateVisual?.ativosVisuais?.assinaturaUrl ||
+        perfilDoUsuario?.templateVisual?.assinaturaUrl ||
+        layoutUsuario?.assinatura_extraida_url ||
+        null
     };
 
     const docs = await gerarDocumentosCirurgicos(
       paciente || {},
-      cirurgia,
+      cirurgiaComLegendas,
       jobFolder,
       fotosCaminhos,
       {
         usuario: usuarioEfetivo,
         layout: layoutUsuario,
-        perfilLaudo: perfilDoUsuario
+        perfilLaudo: perfilDoUsuario,
+        perfilCirurgico: perfilCirurgicoUsuario,
+        legendasFotos
       }
     );
 
@@ -1487,12 +1800,22 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
     const cacheBuster = Date.now();
     const pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}?v=${cacheBuster}`;
     const docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}?v=${cacheBuster}`;
+    const fotosResposta = fotosCaminhos.map((p, idx) => {
+      const nomeArq = path.basename(p);
+      return {
+        index: idx,
+        nome: nomeArq,
+        url: `/downloads/${safeJobId}/fotos/${encodeURIComponent(nomeArq)}`,
+        legenda: legendasFotos[idx]
+      };
+    });
 
     fs.writeFileSync(metaPath, JSON.stringify({
       jobId: safeJobId,
       paciente,
-      cirurgia,
+      cirurgia: cirurgiaComLegendas,
       fotosCaminhos,
+      legendasFotos,
       usuarioId: req.usuario?.id,
       atualizadoEm: new Date().toISOString()
     }, null, 2), 'utf8');
@@ -1508,7 +1831,7 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
           pacienteEspecie: paciente?.especie || null,
           procedimento: cirurgia.procedimento || 'Procedimento Cirúrgico',
           diagnostico: cirurgia.diagnosticoPreCirurgico || null,
-          dadosCirurgia: cirurgia,
+          dadosCirurgia: cirurgiaComLegendas,
           pdfArquivo: `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}`,
           docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`
         }
@@ -1519,7 +1842,9 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
       sucesso: true,
       mensagem: 'Relatório cirúrgico recompilado com sucesso com suas modificações!',
       paciente,
-      cirurgia,
+      cirurgia: cirurgiaComLegendas,
+      fotos: fotosResposta,
+      legendasFotos,
       pdfUrl,
       docxUrl,
       pdfNome,

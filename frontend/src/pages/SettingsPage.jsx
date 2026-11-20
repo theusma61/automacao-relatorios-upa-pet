@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { UltrasoundIcon } from '../components/icons/VetaroIcons';
 import EstiloLaudoTab from '../components/EstiloLaudoTab';
+import EstiloCirurgiaTab from '../components/EstiloCirurgiaTab';
 import { api } from '../services/api';
 
 export default function SettingsPage({
@@ -138,16 +139,27 @@ export default function SettingsPage({
 
       const res = await api.updatePerfilProfissional(fd);
       if (res && res.usuario) {
+        const ts = Date.now();
+        const logoUrlAtualizada = res.usuario.logoUrl
+          ? `${res.usuario.logoUrl.split("?")[0]}?v=${ts}`
+          : userProfile.logoUrl;
+        const assinaturaUrlAtualizada = res.usuario.assinaturaUrl
+          ? `${res.usuario.assinaturaUrl.split("?")[0]}?v=${ts}`
+          : userProfile.assinaturaUrl;
         setUserProfile({
           ...userProfile,
           ...res.usuario,
           name: res.usuario.nome || userProfile.name,
-          clinicName: res.usuario.nomeClinica || userProfile.clinicName
+          clinicName: res.usuario.nomeClinica || userProfile.clinicName,
+          logoUrl: logoUrlAtualizada,
+          assinaturaUrl: assinaturaUrlAtualizada
         });
       }
+      setLogoFile(null);
+      setAssinaturaFile(null);
       onToast(`Dados do perfil (${userProfile.name}) salvos com sucesso!`);
-    } catch (_) {
-      onToast(`Dados do perfil da ${userProfile.name} atualizados!`);
+    } catch (err) {
+      onToast(`Erro ao salvar perfil/logo: ${err.message || "tente novamente"}`);
     } finally {
       setSavingProfile(false);
     }
@@ -160,7 +172,8 @@ export default function SettingsPage({
         <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'perfil', label: `Meu perfil (${userProfile.greetingName})`, icon: User },
-            { id: 'estilo', label: 'Estilo & Padrão de Laudo', icon: Sparkles },
+            { id: 'estilo', label: 'Padrão de Ultrassom', icon: Sparkles },
+            { id: 'estilo_cirurgia', label: 'Padrão Cirúrgico', icon: Stethoscope },
             { id: 'assinatura', label: 'Plano e assinatura', icon: CreditCard },
             { id: 'preferencias', label: 'Configurações & IA', icon: Settings }
           ].map((tab) => {
@@ -346,7 +359,7 @@ export default function SettingsPage({
                 <input
                   ref={logoInputRef}
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept="image/png,image/jpeg,image/webp"
                   className="hidden"
                   onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
                 />
@@ -361,9 +374,21 @@ export default function SettingsPage({
                 >
                   <Upload className="w-4 h-4 text-[#00D296]" />
                   <span className="truncate">
-                    {logoFile ? logoFile.name : 'Enviar Logotipo da Clínica (PNG/JPG)'}
+                    {logoFile ? logoFile.name : (userProfile.logoUrl ? 'Trocar Logotipo da Clínica (PNG/JPG/WEBP)' : 'Enviar Logotipo da Clínica (PNG/JPG/WEBP)')}
                   </span>
                 </button>
+                {(logoFile || userProfile.logoUrl) && (
+                  <div className={`mt-2 p-2 rounded-xl border flex items-center gap-2.5 ${darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <img
+                      src={logoFile ? URL.createObjectURL(logoFile) : userProfile.logoUrl}
+                      alt="Logo da clínica"
+                      className="h-9 max-w-[90px] object-contain rounded bg-white p-1"
+                    />
+                    <span className="text-[11px] text-[#00D296] font-bold truncate">
+                      {logoFile ? 'Nova logo pronta para salvar' : 'Logo ativa nos relatórios e laudos'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -412,6 +437,17 @@ export default function SettingsPage({
       {/* ABA: ESTILO & PADRÃO DE LAUDO (APRENDIZADO POR IA) */}
       {settingsTab === 'estilo' && (
         <EstiloLaudoTab
+          darkMode={darkMode}
+          isMobileLayout={isMobileLayout}
+          onToast={onToast}
+          userProfile={userProfile}
+          setUserProfile={setUserProfile}
+        />
+      )}
+
+      {/* ABA: COPIAR PADRÃO DE RELATÓRIO CIRÚRGICO */}
+      {settingsTab === 'estilo_cirurgia' && (
+        <EstiloCirurgiaTab
           darkMode={darkMode}
           isMobileLayout={isMobileLayout}
           onToast={onToast}

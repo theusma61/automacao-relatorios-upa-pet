@@ -139,6 +139,24 @@ export const api = {
       method: 'DELETE'
     }),
 
+  // Personalização e Aprendizado de Padrão de Relatório Cirúrgico por IA (Multimodal)
+  aprenderPadraoCirurgia: (formData) =>
+    requestJson('/api/cirurgia/aprender-padrao', {
+      method: 'POST',
+      body: formData
+    }),
+  getPerfilCirurgico: () => requestJson('/api/cirurgia/meu-perfil'),
+  salvarPerfilCirurgico: (payload) =>
+    requestJson('/api/cirurgia/meu-perfil', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  resetPerfilCirurgico: () =>
+    requestJson('/api/cirurgia/meu-perfil', {
+      method: 'DELETE'
+    }),
+
   // Recompilação e Edição em Tempo Real de Laudos e Cirurgias
   getExameDados: (jobId) =>
     requestJson(`/api/ultrassom/${encodeURIComponent(jobId)}/dados`),

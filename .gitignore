@@ -7,6 +7,9 @@ config.json
 # Dependências do Node.js
 node_modules/
 
+# Build gerado do Frontend (compilado automaticamente no CI/CD e Docker)
+frontend/dist/
+
 # Arquivos temporários e do sistema
 uploads/
 ~$*

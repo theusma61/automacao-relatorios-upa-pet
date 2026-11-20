@@ -43,16 +43,36 @@ async function analisarCirurgiaComIA(arquivos, apiKey, opcoes = {}) {
   const modelosBiblioteca = await obterTextoModelosParaPrompt(usuario?.id || null);
   const dataHoje = formatarDataHoje();
 
-  const nomeClinica = usuario?.nomeClinica || 'Vetaro';
-  const identificacaoMedico = usuario?.nome
-    ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
-    : 'Dra. Camila Bastos - CRMV/MG: 22904';
+  const perfilCirurgico = (opcoes.perfilCirurgico && opcoes.perfilCirurgico.ativo !== false) ? opcoes.perfilCirurgico : null;
+  const nomeClinica = perfilCirurgico?.clinicaDetectada || usuario?.nomeClinica || 'Vetaro';
+  const nomeMedEfetivo = perfilCirurgico?.nomeDetectado || usuario?.nome || 'Dra. Camila Bastos';
+  const crmvMedEfetivo = perfilCirurgico?.crmvDetectado || usuario?.crmv || 'CRMV/MG: 22904';
+  const identificacaoMedico = `${nomeMedEfetivo}${crmvMedEfetivo ? ' - ' + crmvMedEfetivo : ''}`;
+
+  let blocoEstiloCirurgicoPersonalizado = '';
+  if (perfilCirurgico) {
+    const er = perfilCirurgico.estiloRedacao || {};
+    const vocab = perfilCirurgico.vocabularioPreferido && Object.keys(perfilCirurgico.vocabularioPreferido).length > 0
+      ? JSON.stringify(perfilCirurgico.vocabularioPreferido)
+      : '';
+    blocoEstiloCirurgicoPersonalizado = `
+### PADRÃO PERSONALIZADO DO CIRURGIÃO (PRIORIDADE MÁXIMA DE ESTILO):
+- Pessoa verbal preferida: ${er.pessoaVerbal || 'impessoal / 3ª pessoa'}
+- Detalhamento de fios e planos: ${er.detalhamentoFios || 'detalhado por planos anatômicos'}
+${er.frasePadraoAntissepsia ? `- Frase/padrão preferido de preparo e antissepsia: "${er.frasePadraoAntissepsia}"` : ''}
+${er.frasePadraoEvolucao ? `- Frase/padrão preferido de evolução/considerações finais: "${er.frasePadraoEvolucao}"` : ''}
+${perfilCirurgico.observacoesEstilo ? `- Diretrizes gerais de redação deste profissional: ${perfilCirurgico.observacoesEstilo}` : ''}
+${vocab ? `- Vocabulário preferido: ${vocab}` : ''}
+Siga fielmente o estilo de redação acima mantendo a precisão técnica do caso.
+`;
+  }
 
   const promptInstrucoes = `
 Você é o assistente cirúrgico veterinário sênior oficial de ${nomeClinica} (${identificacaoMedico}).
 Sua missão é ouvir o áudio gravado pelo cirurgião veterinário (ou ler os arquivos de texto e fotos anexas) e redigir o RELATÓRIO CIRÚRGICO oficial da clínica, seguindo rigorosamente o padrão institucional já estabelecido.
 
 ${modelosBiblioteca}
+${blocoEstiloCirurgicoPersonalizado}
 
 REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICAS):
 1. **Padrão Institucional**:

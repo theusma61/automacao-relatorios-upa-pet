@@ -5,10 +5,28 @@ const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthT
 const { obterLayout, converterParaDocx, LAYOUT_PADRAO } = require('./gerenciador_layout');
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
-const LOGO_PATH = null;
 const ASSINATURA_PATH = fs.existsSync(path.join(ASSETS_DIR, 'assinatura_camila.jpg'))
   ? path.join(ASSETS_DIR, 'assinatura_camila.jpg')
   : null;
+
+function escaparHtml(texto) {
+  if (texto === null || texto === undefined) return '';
+  return String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function obterMimePorExtensao(caminhoArquivo) {
+  const ext = path.extname(caminhoArquivo || '').toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.svg') return 'image/svg+xml';
+  if (ext === '.gif') return 'image/gif';
+  return 'image/jpeg';
+}
 
 function obterDimensoesImagem(buffer) {
   try {
@@ -51,93 +69,189 @@ function calcularDimensoesDocx(origWidth, origHeight, maxWidth = 480, maxHeight 
 
 /**
  * Normaliza e resolve caminhos de arquivos de imagem no sistema de arquivos,
- * suportando caminhos relativos, absolutos, URLs locais (/uploads/...) e
- * referências de volumes Docker (/app/uploads/...).
+ * suportando caminhos relativos, absolutos, Windows, URLs locais (/uploads/...),
+ * querystrings (?v=...), UPLOAD_PERSISTENT_DIR e referências de volumes Docker (/app/uploads/...).
  */
-function resolverCaminhoArquivo(caminho) {
+function resolverCaminhoArquivo(caminho, opcoes = {}) {
   if (!caminho || typeof caminho !== 'string') return null;
-  const limpo = caminho.trim();
+  let limpo = caminho.trim();
   if (!limpo) return null;
+  if (/^https?:\/\//i.test(limpo) || /^data:image\//i.test(limpo)) return null;
 
-  // 1. Caminho direto se existir
-  if (fs.existsSync(limpo)) return path.resolve(limpo);
+  // Remove querystring / hash e normaliza separadores Windows -> POSIX
+  limpo = limpo.split('?')[0].split('#')[0];
+  try { limpo = decodeURIComponent(limpo); } catch (_) {}
+  const normalizado = limpo.replace(/\\/g, '/');
 
-  // 2. Se for caminho relativo/absoluto de container Docker (/app/...)
-  const semApp = limpo.replace(/^\/app\//, '').replace(/^app\//, '');
-  if (fs.existsSync(semApp)) return path.resolve(semApp);
-  if (fs.existsSync(path.join(__dirname, semApp))) return path.resolve(path.join(__dirname, semApp));
+  const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR
+    ? path.resolve(process.env.UPLOAD_PERSISTENT_DIR)
+    : path.join(__dirname, 'uploads');
 
-  // 3. Se começar com barra web (/uploads/...)
-  const semBarra = limpo.replace(/^\/+/, '');
-  if (fs.existsSync(semBarra)) return path.resolve(semBarra);
-  if (fs.existsSync(path.join(__dirname, semBarra))) return path.resolve(path.join(__dirname, semBarra));
+  const candidatos = [];
 
-  const resolvidoCwd = path.resolve(process.cwd(), semBarra);
-  if (fs.existsSync(resolvidoCwd)) return resolvidoCwd;
+  // 1. Caminho direto
+  candidatos.push(limpo);
+  if (normalizado !== limpo) candidatos.push(normalizado);
+
+  // 2. Caminhos dentro de /uploads/... resolvidos contra UPLOAD_PERSISTENT_DIR e __dirname/uploads
+  const idxUploads = normalizado.toLowerCase().lastIndexOf('/uploads/');
+  if (idxUploads !== -1) {
+    const relUploads = normalizado.slice(idxUploads + '/uploads/'.length);
+    candidatos.push(path.join(uploadsDir, relUploads));
+    candidatos.push(path.join(__dirname, 'uploads', relUploads));
+    candidatos.push(path.resolve(process.cwd(), 'uploads', relUploads));
+  } else if (normalizado.toLowerCase().startsWith('uploads/')) {
+    const relUploads = normalizado.slice('uploads/'.length);
+    candidatos.push(path.join(uploadsDir, relUploads));
+    candidatos.push(path.join(__dirname, 'uploads', relUploads));
+    candidatos.push(path.resolve(process.cwd(), 'uploads', relUploads));
+  }
+
+  // 3. Caminho relativo/absoluto de container Docker (/app/...)
+  const semApp = normalizado.replace(/^\/app\//, '').replace(/^app\//, '');
+  candidatos.push(semApp);
+  candidatos.push(path.join(__dirname, semApp));
+
+  // 4. Sem barra inicial
+  const semBarra = normalizado.replace(/^\/+/, '');
+  candidatos.push(semBarra);
+  candidatos.push(path.join(__dirname, semBarra));
+  candidatos.push(path.resolve(process.cwd(), semBarra));
+
+  // 5. Fallback por basename em logos/assinaturas/templates (útil se o path veio de outro SO/container)
+  const base = path.basename(normalizado);
+  if (base && /\.(jpe?g|png|webp|svg|gif)$/i.test(base)) {
+    candidatos.push(path.join(uploadsDir, 'logos', base));
+    candidatos.push(path.join(uploadsDir, 'assinaturas', base));
+    if (opcoes.usuarioId) {
+      const idLimpo = String(opcoes.usuarioId).replace(/[^a-zA-Z0-9_-]/g, '');
+      candidatos.push(path.join(uploadsDir, 'templates_cirurgia', idLimpo, base));
+      candidatos.push(path.join(uploadsDir, 'templates', idLimpo, base));
+    }
+  }
+
+  for (const cand of candidatos) {
+    if (!cand) continue;
+    try {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        return path.resolve(cand);
+      }
+    } catch (_) {}
+  }
 
   return null;
+}
+
+function resolverLegendaFoto(idx, legendasFotos, legendaPadraoTemplate) {
+  if (Array.isArray(legendasFotos)) {
+    const item = legendasFotos[idx];
+    if (typeof item === 'string' && item.trim()) return item.trim();
+    if (item && typeof item === 'object' && typeof item.legenda === 'string' && item.legenda.trim()) {
+      return item.legenda.trim();
+    }
+  }
+  const padrao = (typeof legendaPadraoTemplate === 'string' && legendaPadraoTemplate.trim())
+    ? legendaPadraoTemplate.trim()
+    : 'Registro fotográfico intraoperatório / peça cirúrgica';
+  return `Figura ${idx + 1} - ${padrao}`;
 }
 
 function resolverContextoCirurgico(opcoes = {}) {
   const usuario = opcoes.usuario || {};
   const layout = opcoes.layout || LAYOUT_PADRAO;
-  const cfgDocx = opcoes.cfgDocx || converterParaDocx(layout);
+  const perfilCirurgico = (opcoes.perfilCirurgico && opcoes.perfilCirurgico.ativo !== false)
+    ? opcoes.perfilCirurgico
+    : null;
+  const tvCir = perfilCirurgico?.templateVisual || {};
+  const layoutCir = perfilCirurgico?.layoutDetectado || {};
 
-  const nomeMedico = opcoes.nomeMedico || usuario.nome || 'Camila Bastos';
-  const crmvMedico = opcoes.crmvMedico || usuario.crmv || 'CRMV/MG: 22904';
-  const clinicaNome = opcoes.clinicaNome || usuario.nomeClinica || 'Vetaro';
+  // Mescla tipografia/cores/margens priorizando o perfil cirúrgico personalizado quando ativo
+  const layoutEfetivo = {
+    ...layout,
+    font_family: tvCir.fontFamily || layoutCir.fontFamily || layout.font_family || LAYOUT_PADRAO.font_family,
+    font_size_body: tvCir.fontSizeBody || layoutCir.fontSizeBody || layout.font_size_body || LAYOUT_PADRAO.font_size_body,
+    font_size_titulo: tvCir.fontSizeTitulo || layoutCir.fontSizeTitulo || layout.font_size_titulo || LAYOUT_PADRAO.font_size_titulo,
+    margin_top: tvCir.marginTop || layoutCir.marginTop || layout.margin_top || LAYOUT_PADRAO.margin_top,
+    margin_bottom: tvCir.marginBottom || layoutCir.marginBottom || layout.margin_bottom || LAYOUT_PADRAO.margin_bottom,
+    margin_left: tvCir.marginLeft || layoutCir.marginLeft || layout.margin_left || LAYOUT_PADRAO.margin_left,
+    margin_right: tvCir.marginRight || layoutCir.marginRight || layout.margin_right || LAYOUT_PADRAO.margin_right,
+    line_height: tvCir.lineHeight || layoutCir.lineHeight || layout.line_height || LAYOUT_PADRAO.line_height,
+    cor_primaria: tvCir.corPrimaria || layoutCir.corPrimaria || layout.cor_primaria || LAYOUT_PADRAO.cor_primaria,
+    cor_secundaria: tvCir.corSecundaria || layoutCir.corSecundaria || layout.cor_secundaria || LAYOUT_PADRAO.cor_secundaria
+  };
+  const cfgDocx = opcoes.cfgDocx || converterParaDocx(layoutEfetivo);
+
+  const nomeMedico = opcoes.nomeMedico || perfilCirurgico?.nomeDetectado || usuario.nome || 'Camila Bastos';
+  const crmvMedico = opcoes.crmvMedico || perfilCirurgico?.crmvDetectado || usuario.crmv || 'CRMV/MG: 22904';
+  const clinicaNome = opcoes.clinicaNome || perfilCirurgico?.clinicaDetectada || usuario.nomeClinica || 'Vetaro';
 
   const logoCandidatos = [
     opcoes.logoPath,
     opcoes.logoUrl,
     usuario.logoUrl,
-    layout.header_logo_url,
-    layout.header_banner_url,
-    layout.headerBannerUrl,
-    layout.visual_config_json?.headerLogoUrl,
-    layout.visualConfigJson?.headerLogoUrl,
-    layout.visual_config_json?.headerBannerUrl,
-    layout.visualConfigJson?.headerBannerUrl,
+    tvCir.ativosVisuais?.headerLogoUrl,
+    tvCir.visualConfigClonado?.headerLogoUrl,
+    tvCir.headerLogoUrl,
+    tvCir.ativosVisuais?.headerBannerUrl,
+    tvCir.headerBannerUrl,
+    opcoes.perfilLaudo?.templateVisual?.ativosVisuais?.headerLogoUrl,
+    opcoes.perfilLaudo?.templateVisual?.visualConfigClonado?.headerLogoUrl,
     opcoes.perfilLaudo?.templateVisual?.headerLogoUrl,
     opcoes.perfilLaudo?.templateVisual?.headerBannerUrl,
     opcoes.perfilLaudo?.headerLogoUrl,
+    layout.header_logo_url,
+    layout.visual_config_json?.headerLogoUrl,
+    layout.visualConfigJson?.headerLogoUrl,
+    layout.header_banner_url,
+    layout.headerBannerUrl,
+    layout.visual_config_json?.headerBannerUrl,
+    layout.visualConfigJson?.headerBannerUrl,
     usuario.clinica?.logoUrl
   ];
 
   let logoPath = null;
   for (const cand of logoCandidatos) {
-    const resolvido = resolverCaminhoArquivo(cand);
+    const resolvido = resolverCaminhoArquivo(cand, { usuarioId: usuario.id });
     if (resolvido) {
       logoPath = resolvido;
       break;
     }
   }
 
-  // Se o usuário tiver logo salva no diretório uploads/templates ou uploads/logos com seu ID
+  // Fallback seguro: busca logo salva no diretório persistente do usuário (logos, templates_cirurgia, templates)
   if (!logoPath && usuario.id) {
     const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
-    const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR || path.join(__dirname, 'uploads');
-    const pastaTemplates = path.join(uploadsDir, 'templates', idLimpo);
-    if (fs.existsSync(pastaTemplates)) {
-      for (const arq of ['header_logo.png', 'header_logo.jpg', 'header_logo.jpeg']) {
-        const cand = path.join(pastaTemplates, arq);
-        if (fs.existsSync(cand)) { logoPath = cand; break; }
-      }
+    const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR
+      ? path.resolve(process.env.UPLOAD_PERSISTENT_DIR)
+      : path.join(__dirname, 'uploads');
+
+    // 1. Primeiro checa uploads/logos/ (upload explícito da logo da pessoa em Meu Perfil)
+    const logosDir = path.join(uploadsDir, 'logos');
+    if (fs.existsSync(logosDir)) {
+      try {
+        const arquivos = fs.readdirSync(logosDir);
+        const logosDoUsuario = arquivos
+          .filter(f => f.includes(idLimpo) && /\.(jpe?g|png|webp)$/i.test(f))
+          .sort()
+          .reverse();
+        if (logosDoUsuario.length > 0) {
+          const achado = path.join(logosDir, logosDoUsuario[0]);
+          if (fs.existsSync(achado)) logoPath = achado;
+        }
+      } catch (_) {}
     }
+
+    // 2. Depois checa uploads/templates_cirurgia/<id> e uploads/templates/<id>
     if (!logoPath) {
-      const logosDir = path.join(uploadsDir, 'logos');
-      if (fs.existsSync(logosDir)) {
-        try {
-          const arquivos = fs.readdirSync(logosDir);
-          const logosDoUsuario = arquivos
-            .filter(f => f.includes(idLimpo) && /\.(jpe?g|png|webp)$/i.test(f))
-            .sort()
-            .reverse();
-          if (logosDoUsuario.length > 0) {
-            const achado = path.join(logosDir, logosDoUsuario[0]);
-            if (fs.existsSync(achado)) logoPath = achado;
+      for (const sub of ['templates_cirurgia', 'templates']) {
+        const pastaTemplates = path.join(uploadsDir, sub, idLimpo);
+        if (fs.existsSync(pastaTemplates)) {
+          for (const arq of ['header_logo.png', 'header_logo.jpg', 'header_logo.jpeg', 'header_logo.webp']) {
+            const cand = path.join(pastaTemplates, arq);
+            if (fs.existsSync(cand)) { logoPath = cand; break; }
           }
-        } catch (_) {}
+        }
+        if (logoPath) break;
       }
     }
   }
@@ -147,25 +261,32 @@ function resolverContextoCirurgico(opcoes = {}) {
     opcoes.assinaturaPath,
     opcoes.assinaturaUrl,
     usuario.assinaturaUrl,
+    tvCir.ativosVisuais?.assinaturaUrl,
+    tvCir.visualConfigClonado?.assinaturaUrl,
+    tvCir.assinaturaUrl,
+    opcoes.perfilLaudo?.templateVisual?.ativosVisuais?.assinaturaUrl,
+    opcoes.perfilLaudo?.templateVisual?.visualConfigClonado?.assinaturaUrl,
+    opcoes.perfilLaudo?.templateVisual?.assinaturaUrl,
     layout.assinatura_extraida_url,
     layout.assinaturaExtraidaUrl,
     layout.visual_config_json?.assinaturaUrl,
-    layout.visualConfigJson?.assinaturaUrl,
-    opcoes.perfilLaudo?.templateVisual?.assinaturaUrl
+    layout.visualConfigJson?.assinaturaUrl
   ];
 
   let assinaturaPath = null;
   for (const cand of assinaturaCandidatos) {
-    const resolvido = resolverCaminhoArquivo(cand);
+    const resolvido = resolverCaminhoArquivo(cand, { usuarioId: usuario.id });
     if (resolvido) {
       assinaturaPath = resolvido;
       break;
     }
   }
 
-  // Se o usuário tiver assinatura salva no diretório uploads/assinaturas com seu ID
   if (!assinaturaPath && usuario.id) {
-    const assinaturasDir = path.join(__dirname, 'uploads', 'assinaturas');
+    const uploadsDir = process.env.UPLOAD_PERSISTENT_DIR
+      ? path.resolve(process.env.UPLOAD_PERSISTENT_DIR)
+      : path.join(__dirname, 'uploads');
+    const assinaturasDir = path.join(uploadsDir, 'assinaturas');
     if (fs.existsSync(assinaturasDir)) {
       try {
         const idLimpo = String(usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -186,6 +307,37 @@ function resolverContextoCirurgico(opcoes = {}) {
     assinaturaPath = ASSINATURA_PATH;
   }
 
+  // Configurações visuais e rótulos do padrão cirúrgico (com defaults oficiais)
+  const rotulosSecoes = {
+    data: tvCir.rotulosSecoes?.data || 'DATA DO PROCEDIMENTO CIRÚRGICO',
+    procedimento: tvCir.rotulosSecoes?.procedimento || 'PROCEDIMENTO',
+    diagnostico: tvCir.rotulosSecoes?.diagnostico || 'DIAGNÓSTICO PRÉ-CIRÚRGICO',
+    descricao: tvCir.rotulosSecoes?.descricao || 'DESCRIÇÃO DO PROCEDIMENTO CIRÚRGICO',
+    evolucao: tvCir.rotulosSecoes?.evolucao || 'EVOLUÇÃO E CONSIDERAÇÕES'
+  };
+
+  const estiloVisualCirurgico = {
+    tipoCabecalho: tvCir.tipoCabecalho || 'logo-esquerda-dados-direita',
+    tipoDadosPaciente: tvCir.tipoDadosPaciente || 'duas-colunas-limpo',
+    tituloDocumento: tvCir.tituloDocumento || 'RELATÓRIO CIRÚRGICO',
+    subtituloDocumento: tvCir.subtituloDocumento || '',
+    alinhamentoTitulo: tvCir.alinhamentoTitulo || 'center',
+    decoracaoTitulo: tvCir.decoracaoTitulo || 'nenhuma',
+    estiloSecoes: tvCir.estiloSecoes || 'negrito-inline',
+    rotuloResponsavel: tvCir.rotuloResponsavel || 'Responsável',
+    rotulosSecoes,
+    tituloRegistroFotografico: tvCir.tituloRegistroFotografico || 'REGISTRO FOTOGRÁFICO INTRAOPERATÓRIO',
+    legendaPadraoFoto: tvCir.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica',
+    posicaoAssinatura: tvCir.posicaoAssinatura || 'centro',
+    linhaAssinatura: tvCir.linhaAssinatura !== undefined ? Boolean(tvCir.linhaAssinatura) : false,
+    textoAvisoLegal: tvCir.textoAvisoLegal || '',
+    rodapeContato: tvCir.rodapeContato || '',
+    corPrimaria: layoutEfetivo.cor_primaria || '#1B365D',
+    corSecundaria: layoutEfetivo.cor_secundaria || '#4A777A',
+    corFundoBlocos: tvCir.corFundoBlocos || '#F8FAFC',
+    corBordaTabelas: tvCir.corBordaTabelas || '#E2E8F0'
+  };
+
   return {
     ...opcoes,
     usuario,
@@ -194,15 +346,19 @@ function resolverContextoCirurgico(opcoes = {}) {
     clinicaNome,
     logoPath,
     assinaturaPath,
-    layout,
-    cfgDocx
+    layout: layoutEfetivo,
+    cfgDocx,
+    perfilCirurgico,
+    estiloVisualCirurgico
   };
 }
 
 async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx, imagens = [], opcoes = {}) {
   const ctx = resolverContextoCirurgico(opcoes);
+  const ev = ctx.estiloVisualCirurgico;
   const fonte = ctx.cfgDocx.fontFamily || 'Calibri';
-  const corPrimariaHex = ctx.cfgDocx.corPrimariaHex || '000000';
+  const corPrimariaHex = (ev.corPrimaria || ctx.cfgDocx.corPrimariaHex || '#000000').replace(/^#/, '').toUpperCase();
+  const legendasFotos = opcoes.legendasFotos || dadosCirurgia?.legendasFotos || [];
 
   const logoBytes = (ctx.logoPath && fs.existsSync(ctx.logoPath)) ? fs.readFileSync(ctx.logoPath) : null;
   const assinaturaBytes = (ctx.assinaturaPath && fs.existsSync(ctx.assinaturaPath)) ? fs.readFileSync(ctx.assinaturaPath) : null;
@@ -213,7 +369,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
 
   const szCorpo = ehTextoMuitoLongo ? 19 : (ehTextoLongo ? 20 : (ctx.cfgDocx.szCorpo || 22));
   const szTitulo = ctx.cfgDocx.szTitulo || 28;
-  const lineSpacingDocx = ehTextoMuitoLongo ? 220 : (ehTextoLongo ? 240 : 260);
+  const lineSpacingDocx = ehTextoMuitoLongo ? 220 : (ehTextoLongo ? 240 : (ctx.cfgDocx.lineSpacing || 260));
   const spacingAfterDocx = ehTextoMuitoLongo ? 80 : (ehTextoLongo ? 100 : 140);
 
   const bordaTransparente = {
@@ -224,7 +380,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
   };
 
   let celulaLogoChildren = [];
-  if (logoBytes) {
+  if (logoBytes && ev.tipoCabecalho !== 'sem-logo-tipografico') {
     let logoDims = { width: 130, height: 65 };
     try {
       const dimsOrig = obterDimensoesImagem(logoBytes);
@@ -272,19 +428,19 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Nome: ', font: fonte, size: szCorpo }),
+                  new TextRun({ text: 'Nome: ', bold: true, font: fonte, size: szCorpo }),
                   new TextRun({ text: dadosPaciente.nome || 'Não informado', font: fonte, size: szCorpo })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Sexo: ', font: fonte, size: szCorpo }),
+                  new TextRun({ text: 'Sexo: ', bold: true, font: fonte, size: szCorpo }),
                   new TextRun({ text: dadosPaciente.sexo || 'Não informado', font: fonte, size: szCorpo })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Idade: ', font: fonte, size: szCorpo }),
+                  new TextRun({ text: 'Idade: ', bold: true, font: fonte, size: szCorpo }),
                   new TextRun({ text: dadosPaciente.idade || 'Não informado', font: fonte, size: szCorpo })
                 ]
               })
@@ -296,19 +452,19 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Tutor: ', font: fonte, size: szCorpo }),
+                  new TextRun({ text: `${ev.rotuloResponsavel}: `, bold: true, font: fonte, size: szCorpo }),
                   new TextRun({ text: dadosPaciente.tutor || 'Não informado', font: fonte, size: szCorpo })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Espécie: ', font: fonte, size: szCorpo }),
+                  new TextRun({ text: 'Espécie: ', bold: true, font: fonte, size: szCorpo }),
                   new TextRun({ text: dadosPaciente.especie || 'Não informada', font: fonte, size: szCorpo })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Peso: ', font: fonte, size: szCorpo }),
+                  new TextRun({ text: 'Peso: ', bold: true, font: fonte, size: szCorpo }),
                   new TextRun({ text: dadosPaciente.peso || 'Não informado', font: fonte, size: szCorpo })
                 ]
               })
@@ -319,27 +475,53 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
     ]
   });
 
+  const alinhamentoTituloDocx = ev.alinhamentoTitulo === 'left' ? AlignmentType.LEFT : AlignmentType.CENTER;
+  const alinhamentoAssinaturaDocx = ev.posicaoAssinatura === 'direita'
+    ? AlignmentType.RIGHT
+    : (ev.posicaoAssinatura === 'esquerda' ? AlignmentType.LEFT : AlignmentType.CENTER);
+
   const paragrafos = [
     tabelaCabecalho,
     new Paragraph({ spacing: { before: ehTextoLongo ? 100 : 180, after: ehTextoLongo ? 80 : 120 } }),
     new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: ehTextoLongo ? 80 : 120, after: ehTextoLongo ? 140 : 200 },
+      alignment: alinhamentoTituloDocx,
+      spacing: { before: ehTextoLongo ? 80 : 120, after: ev.subtituloDocumento ? 60 : (ehTextoLongo ? 140 : 200) },
       children: [
         new TextRun({
-          text: 'RELATÓRIO CIRÚRGICO',
+          text: ev.tituloDocumento,
           bold: true,
           font: fonte,
           size: szTitulo,
           color: corPrimariaHex
         })
       ]
-    }),
+    })
+  ];
+
+  if (ev.subtituloDocumento) {
+    paragrafos.push(
+      new Paragraph({
+        alignment: alinhamentoTituloDocx,
+        spacing: { after: ehTextoLongo ? 120 : 180 },
+        children: [
+          new TextRun({
+            text: ev.subtituloDocumento,
+            italics: true,
+            font: fonte,
+            size: Math.max(18, szCorpo - 2),
+            color: (ev.corSecundaria || '#555555').replace(/^#/, '').toUpperCase()
+          })
+        ]
+      })
+    );
+  }
+
+  paragrafos.push(
     new Paragraph({
       alignment: AlignmentType.BOTH,
       spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
       children: [
-        new TextRun({ text: 'DATA DO PROCEDIMENTO CIRURGICO: ', bold: true, font: fonte, size: szCorpo }),
+        new TextRun({ text: `${ev.rotulosSecoes.data}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
         new TextRun({ text: dadosCirurgia.data || dadosPaciente.data || 'Não informada', font: fonte, size: szCorpo })
       ]
     }),
@@ -347,7 +529,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
       alignment: AlignmentType.BOTH,
       spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
       children: [
-        new TextRun({ text: 'PROCEDIMENTO: ', bold: true, font: fonte, size: szCorpo }),
+        new TextRun({ text: `${ev.rotulosSecoes.procedimento}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
         new TextRun({ text: dadosCirurgia.procedimento || 'Não informado', font: fonte, size: szCorpo })
       ]
     }),
@@ -355,44 +537,57 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
       alignment: AlignmentType.BOTH,
       spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
       children: [
-        new TextRun({ text: 'DIAGNÓSTICO PRÉ-CIRURGICO: ', bold: true, font: fonte, size: szCorpo }),
+        new TextRun({ text: `${ev.rotulosSecoes.diagnostico}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
         new TextRun({ text: dadosCirurgia.diagnosticoPreCirurgico || 'Não informado', font: fonte, size: szCorpo })
       ]
     })
-  ];
+  );
 
-  const descParagrafos = (dadosCirurgia.descricaoProcedimento || '').split(/\n\s*\n/);
-  descParagrafos.forEach((par, idx) => {
-    if (idx === 0) {
-      paragrafos.push(
-        new Paragraph({
-          alignment: AlignmentType.BOTH,
-          spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
-          children: [
-            new TextRun({ text: 'DESCRIÇÃO DO PROCEDIMENTO CIRURGICO: ', bold: true, font: fonte, size: szCorpo }),
-            new TextRun({ text: par.trim(), font: fonte, size: szCorpo })
-          ]
-        })
-      );
-    } else {
-      paragrafos.push(
-        new Paragraph({
-          alignment: AlignmentType.BOTH,
-          spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
-          children: [
-            new TextRun({ text: par.trim(), font: fonte, size: szCorpo })
-          ]
-        })
-      );
-    }
-  });
+  const descParagrafos = (dadosCirurgia.descricaoProcedimento || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  if (descParagrafos.length === 0) {
+    paragrafos.push(
+      new Paragraph({
+        alignment: AlignmentType.BOTH,
+        spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
+        children: [
+          new TextRun({ text: `${ev.rotulosSecoes.descricao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
+          new TextRun({ text: 'Não informada.', font: fonte, size: szCorpo })
+        ]
+      })
+    );
+  } else {
+    descParagrafos.forEach((par, idx) => {
+      if (idx === 0) {
+        paragrafos.push(
+          new Paragraph({
+            alignment: AlignmentType.BOTH,
+            spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
+            children: [
+              new TextRun({ text: `${ev.rotulosSecoes.descricao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
+              new TextRun({ text: par, font: fonte, size: szCorpo })
+            ]
+          })
+        );
+      } else {
+        paragrafos.push(
+          new Paragraph({
+            alignment: AlignmentType.BOTH,
+            spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
+            children: [
+              new TextRun({ text: par, font: fonte, size: szCorpo })
+            ]
+          })
+        );
+      }
+    });
+  }
 
   paragrafos.push(
     new Paragraph({
       alignment: AlignmentType.BOTH,
       spacing: { after: ehTextoLongo ? 120 : 180, line: lineSpacingDocx },
       children: [
-        new TextRun({ text: 'EVOLUÇÃO E CONSIDERAÇÕES: ', bold: true, font: fonte, size: szCorpo }),
+        new TextRun({ text: `${ev.rotulosSecoes.evolucao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
         new TextRun({ text: dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.', font: fonte, size: szCorpo })
       ]
     })
@@ -402,7 +597,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
   if (assinaturaBytes) {
     blocoAssinatura.push(
       new Paragraph({
-        alignment: AlignmentType.CENTER,
+        alignment: alinhamentoAssinaturaDocx,
         spacing: { before: ehTextoLongo ? 100 : 160, after: 30 },
         children: [
           new ImageRun({
@@ -413,21 +608,55 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
       })
     );
   }
+  if (ev.linhaAssinatura) {
+    blocoAssinatura.push(
+      new Paragraph({
+        alignment: alinhamentoAssinaturaDocx,
+        spacing: { before: assinaturaBytes ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
+        children: [
+          new TextRun({ text: '________________________________________', font: fonte, size: Math.max(16, szCorpo - 4), color: '888888' })
+        ]
+      })
+    );
+  }
   blocoAssinatura.push(
     new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: assinaturaBytes ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
+      alignment: alinhamentoAssinaturaDocx,
+      spacing: { before: (assinaturaBytes || ev.linhaAssinatura) ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
       children: [
-        new TextRun({ text: ctx.nomeMedico, font: fonte, size: szCorpo })
+        new TextRun({ text: ctx.nomeMedico, bold: true, font: fonte, size: szCorpo })
       ]
     }),
     new Paragraph({
-      alignment: AlignmentType.CENTER,
+      alignment: alinhamentoAssinaturaDocx,
       children: [
         new TextRun({ text: ctx.crmvMedico, font: fonte, size: szCorpo })
       ]
     })
   );
+
+  if (ev.textoAvisoLegal) {
+    blocoAssinatura.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 140, after: 40 },
+        children: [
+          new TextRun({ text: ev.textoAvisoLegal, italics: true, font: fonte, size: 16, color: '666666' })
+        ]
+      })
+    );
+  }
+  if (ev.rodapeContato) {
+    blocoAssinatura.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 40 },
+        children: [
+          new TextRun({ text: ev.rodapeContato, font: fonte, size: 16, color: '666666' })
+        ]
+      })
+    );
+  }
 
   paragrafos.push(...blocoAssinatura);
 
@@ -443,7 +672,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
         spacing: { before: 80, after: 160 },
         children: [
           new TextRun({
-            text: 'REGISTRO FOTOGRÁFICO INTRAOPERATÓRIO',
+            text: ev.tituloRegistroFotografico,
             bold: true,
             font: fonte,
             size: szTitulo,
@@ -461,6 +690,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
       const maxW = imagensValidas.length === 1 ? 480 : 380;
       const maxH = imagensValidas.length === 1 ? 460 : 230;
       const { width, height } = calcularDimensoesDocx(dims.width, dims.height, maxW, maxH);
+      const legendaTexto = resolverLegendaFoto(i, legendasFotos, ev.legendaPadraoFoto);
 
       paragrafos.push(
         new Paragraph({
@@ -481,10 +711,10 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
           spacing: { after: 140 },
           children: [
             new TextRun({
-              text: `Figura ${i + 1} - Registro fotográfico intraoperatório / peça cirúrgica`,
+              text: legendaTexto,
               italics: true,
               font: fonte,
-              size: szCorpo - 2
+              size: Math.max(16, szCorpo - 2)
             })
           ]
         })
@@ -498,10 +728,10 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
         properties: {
           page: {
             margin: {
-              top: 1134,
-              bottom: 1134,
-              left: 1417,
-              right: 1417
+              top: ctx.cfgDocx.marginTop || 1134,
+              bottom: ctx.cfgDocx.marginBottom || 1134,
+              left: ctx.cfgDocx.marginLeft || 1417,
+              right: ctx.cfgDocx.marginRight || 1417
             }
           }
         },
@@ -517,22 +747,27 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
 
 async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, imagens = [], opcoes = {}) {
   const ctx = resolverContextoCirurgico(opcoes);
+  const ev = ctx.estiloVisualCirurgico;
+  const legendasFotos = opcoes.legendasFotos || dadosCirurgia?.legendasFotos || [];
+
   const logoBase64 = (ctx.logoPath && fs.existsSync(ctx.logoPath))
     ? fs.readFileSync(ctx.logoPath).toString('base64')
     : '';
-  const logoExt = (ctx.logoPath && path.extname(ctx.logoPath).toLowerCase() === '.png') ? 'png' : 'jpeg';
-  const logoSrc = logoBase64 ? `data:image/${logoExt};base64,${logoBase64}` : '';
+  const logoMime = obterMimePorExtensao(ctx.logoPath);
+  const logoSrc = (logoBase64 && ev.tipoCabecalho !== 'sem-logo-tipografico')
+    ? `data:${logoMime};base64,${logoBase64}`
+    : '';
 
   const textoTotal = (dadosCirurgia.descricaoProcedimento || '') + (dadosCirurgia.evolucaoConsideracoes || '');
   const ehTextoLongo = textoTotal.length > 1750;
   const ehTextoMuitoLongo = textoTotal.length > 2300;
 
   const fontSizePt = ehTextoMuitoLongo ? '9.3pt' : (ehTextoLongo ? '10.2pt' : (ctx.layout.font_size_body || '11pt'));
-  const lineHeight = ehTextoMuitoLongo ? '1.24' : (ehTextoLongo ? '1.28' : '1.35');
+  const lineHeight = ehTextoMuitoLongo ? '1.24' : (ehTextoLongo ? '1.28' : (ctx.layout.line_height || '1.35'));
   const marginBottomP = ehTextoMuitoLongo ? '6px' : (ehTextoLongo ? '8px' : '11px');
-  const margemVertical = ehTextoMuitoLongo ? '1.2cm' : (ehTextoLongo ? '1.5cm' : '1.8cm');
-  const margemHorizontal = ehTextoMuitoLongo ? '1.8cm' : '2.0cm';
-  const logoWidth = ehTextoMuitoLongo ? '110px' : (ehTextoLongo ? '120px' : '130px');
+  const margemVertical = ehTextoMuitoLongo ? '1.2cm' : (ehTextoLongo ? '1.5cm' : (ctx.layout.margin_top || '1.8cm'));
+  const margemHorizontal = ehTextoMuitoLongo ? '1.8cm' : (ctx.layout.margin_left || '2.0cm');
+  const logoWidth = ehTextoMuitoLongo ? '110px' : (ehTextoLongo ? '120px' : '135px');
   const marginHeader = ehTextoMuitoLongo ? '12px' : '18px';
   const marginTitulo = ehTextoMuitoLongo ? '10px 0 12px 0' : (ehTextoLongo ? '14px 0 16px 0' : '18px 0 20px 0');
   const marginAssinatura = ehTextoMuitoLongo ? '14px' : '22px';
@@ -540,9 +775,9 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
 
   let assinaturaHtml = '';
   if (ctx.assinaturaPath && fs.existsSync(ctx.assinaturaPath)) {
-    const assExt = path.extname(ctx.assinaturaPath).toLowerCase() === '.png' ? 'png' : 'jpeg';
+    const assMime = obterMimePorExtensao(ctx.assinaturaPath);
     const assBase64 = fs.readFileSync(ctx.assinaturaPath).toString('base64');
-    assinaturaHtml = `<img src="data:image/${assExt};base64,${assBase64}" class="assinatura-img" alt="Assinatura" />`;
+    assinaturaHtml = `<img src="data:${assMime};base64,${assBase64}" class="assinatura-img" alt="Assinatura" />`;
   }
 
   const descParagrafos = (dadosCirurgia.descricaoProcedimento || '')
@@ -550,58 +785,141 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     .map(p => p.trim())
     .filter(Boolean);
 
-  let descHtml = '';
-  descParagrafos.forEach((par, idx) => {
-    if (idx === 0) {
-      descHtml += `<p><strong>DESCRIÇÃO DO PROCEDIMENTO CIRURGICO:</strong> ${par}</p>`;
-    } else {
-      descHtml += `<p>${par}</p>`;
+  const renderSecao = (rotulo, conteudoHtml, ehBlocoMultiplo = false) => {
+    const rotuloEsc = escaparHtml(rotulo);
+    if (ev.estiloSecoes === 'barra-lateral') {
+      return `
+        <div class="secao-barra">
+          <div class="secao-titulo-barra">${rotuloEsc}</div>
+          <div class="secao-corpo">${ehBlocoMultiplo ? conteudoHtml : `<p>${conteudoHtml}</p>`}</div>
+        </div>`;
     }
-  });
+    if (ev.estiloSecoes === 'tarja-colorida') {
+      return `
+        <div class="secao-tarja">
+          <div class="secao-titulo-tarja">${rotuloEsc}</div>
+          <div class="secao-corpo">${ehBlocoMultiplo ? conteudoHtml : `<p>${conteudoHtml}</p>`}</div>
+        </div>`;
+    }
+    if (ev.estiloSecoes === 'sublinhado') {
+      return `
+        <div class="secao-sublinhada">
+          <div class="secao-titulo-sublinhado">${rotuloEsc}</div>
+          <div class="secao-corpo">${ehBlocoMultiplo ? conteudoHtml : `<p>${conteudoHtml}</p>`}</div>
+        </div>`;
+    }
+    // Padrão clássico: negrito-inline
+    if (ehBlocoMultiplo) {
+      return conteudoHtml;
+    }
+    return `<p><strong class="rotulo-inline">${rotuloEsc}:</strong> ${conteudoHtml}</p>`;
+  };
+
+  let descHtml = '';
+  if (ev.estiloSecoes === 'negrito-inline') {
+    if (descParagrafos.length === 0) {
+      descHtml = `<p><strong class="rotulo-inline">${escaparHtml(ev.rotulosSecoes.descricao)}:</strong> Não informada.</p>`;
+    } else {
+      descParagrafos.forEach((par, idx) => {
+        if (idx === 0) {
+          descHtml += `<p><strong class="rotulo-inline">${escaparHtml(ev.rotulosSecoes.descricao)}:</strong> ${escaparHtml(par)}</p>`;
+        } else {
+          descHtml += `<p>${escaparHtml(par)}</p>`;
+        }
+      });
+    }
+  } else {
+    const innerPars = descParagrafos.length > 0
+      ? descParagrafos.map(p => `<p>${escaparHtml(p)}</p>`).join('\n')
+      : '<p>Não informada.</p>';
+    descHtml = renderSecao(ev.rotulosSecoes.descricao, innerPars, true);
+  }
 
   const renderLogoTag = () => logoSrc
-    ? `<img src="${logoSrc}" class="logo-img" alt="${ctx.clinicaNome}">`
-    : `<div style="font-weight:900;font-size:18pt;color:${ctx.layout.cor_primaria || '#1B365D'};">${ctx.clinicaNome}</div>`;
+    ? `<img src="${logoSrc}" class="logo-img" alt="${escaparHtml(ctx.clinicaNome)}">`
+    : `<div style="font-weight:900;font-size:18pt;color:${ev.corPrimaria};">${escaparHtml(ctx.clinicaNome)}</div>`;
+
+  const renderCabecalhoHtml = (ehAnexo = false) => {
+    const dadosCol1 = ehAnexo
+      ? `<div><strong>Paciente:</strong> ${escaparHtml(dadosPaciente.nome || 'Não informado')}</div>
+         <div><strong>Espécie:</strong> ${escaparHtml(dadosPaciente.especie || 'Não informada')} | <strong>Sexo:</strong> ${escaparHtml(dadosPaciente.sexo || 'Não informado')}</div>`
+      : `<div><strong>Nome:</strong> ${escaparHtml(dadosPaciente.nome || 'Não informado')}</div>
+         <div><strong>Sexo:</strong> ${escaparHtml(dadosPaciente.sexo || 'Não informado')}</div>
+         <div><strong>Idade:</strong> ${escaparHtml(dadosPaciente.idade || 'Não informado')}</div>`;
+
+    const dadosCol2 = ehAnexo
+      ? `<div><strong>${escaparHtml(ev.rotuloResponsavel)}:</strong> ${escaparHtml(dadosPaciente.tutor || 'Não informado')}</div>
+         <div><strong>Data:</strong> ${escaparHtml(dadosCirurgia.data || dadosPaciente.data || 'Não informada')}</div>`
+      : `<div><strong>${escaparHtml(ev.rotuloResponsavel)}:</strong> ${escaparHtml(dadosPaciente.tutor || 'Não informado')}</div>
+         <div><strong>Espécie:</strong> ${escaparHtml(dadosPaciente.especie || 'Não informada')}</div>
+         <div><strong>Peso:</strong> ${escaparHtml(dadosPaciente.peso || 'Não informado')}</div>`;
+
+    if (ev.tipoCabecalho === 'logo-centro' && !ehAnexo) {
+      return `
+        <div class="header-centro">
+          <div class="header-centro-logo">${renderLogoTag()}</div>
+          ${ev.rodapeContato ? `<div class="header-contato">${escaparHtml(ev.rodapeContato)}</div>` : ''}
+        </div>
+        <table class="paciente-table ${ev.tipoDadosPaciente}">
+          <tr>
+            <td class="col-info-half">${dadosCol1}</td>
+            <td class="col-info-half">${dadosCol2}</td>
+          </tr>
+        </table>`;
+    }
+
+    if (ev.tipoCabecalho === 'banner-superior' && !ehAnexo) {
+      return `
+        <div class="header-banner">
+          <div class="header-banner-logo">${renderLogoTag()}</div>
+          <div class="header-banner-texto">
+            <div class="header-banner-clinica">${escaparHtml(ctx.clinicaNome)}</div>
+            ${ev.rodapeContato ? `<div class="header-banner-sub">${escaparHtml(ev.rodapeContato)}</div>` : ''}
+          </div>
+        </div>
+        <table class="paciente-table ${ev.tipoDadosPaciente}">
+          <tr>
+            <td class="col-info-half">${dadosCol1}</td>
+            <td class="col-info-half">${dadosCol2}</td>
+          </tr>
+        </table>`;
+    }
+
+    return `
+      <table class="header-table ${ehAnexo ? 'header-anexo' : ''} ${ev.tipoDadosPaciente}">
+        <tr>
+          <td class="logo-cell">${renderLogoTag()}</td>
+          <td class="col-info">${dadosCol1}</td>
+          <td class="col-info">${dadosCol2}</td>
+        </tr>
+      </table>`;
+  };
 
   let anexoImagensHtml = '';
   const imagensValidasPdf = (imagens || []).filter(img => fs.existsSync(img));
   if (imagensValidasPdf.length > 0) {
     const cardsHtml = imagensValidasPdf.map((imgCaminho, idx) => {
-      const imgExt = path.extname(imgCaminho).toLowerCase().replace('.', '');
-      const mime = imgExt === 'png' ? 'image/png' : (imgExt === 'webp' ? 'image/webp' : 'image/jpeg');
+      const mime = obterMimePorExtensao(imgCaminho);
       const imgBase64 = fs.readFileSync(imgCaminho).toString('base64');
       const imgSrc = `data:${mime};base64,${imgBase64}`;
       const ehUnica = imagensValidasPdf.length === 1;
+      const legendaTexto = resolverLegendaFoto(idx, legendasFotos, ev.legendaPadraoFoto);
 
       return `
         <div class="anexo-card ${ehUnica ? 'unica' : ''}">
           <div class="anexo-img-wrapper">
             <img src="${imgSrc}" class="anexo-foto ${ehUnica ? 'foto-grande' : ''}" alt="Registro Intraoperatório ${idx + 1}">
           </div>
-          <div class="anexo-legenda">Figura ${idx + 1} - Registro fotográfico intraoperatório / peça cirúrgica</div>
+          <div class="anexo-legenda">${escaparHtml(legendaTexto)}</div>
         </div>
       `;
     }).join('\n');
 
     anexoImagensHtml = `
       <div class="pagina-anexo">
-        <table class="header-table header-anexo">
-          <tr>
-            <td class="logo-cell">
-              ${renderLogoTag()}
-            </td>
-            <td class="col-info">
-              <div><strong>Paciente:</strong> ${dadosPaciente.nome || 'Não informado'}</div>
-              <div><strong>Espécie:</strong> ${dadosPaciente.especie || 'Não informada'} | <strong>Sexo:</strong> ${dadosPaciente.sexo || 'Não informado'}</div>
-            </td>
-            <td class="col-info">
-              <div><strong>Tutor:</strong> ${dadosPaciente.tutor || 'Não informado'}</div>
-              <div><strong>Data:</strong> ${dadosCirurgia.data || dadosPaciente.data || 'Não informada'}</div>
-            </td>
-          </tr>
-        </table>
+        ${renderCabecalhoHtml(true)}
 
-        <div class="titulo-anexo">REGISTRO FOTOGRÁFICO INTRAOPERATÓRIO</div>
+        <div class="titulo-anexo">${escaparHtml(ev.tituloRegistroFotografico)}</div>
 
         <div class="anexo-grade ${imagensValidasPdf.length === 1 ? 'grade-unica' : (imagensValidasPdf.length === 2 ? 'grade-dupla' : 'grade-multipla')}">
           ${cardsHtml}
@@ -610,11 +928,24 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     `;
   }
 
+  const alignAssinaturaCss = ev.posicaoAssinatura === 'direita'
+    ? 'right'
+    : (ev.posicaoAssinatura === 'esquerda' ? 'left' : 'center');
+  const marginAssImg = alignAssinaturaCss === 'center'
+    ? '0 auto 3px auto'
+    : (alignAssinaturaCss === 'right' ? '0 0 3px auto' : '0 auto 3px 0');
+
+  const tituloDecoracaoCss = ev.decoracaoTitulo === 'faixa-colorida'
+    ? `background: ${ev.corPrimaria}; color: #fff; padding: 6px 12px; border-radius: 4px;`
+    : (ev.decoracaoTitulo === 'borda-inferior'
+      ? `border-bottom: 2px solid ${ev.corPrimaria}; padding-bottom: 5px;`
+      : '');
+
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Relatório Cirúrgico - ${dadosPaciente.nome || 'Paciente'}</title>
+  <title>${escaparHtml(ev.tituloDocumento)} - ${escaparHtml(dadosPaciente.nome || 'Paciente')}</title>
   <style>
     @page {
       size: A4 portrait;
@@ -639,9 +970,68 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     }
     .header-table td {
       vertical-align: middle;
-      padding: 2px 4px;
+      padding: 4px 6px;
       font-size: ${fontSizePt};
       border: none;
+    }
+    .header-table.tabela-zebrada td.col-info,
+    .header-table.tabela-borda-simples td.col-info {
+      border: 1px solid ${ev.corBordaTabelas};
+      background: ${ev.tipoDadosPaciente === 'tabela-zebrada' ? ev.corFundoBlocos : '#fff'};
+    }
+    .paciente-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: ${marginHeader};
+    }
+    .paciente-table td {
+      padding: 6px 10px;
+      font-size: ${fontSizePt};
+      vertical-align: top;
+      border: 1px solid ${ev.corBordaTabelas};
+      background: ${ev.tipoDadosPaciente === 'tabela-zebrada' ? ev.corFundoBlocos : '#fff'};
+    }
+    .col-info-half {
+      width: 50%;
+      line-height: 1.4;
+    }
+    .header-centro {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .header-centro-logo .logo-img {
+      margin: 0 auto;
+    }
+    .header-contato {
+      font-size: 8.5pt;
+      color: #555;
+      margin-top: 4px;
+    }
+    .header-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: ${ev.corPrimaria};
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .header-banner-logo .logo-img {
+      max-height: 55px;
+      background: #fff;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .header-banner-clinica {
+      font-size: 13pt;
+      font-weight: 800;
+      text-align: right;
+    }
+    .header-banner-sub {
+      font-size: 8.5pt;
+      opacity: 0.9;
+      text-align: right;
     }
     .logo-cell {
       width: 32%;
@@ -659,13 +1049,22 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
       line-height: 1.38;
     }
     .titulo-relatorio {
-      text-align: center;
-      font-size: 13.5pt;
+      text-align: ${ev.alinhamentoTitulo === 'left' ? 'left' : 'center'};
+      font-size: ${ctx.layout.font_size_titulo || '13.5pt'};
       font-weight: bold;
       letter-spacing: 0.5px;
       margin: ${marginTitulo};
       text-transform: uppercase;
-      color: ${ctx.layout.cor_primaria || '#000'};
+      color: ${ev.corPrimaria};
+      ${tituloDecoracaoCss}
+    }
+    .subtitulo-relatorio {
+      text-align: ${ev.alinhamentoTitulo === 'left' ? 'left' : 'center'};
+      font-size: 9.5pt;
+      color: ${ev.corSecundaria};
+      font-style: italic;
+      margin-top: -10px;
+      margin-bottom: 14px;
     }
     .conteudo-cirurgico p {
       text-align: justify;
@@ -673,26 +1072,82 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
       margin-bottom: ${marginBottomP};
       line-height: ${lineHeight};
     }
-    .conteudo-cirurgico strong {
+    .rotulo-inline {
       font-weight: bold;
+      color: ${ev.corPrimaria};
+    }
+    .secao-barra {
+      border-left: 3px solid ${ev.corPrimaria};
+      padding-left: 10px;
+      margin-bottom: 10px;
+    }
+    .secao-titulo-barra {
+      font-weight: bold;
+      color: ${ev.corPrimaria};
+      text-transform: uppercase;
+      font-size: 10pt;
+      margin-bottom: 3px;
+    }
+    .secao-tarja {
+      margin-bottom: 10px;
+    }
+    .secao-titulo-tarja {
+      background: ${ev.corPrimaria};
+      color: #fff;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 9.5pt;
+      padding: 3px 8px;
+      border-radius: 3px;
+      margin-bottom: 5px;
+    }
+    .secao-sublinhada {
+      margin-bottom: 10px;
+    }
+    .secao-titulo-sublinhado {
+      font-weight: bold;
+      color: ${ev.corPrimaria};
+      text-transform: uppercase;
+      font-size: 10pt;
+      border-bottom: 1px solid ${ev.corBordaTabelas};
+      padding-bottom: 2px;
+      margin-bottom: 4px;
     }
     .assinatura-bloco {
-      text-align: center;
+      text-align: ${alignAssinaturaCss};
       margin-top: ${marginAssinatura};
       page-break-inside: avoid;
     }
     .assinatura-img {
       max-height: ${assinaturaMaxHeight};
       display: block;
-      margin: 0 auto 3px auto;
+      margin: ${marginAssImg};
+    }
+    .assinatura-linha {
+      width: 220px;
+      border-top: 1px solid #555;
+      margin: ${alignAssinaturaCss === 'center' ? '6px auto 4px auto' : (alignAssinaturaCss === 'right' ? '6px 0 4px auto' : '6px auto 4px 0')};
     }
     .assinatura-nome {
       font-size: ${fontSizePt};
+      font-weight: bold;
       line-height: 1.25;
     }
     .assinatura-crmv {
       font-size: ${fontSizePt};
       line-height: 1.25;
+    }
+    .rodape-bloco {
+      margin-top: 16px;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      font-size: 8.5pt;
+      color: #555;
+    }
+    .rodape-aviso {
+      font-style: italic;
+      margin-bottom: 3px;
     }
     .pagina-anexo {
       page-break-before: always;
@@ -711,7 +1166,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
       letter-spacing: 0.5px;
       margin: 10px 0 14px 0;
       text-transform: uppercase;
-      color: #1a1a1a;
+      color: ${ev.corPrimaria};
     }
     .anexo-grade {
       display: flex;
@@ -765,39 +1220,32 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   </style>
 </head>
 <body>
-  <table class="header-table">
-    <tr>
-      <td class="logo-cell">
-        ${renderLogoTag()}
-      </td>
-      <td class="col-info">
-        <div>Nome: ${dadosPaciente.nome || 'Não informado'}</div>
-        <div>Sexo: ${dadosPaciente.sexo || 'Não informado'}</div>
-        <div>Idade: ${dadosPaciente.idade || 'Não informado'}</div>
-      </td>
-      <td class="col-info">
-        <div>Tutor: ${dadosPaciente.tutor || 'Não informado'}</div>
-        <div>Espécie: ${dadosPaciente.especie || 'Não informada'}</div>
-        <div>Peso: ${dadosPaciente.peso || 'Não informado'}</div>
-      </td>
-    </tr>
-  </table>
+  ${renderCabecalhoHtml(false)}
 
-  <div class="titulo-relatorio">RELATÓRIO CIRÚRGICO</div>
+  <div class="titulo-relatorio">${escaparHtml(ev.tituloDocumento)}</div>
+  ${ev.subtituloDocumento ? `<div class="subtitulo-relatorio">${escaparHtml(ev.subtituloDocumento)}</div>` : ''}
 
   <div class="conteudo-cirurgico">
-    <p><strong>DATA DO PROCEDIMENTO CIRURGICO:</strong> ${dadosCirurgia.data || dadosPaciente.data || 'Não informada'}</p>
-    <p><strong>PROCEDIMENTO:</strong> ${dadosCirurgia.procedimento || 'Não informado'}</p>
-    <p><strong>DIAGNÓSTICO PRÉ-CIRURGICO:</strong> ${dadosCirurgia.diagnosticoPreCirurgico || 'Não informado'}</p>
+    ${renderSecao(ev.rotulosSecoes.data, escaparHtml(dadosCirurgia.data || dadosPaciente.data || 'Não informada'))}
+    ${renderSecao(ev.rotulosSecoes.procedimento, escaparHtml(dadosCirurgia.procedimento || 'Não informado'))}
+    ${renderSecao(ev.rotulosSecoes.diagnostico, escaparHtml(dadosCirurgia.diagnosticoPreCirurgico || 'Não informado'))}
     ${descHtml}
-    <p><strong>EVOLUÇÃO E CONSIDERAÇÕES:</strong> ${dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.'}</p>
+    ${renderSecao(ev.rotulosSecoes.evolucao, escaparHtml(dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.'))}
   </div>
 
   <div class="assinatura-bloco">
     ${assinaturaHtml}
-    <div class="assinatura-nome">${ctx.nomeMedico}</div>
-    <div class="assinatura-crmv">${ctx.crmvMedico}</div>
+    ${ev.linhaAssinatura ? '<div class="assinatura-linha"></div>' : ''}
+    <div class="assinatura-nome">${escaparHtml(ctx.nomeMedico)}</div>
+    <div class="assinatura-crmv">${escaparHtml(ctx.crmvMedico)}</div>
   </div>
+
+  ${(ev.textoAvisoLegal || ev.rodapeContato) ? `
+    <div class="rodape-bloco">
+      ${ev.textoAvisoLegal ? `<div class="rodape-aviso">${escaparHtml(ev.textoAvisoLegal)}</div>` : ''}
+      ${ev.rodapeContato ? `<div class="rodape-contato">${escaparHtml(ev.rodapeContato)}</div>` : ''}
+    </div>
+  ` : ''}
 
   ${anexoImagensHtml}
 </body>
@@ -828,7 +1276,14 @@ async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDest
       perfilLaudo = await obterPerfilLaudo(usuario.id);
     } catch (_) {}
   }
-  const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, cfgDocx, perfilLaudo });
+  let perfilCirurgico = opcoes.perfilCirurgico;
+  if (!perfilCirurgico && usuario.id) {
+    try {
+      const { obterPerfilCirurgico } = require('./gerenciador_perfil_cirurgico');
+      perfilCirurgico = await obterPerfilCirurgico(usuario.id);
+    } catch (_) {}
+  }
+  const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, cfgDocx, perfilLaudo, perfilCirurgico });
 
   const nomeLimpo = (dadosPaciente.nome || 'PACIENTE')
     .toUpperCase()
@@ -845,6 +1300,9 @@ async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDest
 }
 
 module.exports = {
+  resolverCaminhoArquivo,
+  resolverContextoCirurgico,
+  resolverLegendaFoto,
   gerarDocxCirurgico,
   gerarPdfCirurgico,
   gerarDocumentosCirurgicos
