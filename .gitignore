@@ -1,5 +1,6 @@
 # Configurações com credenciais sensíveis (NUNCA comitar)
 config.json
+.tokens.json
 .env
 *.env
 

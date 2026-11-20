@@ -3,7 +3,7 @@
  */
 
 const { prisma } = require('./db');
-const { salvarLayout, LAYOUT_PADRAO } = require('./gerenciador_layout');
+const { salvarLayout, obterLayout, LAYOUT_PADRAO } = require('./gerenciador_layout');
 
 /**
  * Obtém o perfil de laudo ativo para o usuário.
@@ -41,7 +41,72 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
     ? dados.quantidadeAmostras
     : (Array.isArray(arquivosAmostras) ? arquivosAmostras.length : 0);
 
-  // 1. Atualizar ou criar o registro no modelo PerfilLaudo
+  // 1. Limpa contaminação de CRMV do rodapé de contato
+  const tVis = dados.templateVisual || dados.layoutDetectado || {};
+  if (tVis.rodapeContato && /CRMV/i.test(tVis.rodapeContato)) {
+    tVis.rodapeContato = tVis.rodapeContato.replace(/CRMV[^\s,;•]*/gi, '').replace(/^[\s,;•\-]+|[\s,;•\-]+$/g, '').trim();
+  }
+
+  // 2. Sincroniza a sequência de órgãos e regras clínicas com writing_style_json
+  let visualClonado = tVis.visualConfigClonado || dados.perfilClonado?.layoutVisual || null;
+  let writingClonado = tVis.writingStyleClonado || dados.perfilClonado?.estiloEscritaClinica || null;
+  const ativosClonados = tVis.ativosVisuais || dados.perfilClonado?.ativosVisuais || {};
+
+  let writingEfetivo = writingClonado;
+  if (!writingEfetivo && usuarioId) {
+    try {
+      const layoutAtual = await obterLayout(usuarioId);
+      if (layoutAtual?.writing_style_json) {
+        writingEfetivo = JSON.parse(JSON.stringify(layoutAtual.writing_style_json));
+      }
+      if (!visualClonado && layoutAtual?.visual_config_json) {
+        visualClonado = JSON.parse(JSON.stringify(layoutAtual.visual_config_json));
+      }
+    } catch (_) {}
+  }
+
+  if (ordemOrgaos.length > 0) {
+    const seqBase = Array.isArray(writingEfetivo?.sequenciaOrgaos) ? writingEfetivo.sequenciaOrgaos : [];
+    const novaSequencia = ordemOrgaos.map(org => {
+      const orgUpper = String(org).trim().toUpperCase();
+      const achado = seqBase.find(o => String(o.orgao).trim().toUpperCase() === orgUpper);
+
+      let textoPadraoNormal = frasesNormalidade[orgUpper] || frasesNormalidade[org] || achado?.textoPadraoNormal || '';
+      if (!textoPadraoNormal) {
+        if (orgUpper === 'RIM ESQUERDO' || orgUpper === 'RIM DIREITO') {
+          textoPadraoNormal = 'Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente X,XX cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose.';
+        } else if (orgUpper === 'RINS') {
+          textoPadraoNormal = 'Localizados em topografia habitual, com contornos regulares, superfície lisa e dimensões preservadas (RE: X,XX cm; RD: X,XX cm). Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litíase ou hidronefrose.';
+        }
+      }
+
+      return {
+        orgao: orgUpper,
+        textoPadraoNormal,
+        ...(achado?.textoQuandoNaoVisualizada ? { textoQuandoNaoVisualizada: achado.textoQuandoNaoVisualizada } : {})
+      };
+    });
+
+    const querRinsSeparados = ordemOrgaos.some(o => /RIM\s+ESQUERDO/i.test(o)) && ordemOrgaos.some(o => /RIM\s+DIREITO/i.test(o));
+    const querRinsUnificados = ordemOrgaos.some(o => /^RINS$/i.test(String(o).trim()));
+
+    writingEfetivo = {
+      ...(writingEfetivo || {}),
+      sequenciaOrgaos: novaSequencia,
+      separarRinsEmDoisTopicos: querRinsSeparados,
+      incluirLinhaResumoRins: querRinsUnificados
+    };
+    tVis.writingStyleClonado = writingEfetivo;
+  }
+
+  // Remove linhas de CRMV de footerConfig.contactLines para evitar duplicação no rodapé
+  if (visualClonado?.footerConfig?.contactLines && Array.isArray(visualClonado.footerConfig.contactLines)) {
+    visualClonado.footerConfig.contactLines = visualClonado.footerConfig.contactLines.filter(
+      l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l)
+    );
+  }
+
+  // 3. Atualizar ou criar o registro no modelo PerfilLaudo
   const perfilAtualizado = await prisma.perfilLaudo.upsert({
     where: { usuarioId: String(usuarioId) },
     update: {
@@ -58,7 +123,7 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
       crmvDetectado: dados.crmvDetectado || null,
       clinicaDetectada: dados.clinicaDetectada || null,
       layoutDetectado: layout,
-      templateVisual: dados.templateVisual || dados.layoutDetectado || null
+      templateVisual: tVis
     },
     create: {
       usuarioId: String(usuarioId),
@@ -75,17 +140,12 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
       crmvDetectado: dados.crmvDetectado || null,
       clinicaDetectada: dados.clinicaDetectada || null,
       layoutDetectado: layout,
-      templateVisual: dados.templateVisual || dados.layoutDetectado || null
+      templateVisual: tVis
     }
   });
 
-  // 2. Sincronizar layout detectado (e template clonado geométrico, se presente) com ConfiguracaoLayout do usuário
-  const tVis = dados.templateVisual || {};
-  const visualClonado = tVis.visualConfigClonado || dados.perfilClonado?.layoutVisual || null;
-  const writingClonado = tVis.writingStyleClonado || dados.perfilClonado?.estiloEscritaClinica || null;
-  const ativosClonados = tVis.ativosVisuais || dados.perfilClonado?.ativosVisuais || {};
-
-  if (Object.keys(layout).length > 0 || visualClonado) {
+  // 4. Sincronizar layout detectado (e template clonado geométrico, se presente) com ConfiguracaoLayout do usuário
+  if (Object.keys(layout).length > 0 || visualClonado || writingEfetivo) {
     const payloadLayout = {
       font_family: layout.fontFamily,
       font_size_body: layout.fontSizeBody,
@@ -129,11 +189,13 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
         ...(ativosClonados.assinaturaUrl ? { assinaturaUrl: ativosClonados.assinaturaUrl } : {}),
         ...(ativosClonados.footerLogoUrl ? { footerLogoUrl: ativosClonados.footerLogoUrl } : {})
       };
-      payloadLayout.writing_style_json = writingClonado || null;
+      payloadLayout.writing_style_json = writingEfetivo || null;
       payloadLayout.header_banner_url = ativosClonados.headerBannerUrl || null;
       payloadLayout.footer_logo_url = ativosClonados.footerLogoUrl || null;
       payloadLayout.assinatura_extraida_url = ativosClonados.assinaturaUrl || null;
       payloadLayout.pdfs_referencia_qtd = quantidadeAmostras || 1;
+    } else if (writingEfetivo) {
+      payloadLayout.writing_style_json = writingEfetivo;
     }
     await salvarLayout(payloadLayout, { id: usuarioId, role: 'veterinario' });
   }

@@ -69,19 +69,130 @@ function sanitizarDadosPaciente(paciente, nomeClinica = '') {
 }
 
 /**
+ * Guia clínico universal de semiologia ultrassonográfica e diagnósticos diferenciais
+ * em pequenos animais (cães e gatos), garantindo interpretação visual rigorosa
+ * além da simples leitura de calipers.
+ */
+function obterGuiaSemiologiaUltrassom() {
+  return `
+---
+
+### GUIA CLÍNICO DE SEMIOLOGIA ULTRASSONOGRÁFICA E DIAGNÓSTICOS DIFERENCIAIS (CRITÉRIOS OBRIGATÓRIOS):
+
+1. BAÇO E ESPLENOMEGALIA (AVALIAÇÃO QUALITATIVA E TOPOGRÁFICA):
+   - ATENÇÃO: Na rotina ultrassonográfica veterinária, o baço NÃO possui mensuração métrica padrão única (calipers na tela). A esplenomegalia é diagnosticada VISUALMENTE por relações topográficas e bordos.
+   - Janela Baço x Rim Esquerdo (imagens com anotação "B" e "R", ou imagem com "BACO"):
+     * Se o parênquima da extremidade caudal do baço se estender caudalmente ultrapassando o polo cranial do rim esquerdo, ou se apresentar bordos abaulados/arredondados:
+       -> Laudar OBRIGATORIAMENTE: "Localizado em topografia habitual, com contornos regulares e bem definidos, com dimensões aumentadas, estendendo-se caudalmente e ultrapassando o polo cranial do rim esquerdo, parênquima com ecogenicidade usual e ecotextura homogênea."
+       -> Inserir na propriedade "diagDif": "PROCESSO INFLAMATÓRIO / INFECCIOSO / HEMOPARASITOSES" (se ecotextura homogênea usual); ou "ESPLENOMEGALIA DIFUSA, HEMATOPOIESE EXTRAMEDULAR, HIPERPLASIA LINFOIDE DIFUSA, INFILTRAÇÃO NEOPLÁSICA (LINFOMA)" (se ecotextura heterogênea/rendilhada).
+     * Somente laudar "dimensões preservadas" (diagDif: "") se o baço nitidamente não ultrapassar o polo cranial do rim esquerdo e mantiver bordos afilados.
+
+2. RINS (RIM ESQUERDO E RIM DIREITO) - DIFERENCIAÇÃO CÓRTICO-MEDULAR E PATOLOGIAS:
+   - Extraia as medidas nos calipers ("RE" e "RD").
+   - Inspecione a diferenciação córtico-medular e a ecogenicidade cortical:
+     * Se houver perda da nitidez ou contraste entre o córtex e as pirâmides medulares (ou hiperecogenicidade difusa do córtex):
+       -> Descrever: "Observa-se perda da diferenciação córticomedular."
+       -> diagDif: "NEFROPATIA CRÔNICA, NEFROTOXICIDADE, PROCESSO INFLAMATÓRIO/ INFECCIOSO OU INFILTRATIVO".
+     * Se ecogenicidade cortical aumentada com diferenciação mantida:
+       -> diagDif: "NEFROPATIA AGUDA, PROCESSOS TÓXICOS, GLOMERULONEFRITE".
+     * Se cálculo com sombra acústica posterior limpa:
+       -> diagDif: "NEFROLITÍASE, UROLÍTIASE".
+     * Se dilatação anecogênica da pelve/divertículos:
+       -> diagDif: "HIDRONEFROSE, OBSTRUÇÃO URETERAL".
+
+3. FÍGADO E HEPATOMEGALIA:
+   - Avaliar dimensões pela projeção dos bordos hepáticos em relação ao gradil costal e estômago:
+     * Se o bordo hepático ultrapassar o gradil costal ou apresentar margens arredondadas:
+       -> Descrever: "dimensões aumentadas, ultrapassando o bordo costal e contornos regulares [ou arredondados]".
+     * Ecogenicidade do parênquima:
+       - Se aumentada/hiperecogênica (parênquima mais brilhante que o córtex renal):
+         -> diagDif: "HEPATOPATIA REACIONAL, LIPIDOSE HEPÁTICA, HEPATITE, FIBROSE, INFILTRADO GORDUROSO".
+       - Se diminuída/hipoecogênica difusa:
+         -> diagDif: "HEPATITE AGUDA, CONGESTÃO HEPÁTICA".
+       - Se heterogênea ou com nódulos:
+         -> Descrever dimensões e diagDif: "HEPATOPATIA CRÔNICA, HIPERPLASIA NODULAR, PROCESSO NEOPLÁSICO".
+
+4. BEXIGA - ESPESSURA PARIETAL, SEDIMENTOS E URÓLITOS:
+   - Critérios métricos de espessura de parede:
+     * Cães: normal até 0,25 cm. Acima de 0,25 cm -> "paredes espessadas, com margens internas irregulares".
+     * Gatos: normal 0,13 a 0,15 cm. Acima de 0,15 cm -> "paredes espessadas, com margens internas irregulares".
+   - Conteúdo luminal:
+     * Imagens marcadas como "UROLITOS", "CALC", "SED" ou visualização de focos hiperecogênicos com forte sombra acústica posterior:
+       -> Extrair as medidas de TODOS os calipers na bexiga (ex: "medindo cerca de 0,59 cm, 0,69 cm e 0,74 cm, acompanhados de sombra acústica distal").
+       -> diagDif: "SEDIMENTOS ASSOCIADOS A URÓLITOS URINÁRIOS" ou "UROLÍTIASE, CISTITE".
+     * Se apenas espessamento de parede sem cálculos: diagDif: "CISTITE".
+
+5. ESTÔMAGO:
+   - Parede: normal até 0,50 cm em cães e 0,36 cm em gatos. Se superior -> "paredes espessadas, medindo X,XX cm" com diagDif: "GASTRITE (AGUDA / CRÔNICA), ENTEROPATIA INFLAMATÓRIA, ULCERAÇÃO GÁSTRICA, PROCESSO NEOPLÁSICO INFILTRATIVO".
+   - Descrever pregueamento mucoso e presença de gás/conteúdo fluido.
+
+6. VESÍCULA BILIAR:
+   - Parede: normal até 0,10 cm. Se > 0,10 cm -> paredes espessadas ("COLECISTITE").
+   - Conteúdo:
+     * Se sedimento ecogênico móvel em região dependente -> diagDif: "LAMA BILIAR, ESTASE BILIAR, COLANGITE".
+     * Se padrão estrelado/septado em roda de carroça imóvel -> diagDif: "MUCOCELE BILIAR".
+     * Se cálculos com sombra acústica -> diagDif: "COLELITÍASE, COLECISTITE".
+
+7. ALÇAS INTESTINAIS:
+   - Extrair medidas dos calipers nas imagens DUO (duodeno: normal até 0,35 cm), JJ (jejuno: normal até 0,25 cm) e CD (cólon: normal até 0,15 cm).
+   - Avaliar motilidade e preservação da estratificação parietal em 5 camadas.
+
+8. GLÂNDULAS ADRENAIS:
+   - Extrair as 3 medidas de AE e AD quando visíveis (polo cranial, polo caudal e comprimento). Se formato preservado -> dimensões preservadas. Se aumento nodular assimétrico -> diagDif: "HIPERADRENOCORTICISMO, NEOPLASIA ADRENAL".
+
+9. CAVIDADE ABDOMINAL:
+   - Se houver acúmulo de líquido anecogênico interalças (efusão) -> descrever presença de líquido livre e atribuir diagDif: "EFUSÃO PERITONEAL / ASCITE". Se ausente -> "Ausência de liquido livre, sem alterações evidentes em linfonodos abdominais."
+`;
+}
+
+/**
  * Constrói o prompt customizado de forma 100% agnóstica quando o médico veterinário
  * possui um estilo clonado de PDFs, garantindo que a ordem, a capitalização,
  * as listas com traços ("- "), observações ("Obs.:") e frases padrão sigam fielmente o médico.
  */
-function construirPromptClonado(estiloClinico, nomeClinica, identificacaoProfissional) {
-  const orgaos = Array.isArray(estiloClinico?.sequenciaOrgaos) ? estiloClinico.sequenciaOrgaos : [];
-  const listaOrgaosInstrucao = orgaos.map((o, idx) => {
-    let linha = `${idx + 1}. "${o.orgao}": Frase padrão quando normal -> ${JSON.stringify(o.textoPadraoNormal || '')}`;
-    if (o.textoQuandoNaoVisualizada) {
-      linha += ` | Quando não visualizado -> ${JSON.stringify(o.textoQuandoNaoVisualizada)}`;
+function construirPromptClonado(estiloClinico, nomeClinica, identificacaoProfissional, opcoesOrgaos = {}) {
+  const ordemDesejada = (Array.isArray(opcoesOrgaos.ordemOrgaos) && opcoesOrgaos.ordemOrgaos.length > 0)
+    ? opcoesOrgaos.ordemOrgaos
+    : (Array.isArray(estiloClinico?.sequenciaOrgaos) ? estiloClinico.sequenciaOrgaos.map(o => o.orgao) : []);
+
+  const frasesNormalidade = opcoesOrgaos.frasesNormalidade || {};
+  const sequenciaOriginal = Array.isArray(estiloClinico?.sequenciaOrgaos) ? estiloClinico.sequenciaOrgaos : [];
+
+  const listaOrgaosInstrucao = (ordemDesejada.length > 0 ? ordemDesejada : sequenciaOriginal.map(o => o.orgao)).map((nomeOrg, idx) => {
+    const nomeNorm = String(nomeOrg).trim().toUpperCase();
+    const itemOriginal = sequenciaOriginal.find(o => String(o.orgao).trim().toUpperCase() === nomeNorm);
+
+    let textoNormal = frasesNormalidade[nomeNorm] || frasesNormalidade[nomeOrg] || itemOriginal?.textoPadraoNormal || '';
+    if (!textoNormal) {
+      if (nomeNorm === 'RIM ESQUERDO' || nomeNorm === 'RIM DIREITO') {
+        textoNormal = 'Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente X,XX cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose.';
+      } else if (nomeNorm === 'RINS') {
+        textoNormal = 'Localizados em topografia habitual, com contornos regulares, superfície lisa e dimensões preservadas (RE: X,XX cm; RD: X,XX cm). Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litíase ou hidronefrose.';
+      }
+    }
+
+    let linha = `${idx + 1}. "${nomeNorm}": Frase padrão quando normal -> ${JSON.stringify(textoNormal)}`;
+    if (itemOriginal?.textoQuandoNaoVisualizada) {
+      linha += ` | Quando não visualizado -> ${JSON.stringify(itemOriginal.textoQuandoNaoVisualizada)}`;
     }
     return linha;
   }).join('\n   ');
+
+  const querRinsSeparados = ordemDesejada.some(o => /RIM\s+ESQUERDO/i.test(o)) && ordemDesejada.some(o => /RIM\s+DIREITO/i.test(o));
+  const querRinsUnificados = ordemDesejada.some(o => /^RINS$/i.test(String(o).trim()));
+
+  const regraRins = querRinsSeparados
+    ? `- REGRA ESTRITA DOS RINS (DIVISÃO OBRIGATÓRIA):
+     * A sequência dos órgãos EXIGE "RIM ESQUERDO" e "RIM DIREITO" como tópicos SEPARADOS.
+     * É TERMINANTEMENTE PROIBIDO agrupar em "RINS".
+     * Você DEVE gerar obrigatoriamente um objeto para "RIM ESQUERDO" e outro para "RIM DIREITO" no array "laudo".
+     * Para "RIM ESQUERDO": identifique a imagem com a sigla RE e extraia a medida aferida nos calipers (ex: medindo aproximadamente X,XX cm).
+     * Para "RIM DIREITO": identifique a imagem com a sigla RD e extraia a medida aferida nos calipers (ex: medindo aproximadamente X,XX cm).`
+    : (querRinsUnificados
+        ? `- REGRA DOS RINS (UNIFICADOS):
+     * A sequência dos órgãos exige "RINS" agrupado em tópico único.
+     * Descreva ambos no mesmo parágrafo "RINS", incluindo as dimensões de RE e RD juntas (ex: "RE: X,XX cm; RD: X,XX cm"). Não separe em RIM ESQUERDO e RIM DIREITO.`
+        : '');
 
   const regraSubitens = estiloClinico?.usarSubitensComTraco
     ? `- PRESERVE AS QUEBRAS DE LINHA E OS TRAÇOS ("\\n- "): nos órgãos cujo modelo padrão usa sub-itens com traço (como ADRENAIS com "\\n- Adrenal esquerda..." e "\\n- Adrenal direita...", ou INTESTINOS com "\\n- Duodeno:...", "\\n- Jejuno:...", "\\n- Íleo:...", "\\n- Cólon..."), mantenha EXATAMENTE esse formato de múltiplas linhas iniciadas por "\\n- " dentro do campo "texto" do JSON.`
@@ -118,14 +229,48 @@ Sua missão é realizar a análise técnica das imagens de ultrassom fornecidas 
    ${listaOrgaosInstrucao}
 
 3. FORMATAÇÃO ESTRUTURAL, CONCLUSÃO E SEXO:
+   ${regraRins}
    ${regraSubitens}
    ${regraObsItalico}
    ${regraDiagDif}
    ${regraSexo}
+
+${obterGuiaSemiologiaUltrassom()}
 `;
 }
 
-function construirPromptPadraoVetaro(nomeClinica, identificacaoProfissional) {
+function construirPromptPadraoVetaro(nomeClinica, identificacaoProfissional, opcoesOrgaos = {}) {
+  const ordemDesejada = (Array.isArray(opcoesOrgaos.ordemOrgaos) && opcoesOrgaos.ordemOrgaos.length > 0)
+    ? opcoesOrgaos.ordemOrgaos
+    : [
+        'BEXIGA',
+        'RIM ESQUERDO',
+        'RIM DIREITO',
+        'BAÇO',
+        'ESTOMAGO',
+        'FÍGADO',
+        'VESICULA BILIAR',
+        'ALÇAS INTESTINAIS',
+        'GLANDULA ADRENAL',
+        'PANCREAS',
+        'CAVIDADE ABDOMINAL',
+        'CONSIDERAÇÕES'
+      ];
+
+  const querRinsSeparados = ordemDesejada.some(o => /RIM\s+ESQUERDO/i.test(o)) && ordemDesejada.some(o => /RIM\s+DIREITO/i.test(o));
+  const querRinsUnificados = ordemDesejada.some(o => /^RINS$/i.test(String(o).trim()));
+
+  const regraRins = querRinsSeparados
+    ? `- REGRA ESTRITA DOS RINS (DIVISÃO OBRIGATÓRIA):
+   * O laudo DEVE conter "RIM ESQUERDO" e "RIM DIREITO" como tópicos separados.
+   * JAMAIS agrupe em "RINS". Extraia a medida da imagem RE para o "RIM ESQUERDO" e da imagem RD para o "RIM DIREITO".`
+    : (querRinsUnificados
+        ? `- REGRA DOS RINS (UNIFICADOS):
+   * O laudo DEVE conter um único tópico "RINS", descrevendo ambos conjuntamente com as medidas de RE e RD (ex: "RE: X,XX cm; RD: X,XX cm").`
+        : '');
+
+  const listaOrgaosTexto = ordemDesejada.map(o => `   - ${o}`).join('\n');
+
   return `
 Você é um médico veterinário especialista em diagnóstico por imagem (ultrassonografia abdominal de cães e gatos).
 Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultrassom fornecidas e estruturar os dados no Padrão Vetaro (${nomeClinica} - ${identificacaoProfissional}).
@@ -140,24 +285,15 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
 
 2. ORDEM ESTRITA DOS ÓRGÃOS NO LAUDO:
    O laudo DEVE conter os órgãos na seguinte ordem exata:
-   - BEXIGA
-   - RIM ESQUERDO
-   - RIM DIREITO
-   - BAÇO
-   - ESTOMAGO
-   - FÍGADO
-   - VESICULA BILIAR
-   - ALÇAS INTESTINAIS
-   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD), ÚTERO (ou histórico de ovariosalpingohisterectomia; medidas e achados de cornos uterinos CUE, CUD e corpo devem ser descritos conjuntamente no tópico ÚTERO). JAMAIS inclua PRÓSTATA em fêmeas.
+${listaOrgaosTexto}
+   - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD se visíveis), ÚTERO (ou histórico de ovariosalpingohisterectomia; medidas e achados de cornos uterinos CUE, CUD e corpo devem ser descritos conjuntamente no tópico ÚTERO). JAMAIS inclua PRÓSTATA em fêmeas.
    - Se Macho: TESTICULO ESQUERDO, TESTICULO DIREITO, PROSTATA (ou histórico de orquiectomia)
-   - GLANDULA ADRENAL
-   - PANCREAS
-   - CAVIDADE ABDOMINAL
-   - CONSIDERAÇÕES
 
 3. CRITÉRIOS ESPECÍFICOS POR ÓRGÃO:
+${regraRins}
 - BEXIGA: Começar com "Em topografia habitual com formato preservado e repleção liquida [pouca / adequada / cheia]...".
 - RIM ESQUERDO e RIM DIREITO: "Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente X,XX cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose."
+- RINS (se unificado): "Localizados em topografia habitual, com contornos regulares, superfície lisa e dimensões preservadas (RE: X,XX cm; RD: X,XX cm). Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litíase ou hidronefrose."
 - BAÇO: "Localizado em topografia habitual, com contornos regulares, bem definidos, com dimensões preservadas..."
 - ESTOMAGO: "Localizado em topografia habitual, paredes [normoespessas / espessadas], medindo X,XX cm, mucosas com pregueamento usual..."
 - FÍGADO: "Localizado em topografia habitual, apresenta-se, na porção visível, com dimensões aparentemente preservadas e contornos regulares..."
@@ -168,17 +304,19 @@ Sua missão é realizar a pré-análise técnica minuciosa das imagens de ultras
 - CAVIDADE ABDOMINAL: "Ausência de liquido livre, sem alterações evidentes em linfonodos abdominais."
 - CONSIDERAÇÕES: "Sugere-se acompanhamento ultrassonográfico das alterações visibilizadas. Associar a exames complementares."
 - IMPORTANTE: Não escreva "DIAG DIF.:" dentro de "texto"; coloque os diagnósticos diferenciais exclusivamente na propriedade "diagDif" do objeto JSON.
+
+${obterGuiaSemiologiaUltrassom()}
 `;
 }
 
 async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosCandidatos = [
-    'gemini-flash-lite-latest',
-    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
     'gemini-flash-latest',
     'gemini-3.5-flash',
-    'gemini-3.8-flash'
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash-lite'
   ];
 
   const usuario = opcoes.usuario || null;
@@ -194,10 +332,14 @@ async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
     ? `${usuario.nome}${usuario.crmv ? ' - ' + usuario.crmv : ''}`
     : 'Médico(a) Veterinário(a)';
 
-  const ordemOrgaos = opcoes.ordemOrgaos ||
-    opcoes.perfilLaudo?.ordemOrgaos ||
-    (Array.isArray(layout?.writing_style_json?.sequenciaOrgaos) ? layout.writing_style_json.sequenciaOrgaos.map(o => o.orgao) : null) ||
-    [];
+  const perfilLaudo = opcoes.perfilLaudo || null;
+
+  const ordemOrgaos = (Array.isArray(opcoes.ordemOrgaos) && opcoes.ordemOrgaos.length > 0)
+    ? opcoes.ordemOrgaos
+    : (Array.isArray(perfilLaudo?.ordemOrgaos) && perfilLaudo.ordemOrgaos.length > 0)
+      ? perfilLaudo.ordemOrgaos
+      : (Array.isArray(layout?.writing_style_json?.sequenciaOrgaos) ? layout.writing_style_json.sequenciaOrgaos.map(o => o.orgao) : null) ||
+        [];
 
   const usarEstiloClonado = Boolean(
     layout &&
@@ -206,9 +348,14 @@ async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
     Array.isArray(layout.writing_style_json.sequenciaOrgaos)
   );
 
+  const opcoesOrgaos = {
+    ordemOrgaos,
+    frasesNormalidade: perfilLaudo?.frasesNormalidade || {}
+  };
+
   const blocoRegras = usarEstiloClonado
-    ? construirPromptClonado(layout.writing_style_json, nomeClinica, identificacaoProfissional)
-    : construirPromptPadraoVetaro(nomeClinica, identificacaoProfissional);
+    ? construirPromptClonado(layout.writing_style_json, nomeClinica, identificacaoProfissional, opcoesOrgaos)
+    : construirPromptPadraoVetaro(nomeClinica, identificacaoProfissional, opcoesOrgaos);
 
   const promptInstrucoes = `${blocoRegras}
 
@@ -302,6 +449,11 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
       const jsonParsed = JSON.parse(jsonClean);
 
       jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
+      jsonParsed.laudo = reconciliarLaudoComOrdemOrgaos(
+        jsonParsed.laudo,
+        ordemOrgaos,
+        opcoes.perfilLaudo?.frasesNormalidade || {}
+      );
 
       const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
 
@@ -325,11 +477,11 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
     console.log(`💳 [ANALISADOR IA] Chave principal/free esgotada ou indisponível. Acionando fallback para CHAVE PAGA...`);
     const genAIPaid = new GoogleGenerativeAI(paidApiKey);
     const modelosPagos = [
-      'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite',
-      'gemini-flash-latest',
       'gemini-3.8-flash',
-      'gemini-3.5-flash'
+      'gemini-flash-latest',
+      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite'
     ];
 
     for (const nomeModeloPago of modelosPagos) {
@@ -343,6 +495,11 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
         const jsonParsed = JSON.parse(jsonClean);
 
         jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
+      jsonParsed.laudo = reconciliarLaudoComOrdemOrgaos(
+        jsonParsed.laudo,
+        ordemOrgaos,
+        opcoes.perfilLaudo?.frasesNormalidade || {}
+      );
 
         const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
 
@@ -466,6 +623,117 @@ function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomes
   return itens.map(i => i.caminho);
 }
 
+/**
+ * Garante que o array `laudo` gerado pela IA obedeça estritamente à divisão/unificação dos rins
+ * e à ordem exata configurada pelo médico veterinário no perfil/layout.
+ */
+function reconciliarLaudoComOrdemOrgaos(laudoArray = [], ordemDesejada = [], frasesNormalidade = {}) {
+  if (!Array.isArray(laudoArray) || laudoArray.length === 0) return [];
+  if (!Array.isArray(ordemDesejada) || ordemDesejada.length === 0) return laudoArray;
+
+  const itens = JSON.parse(JSON.stringify(laudoArray));
+  const querRinsSeparados = ordemDesejada.some(o => /RIM\s+ESQUERDO/i.test(o)) && ordemDesejada.some(o => /RIM\s+DIREITO/i.test(o));
+  const querRinsUnificados = ordemDesejada.some(o => /^RINS$/i.test(String(o).trim()));
+
+  const idxRins = itens.findIndex(it => /^RINS$/i.test((it.orgao || '').trim()));
+  const idxRE = itens.findIndex(it => /^(RIM\s+ESQUERDO|RE)$/i.test((it.orgao || '').trim()));
+  const idxRD = itens.findIndex(it => /^(RIM\s+DIREITO|RD)$/i.test((it.orgao || '').trim()));
+
+  // Caso 1: Usuário quer RINS SEPARADOS (RIM ESQUERDO e RIM DIREITO), mas a IA devolveu RINS unificado
+  if (querRinsSeparados && idxRins !== -1 && (idxRE === -1 || idxRD === -1)) {
+    const itemRins = itens[idxRins];
+    const textoRins = itemRins.texto || '';
+
+    // Extrai medidas de RE e RD do texto de RINS se presentes (ex: "RE: 4,13 cm; RD: 5,01 cm" ou "RE: 4.13 cm")
+    const matchRE = textoRins.match(/RE:\s*([\d,.]+)\s*cm/i);
+    const matchRD = textoRins.match(/RD:\s*([\d,.]+)\s*cm/i);
+    const medidaRE = matchRE ? matchRE[1].replace('.', ',') : null;
+    const medidaRD = matchRD ? matchRD[1].replace('.', ',') : null;
+
+    // Remove referências a RE e RD unificados do texto base
+    let textoBase = textoRins
+      .replace(/\(RE:\s*[\d,.]+\s*cm[;,]\s*RD:\s*[\d,.]+\s*cm\)/gi, '')
+      .replace(/\bLocalizados\b/gi, 'Localizado')
+      .trim();
+
+    function adaptarTextoRim(base, medida, fraseCustom) {
+      if (fraseCustom) return fraseCustom;
+      if (!base) {
+        return medida
+          ? `Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente ${medida} cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose.`
+          : 'Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose.';
+      }
+      let t = base;
+      if (medida) {
+        if (/medindo\s+aproximadamente\s*[\d,.]*\s*cm/i.test(t)) {
+          t = t.replace(/medindo\s+aproximadamente\s*[\d,.]*\s*cm/i, `medindo aproximadamente ${medida} cm`);
+        } else if (/dimensões\s+preservadas/i.test(t)) {
+          t = t.replace(/(dimensões\s+preservadas)/i, `$1, medindo aproximadamente ${medida} cm`);
+        } else if (/Localizado\s+em\s+topografia\s+habitual,/i.test(t)) {
+          t = t.replace(/(Localizado\s+em\s+topografia\s+habitual,)/i, `$1 com dimensões preservadas, medindo aproximadamente ${medida} cm,`);
+        }
+      }
+      return t;
+    }
+
+    const frasePadraoRE = adaptarTextoRim(textoBase, medidaRE, frasesNormalidade['RIM ESQUERDO']);
+    const frasePadraoRD = adaptarTextoRim(textoBase, medidaRD, frasesNormalidade['RIM DIREITO']);
+
+    const itemRE = {
+      orgao: 'RIM ESQUERDO',
+      texto: frasePadraoRE,
+      diagDif: itemRins.diagDif || ''
+    };
+    const itemRD = {
+      orgao: 'RIM DIREITO',
+      texto: frasePadraoRD,
+      diagDif: itemRins.diagDif || ''
+    };
+
+    itens.splice(idxRins, 1, itemRE, itemRD);
+  }
+
+  // Caso 2: Usuário quer RINS UNIFICADO, mas a IA devolveu RIM ESQUERDO e RIM DIREITO separados
+  if (querRinsUnificados && idxRins === -1 && idxRE !== -1 && idxRD !== -1) {
+    const itemRE = itens[idxRE];
+    const itemRD = itens[idxRD];
+    const matchRE = (itemRE.texto || '').match(/([\d,.]+)\s*cm/);
+    const matchRD = (itemRD.texto || '').match(/([\d,.]+)\s*cm/);
+    const reStr = matchRE ? matchRE[1].replace('.', ',') : 'X,XX';
+    const rdStr = matchRD ? matchRD[1].replace('.', ',') : 'X,XX';
+
+    const diagCombinado = [itemRE.diagDif, itemRD.diagDif].filter(Boolean).join(', ');
+    const itemRinsUnificado = {
+      orgao: 'RINS',
+      texto: `Localizados em topografia habitual, com contornos regulares, superfície lisa e dimensões preservadas (RE: ${reStr} cm; RD: ${rdStr} cm). Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litíase ou hidronefrose.`,
+      diagDif: diagCombinado
+    };
+
+    const menorIdx = Math.min(idxRE, idxRD);
+    const maiorIdx = Math.max(idxRE, idxRD);
+    itens.splice(maiorIdx, 1);
+    itens.splice(menorIdx, 1, itemRinsUnificado);
+  }
+
+  // Ordenação final canônica: Reordena os tópicos estritamente pela sequência de ordemDesejada
+  const mapaOrdem = new Map();
+  ordemDesejada.forEach((org, pos) => {
+    mapaOrdem.set(String(org).trim().toUpperCase(), pos);
+  });
+
+  itens.sort((a, b) => {
+    const posA = mapaOrdem.has(String(a.orgao).trim().toUpperCase())
+      ? mapaOrdem.get(String(a.orgao).trim().toUpperCase())
+      : 999;
+    const posB = mapaOrdem.has(String(b.orgao).trim().toUpperCase())
+      ? mapaOrdem.get(String(b.orgao).trim().toUpperCase())
+      : 999;
+    return posA - posB;
+  });
+
+  return itens;
+}
+
 module.exports = {
   analisarExameComIA,
   construirPromptClonado,
@@ -473,5 +741,6 @@ module.exports = {
   ordenarImagensCanonicamente,
   construirMapaPrioridades,
   sanitizarDadosPaciente,
+  reconciliarLaudoComOrdemOrgaos,
   MAPA_ORDEM_CANONICA
 };

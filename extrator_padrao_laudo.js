@@ -636,8 +636,20 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
   const footerLinesSig = (sigPageObj?.lines || []).filter(l => l.yMin >= sigFooterYMin);
   const footerLinesRef = footerLinesSig.length > 0 ? footerLinesSig : footerLinesP1;
 
-  const contactLines = footerLinesRef.filter(l => /CRMV|@|outlook|gmail|tel|\(\d{2}\)/i.test(l.text));
-  const disclaimerLines = footerLinesRef.filter(l => !contactLines.includes(l) && l.text.trim().length > 10);
+  // Linhas de contato de clínica (endereço, telefone, email, etc. - NUNCA CRMV nem identificação do médico)
+  const contactLines = footerLinesRef.filter(l =>
+    !/CRMV/i.test(l.text) &&
+    !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l.text) &&
+    (crmvBlock ? (l.yMin > crmvBlock.yMax + 5 || l.page !== crmvBlock.page) : true) &&
+    /@|outlook|gmail|tel|\(\d{2}\)|rua|av\.|avenida|alameda|rodovia|bairro|cep|fone|whatsapp/i.test(l.text)
+  );
+  const disclaimerLines = footerLinesRef.filter(l =>
+    !contactLines.includes(l) &&
+    !/CRMV/i.test(l.text) &&
+    !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l.text) &&
+    (crmvBlock ? (l.yMin > crmvBlock.yMax + 5 || l.page !== crmvBlock.page) : true) &&
+    l.text.trim().length > 10
+  );
 
   const footerTextYMinPt = footerLinesRef.length > 0 ? Math.min(...footerLinesRef.map(l => l.yMin)) : null;
   const footerTextYMaxPt = footerLinesRef.length > 0 ? Math.max(...footerLinesRef.map(l => l.yMax)) : null;

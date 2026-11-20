@@ -68,7 +68,7 @@ function sanitizarPerfilExtraido(bruto = {}) {
     posicaoAssinatura: sanitizeStr(tVisual.posicaoAssinatura, 'direita'),
     linhaAssinatura: tVisual.linhaAssinatura !== undefined ? Boolean(tVisual.linhaAssinatura) : true,
     textoAvisoLegal: sanitizeStr(tVisual.textoAvisoLegal, 'O exame ultrassonográfico é um método complementar e deve ser correlacionado com o quadro clínico e exames laboratoriais do paciente.'),
-    rodapeContato: sanitizeStr(tVisual.rodapeContato, ''),
+    rodapeContato: sanitizeStr(tVisual.rodapeContato, '').replace(/CRMV[^\s,;•]*/gi, '').replace(/^[\s,;•\-]+|[\s,;•\-]+$/g, '').trim(),
     corPrimaria,
     corSecundaria,
     corFundoBlocos: sanitizeStr(tVisual.corFundoBlocos, '#F8FAFC'),
@@ -193,7 +193,7 @@ Identifique minuciosamente como as páginas foram diagramadas:
 - "posicaoAssinatura": Onde fica a assinatura do médico? "direita", "centro" ou "esquerda".
 - "linhaAssinatura": true se há linha horizontal para assinatura/carimbo, false se não.
 - "textoAvisoLegal": O texto exato da nota legal / disclaimer que aparece no rodapé do laudo (extraia o texto que este médico realmente usa).
-- "rodapeContato": Endereço, telefone, WhatsApp ou e-mail que aparecem no cabeçalho ou rodapé.
+- "rodapeContato": Endereço, telefone, WhatsApp ou e-mail que aparecem no cabeçalho ou rodapé (ATENÇÃO: NUNCA inclua CRMV nem nome do médico veterinário aqui; CRMV pertence exclusivamente ao crmvDetectado e à assinatura).
 
 - "corPrimaria": Cor predominante em hexadecimal (usada nos títulos, faixas ou logo).
 - "corSecundaria": Cor de apoio em hexadecimal (usada em linhas, subtítulos ou bordas).

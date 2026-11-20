@@ -285,4 +285,34 @@ describe('Motor 100% Agnóstico de Clonagem Visual e Textual de Laudos (1 a 10 P
     expect(normalizarRotuloResponsavel('TUTOR')).toBe('RESPONSÁVEL');
     expect(normalizarRotuloResponsavel('Nome:')).toBe('Nome:');
   });
+
+  test('gerarHtmlTemplateClonado nunca insere CRMV dentro do bloco de rodapé (contact-lines)', () => {
+    const layoutComCrmvNoRodape = {
+      modo_template: 'clonado_pdf',
+      visual_config_json: {
+        stationeryMode: 'inline_logo_header',
+        footerConfig: {
+          showOnTextPages: 'all_text_pages',
+          disclaimerText: 'Aviso legal de teste',
+          contactLines: ['CRMV/MG: 22904', 'Dra. Camila Bastos', 'Av. Amazonas 100 • (31) 9999-9999']
+        }
+      }
+    };
+
+    const html = gerarHtmlTemplateClonado(
+      { nome: 'Thor', sexo: 'Macho' },
+      [{ orgao: 'BEXIGA', texto: 'Normal' }],
+      [],
+      layoutComCrmvNoRodape
+    );
+
+    // CRMV deve estar na assinatura, MAS NUNCA dentro de contact-lines no rodapé
+    expect(html).toContain('contact-lines');
+    expect(html).toContain('Av. Amazonas 100');
+    // Verifica que contact-lines não contém CRMV nem nome do médico
+    const contactBlockMatch = html.match(/<div class="contact-lines">([\s\S]*?)<\/div>/);
+    expect(contactBlockMatch).not.toBeNull();
+    expect(contactBlockMatch[1]).not.toContain('CRMV');
+    expect(contactBlockMatch[1]).not.toContain('Camila Bastos');
+  });
 });

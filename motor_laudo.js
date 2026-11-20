@@ -405,12 +405,17 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     <div class="final-footer-wrap">
       ${fCfg.hasTopBorder ? `<div class="footer-top-border"></div>` : ''}
       ${fCfg.disclaimerText ? `<div class="disclaimer-text">${fCfg.disclaimerText}</div>` : ''}
-      ${(fCfg.contactLines && fCfg.contactLines.length > 0) ? `
-        <div class="contact-divider"></div>
-        <div class="contact-lines">
-          ${fCfg.contactLines.map(l => `<p>${l}</p>`).join('\n')}
-        </div>
-      ` : ''}
+      ${(() => {
+        const linhasContatoEfetivas = (fCfg.contactLines && Array.isArray(fCfg.contactLines))
+          ? fCfg.contactLines.filter(l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l))
+          : [];
+        return linhasContatoEfetivas.length > 0 ? `
+          <div class="contact-divider"></div>
+          <div class="contact-lines">
+            ${linhasContatoEfetivas.map(l => `<p>${l}</p>`).join('\n')}
+          </div>
+        ` : '';
+      })()}
       ${(fCfg.showFooterLogo && footerLogoUri) ? `
         <div class="footer-mini-logo-wrap">
           <img src="${footerLogoUri}" class="footer-mini-logo" alt="Logo Rodapé">

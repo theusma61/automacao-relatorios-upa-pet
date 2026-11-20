@@ -566,10 +566,14 @@ function criarRodapeDocx(usarModoClonado, visual, footerLogoPath, textoAvisoFall
     );
   }
 
-  if (usarModoClonado && Array.isArray(fCfg.contactLines) && fCfg.contactLines.length > 0) {
+  const linhasContatoEfetivasDocx = (usarModoClonado && Array.isArray(fCfg.contactLines))
+    ? fCfg.contactLines.filter(l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l))
+    : [];
+
+  if (linhasContatoEfetivasDocx.length > 0) {
     const fonteContato = extrairNomeFontePrincipal(fCfg.contactFontFamily, fonteRodape);
     const szContato = ptParaHalfPoints(fCfg.contactFontSize || '8.5pt', 17);
-    fCfg.contactLines.forEach((linha, idx) => {
+    linhasContatoEfetivasDocx.forEach((linha, idx) => {
       rodapeChildren.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
