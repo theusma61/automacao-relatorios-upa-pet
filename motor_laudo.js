@@ -391,7 +391,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
 
     inlineHeaderHtml = `
       <div class="inline-page-header" style="height: ${inlineHeaderHeightMm}mm;">
-        ${headerLogoUri ? `<img src="${headerLogoUri}" class="inline-header-logo" style="left: ${logoBox.xMm}mm; top: ${logoBox.yMm}mm; width: ${logoBox.widthMm}mm; height: ${logoBox.heightMm}mm;" alt="Logo">` : ''}
+        ${headerLogoUri ? `<img src="${headerLogoUri}" class="inline-header-logo" style="left: ${logoBox.xMm}mm; top: ${logoBox.yMm}mm; width: ${logoBox.widthMm}mm; height: ${logoBox.heightMm}mm; object-position: ${logoBox.side === 'right' ? 'right center' : 'left center'};" alt="Logo">` : ''}
         ${colsPosHtml}
         ${temDivisorInferior ? `<div class="inline-header-divider" style="left: ${margins.left || '20mm'}; right: ${margins.right || '20mm'};"></div>` : ''}
       </div>
@@ -649,6 +649,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     .inline-header-logo {
       position: absolute;
       object-fit: contain;
+      object-position: left center;
       display: block;
     }
     .inline-patient-col {
@@ -1116,8 +1117,8 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       }
     }
     .header { display: flex; align-items: center; margin-bottom: ${autoFit.marginHeaderBottom}; border-bottom: 1px solid #d1d5db; padding-bottom: ${autoFit.paddingHeaderBottom}; }
-    .logo-box { width: 140px; display: flex; align-items: center; }
-    .logo-img { max-width: 130px; max-height: ${autoFit.logoMaxHeight}; object-fit: contain; }
+    .logo-box { width: 155px; max-height: 68px; display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0; }
+    .logo-img { width: auto; height: auto; max-width: 100%; max-height: ${autoFit.logoMaxHeight}; object-fit: contain; object-position: left center; display: block; }
     .patient-info { flex: 1; display: flex; justify-content: space-between; font-size: 10pt; }
     .patient-info .col { width: 48%; }
     .patient-info .col p { margin: 1.5px 0; }

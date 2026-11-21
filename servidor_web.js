@@ -370,21 +370,26 @@ app.post('/api/perfil/profissional', exigirAutenticacao, (req, res, next) => {
 
     const atualizado = await atualizarPerfilProfissional(req.usuario.id, dados);
 
-    // Espelhamento para diretório de templates do usuário para redundância máxima
+    // Espelhamento para diretórios de templates (laudos e cirurgia) do usuário para redundância máxima
     const userIdSafe = String(req.usuario.id).replace(/[^a-zA-Z0-9_-]/g, '');
     const pastaTemplatesUsuario = path.join(templatesDir, userIdSafe);
-    if (!fs.existsSync(pastaTemplatesUsuario)) {
-      try { fs.mkdirSync(pastaTemplatesUsuario, { recursive: true }); } catch (_) {}
-    }
+    const pastaTemplatesCirurgiaUsuario = path.join(templatesCirurgiaDir, userIdSafe);
+    [pastaTemplatesUsuario, pastaTemplatesCirurgiaUsuario].forEach((dir) => {
+      if (!fs.existsSync(dir)) {
+        try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+      }
+    });
 
     if (logoFile && fs.existsSync(logoFile.path)) {
       const ext = path.extname(logoFile.path).toLowerCase() || '.png';
-      try {
-        fs.copyFileSync(logoFile.path, path.join(pastaTemplatesUsuario, `header_logo${ext}`));
-        if (ext !== '.png') {
-          fs.copyFileSync(logoFile.path, path.join(pastaTemplatesUsuario, 'header_logo.png'));
-        }
-      } catch (_) {}
+      [pastaTemplatesUsuario, pastaTemplatesCirurgiaUsuario].forEach((destDir) => {
+        try {
+          fs.copyFileSync(logoFile.path, path.join(destDir, `header_logo${ext}`));
+          if (ext !== '.png') {
+            fs.copyFileSync(logoFile.path, path.join(destDir, 'header_logo.png'));
+          }
+        } catch (_) {}
+      });
 
       try {
         const layoutUsuario = await prisma.configuracaoLayout.findFirst({
@@ -862,13 +867,15 @@ app.post('/api/layout-config/importar-pdfs', exigirAutenticacao, upload.array('p
     const layoutAtualizado = await salvarTemplateClonado(perfilExtraido, req.usuario);
 
     // Atualiza também o perfil profissional do médico (nome, CRMV, clínica, assinatura) se extraídos
+    // Nunca sobrescreve uma logo que o usuário subiu manualmente em Meu Perfil (/uploads/logos/)
     const idProf = perfilExtraido.identidadeProfissional || {};
-    if (req.usuario.id && (idProf.nomeMedico || idProf.crmv || idProf.nomeClinica || perfilExtraido.ativosVisuais?.headerLogoUrl || perfilExtraido.ativosVisuais?.assinaturaUrl)) {
+    const usuarioTemLogoManual = typeof req.usuario?.logoUrl === 'string' && req.usuario.logoUrl.includes('/uploads/logos/');
+    if (req.usuario.id && (idProf.nomeMedico || idProf.crmv || idProf.nomeClinica || (!usuarioTemLogoManual && perfilExtraido.ativosVisuais?.headerLogoUrl) || perfilExtraido.ativosVisuais?.assinaturaUrl)) {
       await atualizarPerfilProfissional(req.usuario.id, {
         nome: idProf.nomeMedico || req.usuario.nome,
         crmv: idProf.crmv || req.usuario.crmv,
         nomeClinica: idProf.nomeClinica || req.usuario.nomeClinica,
-        ...(perfilExtraido.ativosVisuais?.headerLogoUrl ? { logoUrl: perfilExtraido.ativosVisuais.headerLogoUrl } : {}),
+        ...(!usuarioTemLogoManual && perfilExtraido.ativosVisuais?.headerLogoUrl ? { logoUrl: perfilExtraido.ativosVisuais.headerLogoUrl } : {}),
         assinaturaUrl: perfilExtraido.ativosVisuais?.assinaturaUrl || req.usuario.assinaturaUrl
       }).catch(() => {});
     }
@@ -1011,12 +1018,13 @@ app.post('/api/laudos/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.arr
       );
       const idProfGeo = perfilGeo.identidadeProfissional || {};
       const ativosGeo = perfilGeo.ativosVisuais || {};
-      if (req.usuario.id && (ativosGeo.headerLogoUrl || ativosGeo.assinaturaUrl)) {
+      const usuarioTemLogoManualLaudo = typeof req.usuario?.logoUrl === 'string' && req.usuario.logoUrl.includes('/uploads/logos/');
+      if (req.usuario.id && ((!usuarioTemLogoManualLaudo && ativosGeo.headerLogoUrl) || ativosGeo.assinaturaUrl)) {
         await atualizarPerfilProfissional(req.usuario.id, {
           nome: perfilDetectado.nomeDetectado || idProfGeo.nomeMedico || req.usuario.nome,
           crmv: perfilDetectado.crmvDetectado || idProfGeo.crmv || req.usuario.crmv,
           nomeClinica: perfilDetectado.clinicaDetectada || idProfGeo.nomeClinica || req.usuario.nomeClinica,
-          ...(ativosGeo.headerLogoUrl ? { logoUrl: ativosGeo.headerLogoUrl } : {}),
+          ...(!usuarioTemLogoManualLaudo && ativosGeo.headerLogoUrl ? { logoUrl: ativosGeo.headerLogoUrl } : {}),
           ...(ativosGeo.assinaturaUrl ? { assinaturaUrl: ativosGeo.assinaturaUrl } : {})
         }).catch(() => {});
       }
@@ -1189,9 +1197,10 @@ app.post('/api/cirurgia/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.a
       }
     };
 
-    if (req.usuario?.id && (ativos.headerLogoUrl || ativos.assinaturaUrl)) {
+    const usuarioTemLogoManualCir = typeof req.usuario?.logoUrl === 'string' && req.usuario.logoUrl.includes('/uploads/logos/');
+    if (req.usuario?.id && ((!usuarioTemLogoManualCir && ativos.headerLogoUrl) || ativos.assinaturaUrl)) {
       await atualizarPerfilProfissional(req.usuario.id, {
-        ...(ativos.headerLogoUrl ? { logoUrl: ativos.headerLogoUrl } : {}),
+        ...(!usuarioTemLogoManualCir && ativos.headerLogoUrl ? { logoUrl: ativos.headerLogoUrl } : {}),
         ...(ativos.assinaturaUrl ? { assinaturaUrl: ativos.assinaturaUrl } : {})
       }).catch(() => {});
     }

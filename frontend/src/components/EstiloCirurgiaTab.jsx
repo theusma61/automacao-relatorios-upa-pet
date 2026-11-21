@@ -212,11 +212,14 @@ export default function EstiloCirurgiaTab({
 
         const ativos = res.perfilDetectado.templateVisual?.ativosVisuais;
         if (setUserProfile && (ativos?.headerLogoUrl || ativos?.assinaturaUrl)) {
-          setUserProfile((prev) => ({
-            ...prev,
-            ...(ativos.headerLogoUrl ? { logoUrl: ativos.headerLogoUrl } : {}),
-            ...(ativos.assinaturaUrl ? { assinaturaUrl: ativos.assinaturaUrl } : {})
-          }));
+          setUserProfile((prev) => {
+            const temLogoManual = typeof prev?.logoUrl === 'string' && prev.logoUrl.includes('/uploads/logos/');
+            return {
+              ...prev,
+              ...(!temLogoManual && ativos.headerLogoUrl ? { logoUrl: ativos.headerLogoUrl } : {}),
+              ...(ativos.assinaturaUrl ? { assinaturaUrl: ativos.assinaturaUrl } : {})
+            };
+          });
         }
 
         if (onToast) {
@@ -300,7 +303,8 @@ export default function EstiloCirurgiaTab({
 
   const temPerfilAtivo = Boolean(perfilDb && perfilDb.ativo);
   const tv = perfilEditando?.templateVisual || {};
-  const logoPreviewUrl = tv.ativosVisuais?.headerLogoUrl || userProfile?.logoUrl || null;
+  const temLogoManual = typeof userProfile?.logoUrl === 'string' && userProfile.logoUrl.includes('/uploads/logos/');
+  const logoPreviewUrl = (temLogoManual ? userProfile.logoUrl : null) || tv.ativosVisuais?.headerLogoUrl || userProfile?.logoUrl || null;
 
   const inputClass = `w-full px-3 py-2 rounded-xl text-xs border font-medium ${
     darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'

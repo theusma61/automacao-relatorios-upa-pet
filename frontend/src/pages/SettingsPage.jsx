@@ -21,11 +21,13 @@ import {
   FileText,
   Calendar,
   Zap,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Move
 } from 'lucide-react';
 import { UltrasoundIcon } from '../components/icons/VetaroIcons';
 import EstiloLaudoTab from '../components/EstiloLaudoTab';
 import EstiloCirurgiaTab from '../components/EstiloCirurgiaTab';
+import LogoCropEditorModal from '../components/modals/LogoCropEditorModal';
 import { api } from '../services/api';
 
 export default function SettingsPage({
@@ -44,6 +46,9 @@ export default function SettingsPage({
   const assinaturaInputRef = useRef(null);
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  const [logoEditorSrc, setLogoEditorSrc] = useState('');
+  const [logoEditorFileName, setLogoEditorFileName] = useState('logo_clinica.png');
   const [assinaturaFile, setAssinaturaFile] = useState(null);
   const [assinaturaPreview, setAssinaturaPreview] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -105,13 +110,34 @@ export default function SettingsPage({
   const handleLogoSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Permite selecionar o mesmo arquivo novamente caso o usuário cancele ou queira reajustar
+    e.target.value = '';
     try {
-      const compressed = await compressImageFile(file, 1200, 0.92);
-      setLogoFile(compressed);
-      setLogoPreview(URL.createObjectURL(compressed));
+      const compressed = await compressImageFile(file, 1600, 0.95);
+      setLogoEditorFileName(file.name || 'logo_clinica.png');
+      setLogoEditorSrc(URL.createObjectURL(compressed));
+      setLogoEditorOpen(true);
     } catch (_) {
-      setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
+      setLogoEditorFileName(file.name || 'logo_clinica.png');
+      setLogoEditorSrc(URL.createObjectURL(file));
+      setLogoEditorOpen(true);
+    }
+  };
+
+  const handleOpenExistingLogoEditor = () => {
+    const srcAtual = logoPreview || getMediaUrl(userProfile.logoUrl);
+    if (!srcAtual) return;
+    setLogoEditorFileName(logoFile?.name || `${userProfile.clinicName || 'logo_clinica'}.png`);
+    setLogoEditorSrc(srcAtual);
+    setLogoEditorOpen(true);
+  };
+
+  const handleConfirmLogoEdit = (editedFile, editedPreviewUrl) => {
+    setLogoFile(editedFile);
+    setLogoPreview(editedPreviewUrl);
+    setLogoEditorOpen(false);
+    if (onToast) {
+      onToast('Logo enquadrada! Clique em "Salvar Dados do Perfil" para aplicar nos relatórios.');
     }
   };
 
@@ -502,20 +528,37 @@ export default function SettingsPage({
                   </p>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => logoInputRef.current && logoInputRef.current.click()}
-                  className={`w-full py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                    darkMode
-                      ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:border-[#00D296]'
-                      : 'bg-white border-slate-300 text-slate-700 hover:border-[#0D5C56]'
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5 text-[#00D296]" />
-                  <span>
-                    {(logoPreview || userProfile.logoUrl) ? 'Substituir Logotipo' : 'Selecionar Logotipo (PNG/JPG)'}
-                  </span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current && logoInputRef.current.click()}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                      darkMode
+                        ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:border-[#00D296]'
+                        : 'bg-white border-slate-300 text-slate-700 hover:border-[#0D5C56]'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5 text-[#00D296]" />
+                    <span>
+                      {(logoPreview || userProfile.logoUrl) ? 'Substituir' : 'Selecionar Logotipo (PNG/JPG)'}
+                    </span>
+                  </button>
+                  {(logoPreview || userProfile.logoUrl) && (
+                    <button
+                      type="button"
+                      onClick={handleOpenExistingLogoEditor}
+                      className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                        darkMode
+                          ? 'bg-[#00D296]/15 border-[#00D296]/40 text-[#00D296] hover:bg-[#00D296]/25'
+                          : 'bg-[#0D5C56]/10 border-[#0D5C56]/30 text-[#0D5C56] hover:bg-[#0D5C56]/20'
+                      }`}
+                      title="Ajustar zoom, alinhamento e posição da logo no cabeçalho"
+                    >
+                      <Move className="w-3.5 h-3.5" />
+                      <span>Ajustar Posição</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Card de Assinatura Digital */}
@@ -1291,6 +1334,17 @@ export default function SettingsPage({
           </div>
         </div>
       )}
+
+      {/* Modal Interativo de Posicionamento e Enquadramento do Logotipo */}
+      <LogoCropEditorModal
+        isOpen={logoEditorOpen}
+        imageSrc={logoEditorSrc}
+        originalFileName={logoEditorFileName}
+        clinicName={userProfile.clinicName}
+        darkMode={darkMode}
+        onCancel={() => setLogoEditorOpen(false)}
+        onConfirm={handleConfirmLogoEdit}
+      />
     </div>
   );
 }

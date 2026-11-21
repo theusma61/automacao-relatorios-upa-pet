@@ -801,11 +801,42 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
         candidatosLaterais.sort((a, b) => b.lim.count - a.lim.count);
         const escolhido = candidatosLaterais[0];
         const rawLogo = recortarImagemRgba(pag1.decoded, escolhido.box);
-        const trimmedLogo = trimImagemRgba(rawLogo, {
+        let trimmedLogo = trimImagemRgba(rawLogo, {
           padding: 4,
           removerFundoBranco: true,
           limiarBranco: 244
         });
+
+        // Proteção contra corte lateral: se o recorte encostou na borda interna próxima ao texto do paciente,
+        // tenta recuperar o objeto de imagem embutido original (sem corte) extraído via pdfimages na página 1.
+        const tocouBordaInterna = escolhido.side === 'left'
+          ? (trimmedLogo.offsetX + trimmedLogo.width >= rawLogo.width - 3)
+          : (trimmedLogo.offsetX <= 3);
+
+        if (tocouBordaInterna && listaMetaImgs.length > 0 && arquivosEmb.length > 0) {
+          const candidatoEmb = listaMetaImgs.find((im) => {
+            if (im.page !== 1 || im.type !== 'image') return false;
+            const ratio = im.width / Math.max(1, im.height);
+            return im.width >= 100 && im.width <= 2200 && im.height >= 40 && im.height <= 900 && ratio >= 0.6 && ratio <= 5.5;
+          });
+          if (candidatoEmb && arquivosEmb[candidatoEmb.num] && fs.existsSync(arquivosEmb[candidatoEmb.num])) {
+            try {
+              const embDec = decodificarPng(fs.readFileSync(arquivosEmb[candidatoEmb.num]));
+              const embTrim = trimImagemRgba(embDec, {
+                padding: 6,
+                removerFundoBranco: true,
+                limiarBranco: 244
+              });
+              if (embTrim.width > trimmedLogo.width) {
+                trimmedLogo = {
+                  ...embTrim,
+                  offsetX: trimmedLogo.offsetX,
+                  offsetY: trimmedLogo.offsetY
+                };
+              }
+            } catch (_) {}
+          }
+        }
 
         if (trimmedLogo.width >= 20 && trimmedLogo.height >= 20) {
           const caminhoLogo = path.join(pastaSaidaAtivos, 'header_logo.png');

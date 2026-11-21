@@ -398,7 +398,7 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
     try {
       const dimsOrig = obterDimensoesImagem(logoBytes);
       if (dimsOrig && dimsOrig.width && dimsOrig.height) {
-        logoDims = calcularDimensoesDocx(dimsOrig.width, dimsOrig.height, 140, 70);
+        logoDims = calcularDimensoesDocx(dimsOrig.width, dimsOrig.height, 155, 68);
       }
     } catch (_) {}
 
@@ -1008,6 +1008,8 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     }
     .header-centro-logo .logo-img {
       margin: 0 auto;
+      max-width: 210px;
+      object-position: center;
     }
     .header-contato {
       font-size: 8.5pt;
@@ -1026,9 +1028,11 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     }
     .header-banner-logo .logo-img {
       max-height: 55px;
+      max-width: 170px;
       background: #fff;
       padding: 4px;
       border-radius: 4px;
+      object-position: left center;
     }
     .header-banner-clinica {
       font-size: 13pt;
@@ -1041,13 +1045,18 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
       text-align: right;
     }
     .logo-cell {
-      width: 32%;
+      width: 34%;
+      max-width: 175px;
+      padding-right: 10px;
       text-align: left;
+      vertical-align: middle;
     }
     .logo-img {
-      width: ${logoWidth};
-      max-height: 70px;
+      width: auto;
+      max-width: 100%;
+      max-height: 72px;
       object-fit: contain;
+      object-position: left center;
       height: auto;
       display: block;
     }
