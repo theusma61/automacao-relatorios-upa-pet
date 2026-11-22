@@ -30,8 +30,8 @@ const TABELA_PLANOS = {
     precoMensal: 79.0,
     precoAnualMensalizado: 63.0,
     descricao: 'Ideal para médicos veterinários autônomos e volantes (Até 40 laudos/mês)',
-    excedentePermitido: true,
-    custoExcedente: 2.50
+    excedentePermitido: false,
+    custoExcedente: 0.0
   },
   PRO: {
     chave: 'PRO',
@@ -40,8 +40,8 @@ const TABELA_PLANOS = {
     precoMensal: 149.0,
     precoAnualMensalizado: 119.0,
     descricao: 'Ideal para ultrassonografistas e especialistas em imagem (Até 150 laudos/mês)',
-    excedentePermitido: true,
-    custoExcedente: 1.50
+    excedentePermitido: false,
+    custoExcedente: 0.0
   },
   CLINICA: {
     chave: 'CLINICA',
@@ -50,8 +50,8 @@ const TABELA_PLANOS = {
     precoMensal: 297.0,
     precoAnualMensalizado: 237.0,
     descricao: 'Ideal para clínicas com setor de imagem e hospitais 24h (Até 500 laudos/mês)',
-    excedentePermitido: true,
-    custoExcedente: 1.00
+    excedentePermitido: false,
+    custoExcedente: 0.0
   },
   ILIMITADO: {
     chave: 'ILIMITADO',
@@ -260,6 +260,9 @@ async function obterMetricasUsoAssinatura(usuarioId) {
       diasRestantes,
       cartaoFinal: assinatura.cartaoFinal || null,
       cartaoBandeira: assinatura.cartaoBandeira || null,
+      stripeCustomerId: assinatura.stripeCustomerId || null,
+      stripeSubscriptionId: assinatura.stripeSubscriptionId || null,
+      cancelAtPeriodEnd: Boolean(assinatura.cancelAtPeriodEnd),
       descricao: planoDef.descricao
     },
     cota: {
@@ -288,7 +291,8 @@ async function obterMetricasUsoAssinatura(usuarioId) {
       valor: Number(f.valor),
       status: f.status,
       descricao: f.descricao,
-      pdfUrl: f.pdfUrl || null
+      pdfUrl: f.pdfUrl || null,
+      hostedInvoiceUrl: f.hostedInvoiceUrl || null
     }))
   };
 }
@@ -354,8 +358,12 @@ async function verificarLimiteCotaUltrassom(usuarioId) {
   const metricas = await obterMetricasUsoAssinatura(usuarioId);
   const { cota, plano } = metricas;
 
-  const bloqueado = cota.consumido >= cota.limite;
-  const motivo = bloqueado
+  const pagamentoPendente = String(plano.status || '').toUpperCase() === 'PAST_DUE';
+  const cotaAtingida = cota.consumido >= cota.limite;
+  const bloqueado = pagamentoPendente || cotaAtingida;
+  const motivo = pagamentoPendente
+    ? 'Há uma fatura pendente na sua assinatura. Atualize seu cartão de crédito em Configurações → Plano e assinatura para liberar novos laudos.'
+    : cotaAtingida
     ? `Você atingiu o limite da sua cota mensal de ${cota.limite} laudo(s) de ultrassom (${cota.consumido}/${cota.limite} emitidos no plano ${plano.nome}). Para continuar gerando novos laudos oficiais, faça upgrade do seu plano.`
     : null;
 

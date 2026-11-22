@@ -118,7 +118,7 @@ export default function AdminUsersModal({ darkMode, isOpen, onClose, onToast }) 
                           <option value="admin">Administrador (Total)</option>
                           <option value="veterinario">Veterinário (Gera laudos)</option>
                           <option value="assistente">Assistente (Consulta)</option>
-                          <option value="pendente">Bloqueado / Pendente</option>
+                          <option value="pendente">Suspensa (Somente Consulta)</option>
                         </select>
                       </td>
                       <td className="p-2.5">

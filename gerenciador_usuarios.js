@@ -20,8 +20,8 @@ const ROLES = {
     permissoes: ['visualizar_relatorios']
   },
   pendente: {
-    nome: 'Acesso Pendente / Bloqueado',
-    permissoes: []
+    nome: 'Conta Suspensa (Somente Consulta)',
+    permissoes: ['visualizar_relatorios']
   }
 };
 
@@ -94,9 +94,8 @@ async function obterPerfilUsuario(email, nome, foto = null) {
   });
 
   if (!usuario) {
-    let roleInicial = 'pendente';
+    let roleInicial = 'veterinario';
     if (adminEmails.includes(emailNorm)) roleInicial = 'admin';
-    else if (vetEmails.includes(emailNorm)) roleInicial = 'veterinario';
 
     usuario = await prisma.usuario.create({
       data: {
