@@ -50,7 +50,7 @@ export default function App() {
   const [activeNav, setActiveNav] = useState('inicio');
   const [settingsTab, setSettingsTab] = useState('perfil');
   const [padroesTab, setPadroesTab] = useState('ultrassom');
-  const [newUiEnabled, setNewUiEnabled] = useState(false);
+  const [newUiEnabled, setNewUiEnabled] = useState(true);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
 
@@ -168,7 +168,8 @@ export default function App() {
       carregarHistoricoServidor();
       try {
         const key = `vetaro_new_ui_v2_${usuario.id || usuario.email || 'default'}`;
-        setNewUiEnabled(localStorage.getItem(key) === 'true');
+        const savedUi = localStorage.getItem(key);
+        setNewUiEnabled(savedUi === null ? true : savedUi === 'true');
       } catch (_) {}
     }
   }, [carregarHistoricoServidor, usuario]);
@@ -306,6 +307,7 @@ export default function App() {
       return (
         <UltrasoundGenerator
           darkMode={darkMode}
+          isMobileLayout={isMobile}
           newUiEnabled={newUiEnabled}
           userProfile={usuario}
           layoutConfig={layoutConfig}
@@ -322,6 +324,7 @@ export default function App() {
       return (
         <SurgeryGenerator
           darkMode={darkMode}
+          isMobileLayout={isMobile}
           newUiEnabled={newUiEnabled}
           userProfile={usuario}
           layoutConfig={layoutConfig}
@@ -396,7 +399,9 @@ export default function App() {
       <main
         className={`flex-1 w-full ${
           isMobile
-            ? 'p-4 pb-24'
+            ? newUiEnabled
+              ? 'px-3.5 pt-3 pb-36'
+              : 'p-4 pb-24'
             : isTablet
             ? 'p-6 h-full overflow-y-auto'
             : 'py-8 px-8 lg:px-12 h-full overflow-y-auto'
@@ -405,16 +410,52 @@ export default function App() {
         <div className={`w-full ${activeNav === 'meus-padroes' && newUiEnabled ? 'max-w-7xl' : 'max-w-5xl'} mx-auto flex flex-col`}>
           {isMobile ? (
             <>
-              <div className="flex items-center justify-between mb-5 relative">
-                <VetaroLogo size={26} dark={darkMode} textSize="text-xl" />
-                <div className="flex items-center gap-2.5">
+              <div
+                className={`flex items-center justify-between relative ${
+                  newUiEnabled
+                    ? `sticky top-0 z-20 -mx-3.5 px-3.5 py-2.5 mb-3.5 border-b backdrop-blur-xl ${
+                        darkMode
+                          ? 'bg-[#0A141D]/90 border-slate-800/80'
+                          : 'bg-[#F8FAFC]/90 border-slate-200/80'
+                      }`
+                    : 'mb-5'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveNav('inicio')}
+                    className="shrink-0"
+                    aria-label="Ir para Início"
+                  >
+                    <VetaroLogo size={newUiEnabled ? 24 : 26} dark={darkMode} textSize={newUiEnabled ? 'text-lg' : 'text-xl'} />
+                  </button>
+                  {newUiEnabled && activeNav !== 'inicio' && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border truncate ${
+                        darkMode
+                          ? 'bg-[#0F1C26] border-slate-800 text-slate-300'
+                          : 'bg-white border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {activeNav === 'ultrassom'
+                        ? 'Ultrassom'
+                        : activeNav === 'relatorio'
+                        ? 'Cirurgia'
+                        : activeNav === 'meus-padroes'
+                        ? 'Meus Padrões'
+                        : 'Ajustes'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => showToast('Nenhuma notificação pendente.')}
-                    className="p-1.5 rounded-full relative"
+                    className="p-2 rounded-full relative"
                   >
                     <Bell className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#00D296]" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#00D296]" />
                   </button>
                   <button
                     type="button"
@@ -449,14 +490,16 @@ export default function App() {
                 )}
               </div>
 
-              <div className="mb-5">
-                <h2 className="text-2xl font-extrabold">
-                  Olá, {usuario.greetingName}!
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Tudo pronto para otimizar seu trabalho hoje?
-                </p>
-              </div>
+              {(!newUiEnabled || activeNav === 'inicio') && (
+                <div className={newUiEnabled ? 'mb-4' : 'mb-5'}>
+                  <h2 className={`${newUiEnabled ? 'text-xl' : 'text-2xl'} font-extrabold tracking-tight`}>
+                    Olá, {usuario.greetingName}!
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Tudo pronto para otimizar seu trabalho hoje?
+                  </p>
+                </div>
+              )}
             </>
           ) : (
             <TopHeader

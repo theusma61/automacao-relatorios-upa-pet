@@ -110,6 +110,7 @@ function loadSavedTabs(storageKey) {
 
 export default function SurgeryGenerator({
   darkMode,
+  isMobileLayout = false,
   newUiEnabled = false,
   userProfile,
   layoutConfig,
@@ -617,26 +618,74 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
         <CardWaveBackground dark={darkMode} />
 
         {/* Cabeçalho */}
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+        <div
+          className={`relative z-10 flex flex-col sm:flex-row sm:items-start justify-between ${
+            isMobileLayout && newUiEnabled ? 'gap-2.5 mb-4' : 'gap-4 mb-6'
+          }`}
+        >
           <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className={`${isMobileLayout && newUiEnabled ? 'text-base' : 'text-lg sm:text-xl'} font-extrabold tracking-tight`}>
                 Relatório Cirúrgico Oficial
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30">
                 {getTabLabel(activeTab)}
               </span>
             </div>
-            <p
-              className={`text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed ${
-                darkMode ? 'text-slate-300' : 'text-[#52657A]'
-              }`}
-            >
-              Envie o documento da cirurgia (.docx, .pages, .txt ou áudio gravado) e fotos
-              anexas opcionais. Você pode alternar entre abas enquanto outro laudo é gerado.
-            </p>
+            {!(isMobileLayout && newUiEnabled) && (
+              <p
+                className={`text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed ${
+                  darkMode ? 'text-slate-300' : 'text-[#52657A]'
+                }`}
+              >
+                Envie o documento da cirurgia (.docx, .pages, .txt ou áudio gravado) e fotos
+                anexas opcionais. Você pode alternar entre abas enquanto outro laudo é gerado.
+              </p>
+            )}
           </div>
 
+          {isMobileLayout && newUiEnabled ? (
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
+              <button
+                type="button"
+                onClick={() => onOpenProfile && onOpenProfile('estilo_cirurgia')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 border shrink-0 transition active:scale-95 ${
+                  darkMode
+                    ? 'bg-[#0A141D] text-[#00D296] border-[#00D296]/35'
+                    : 'bg-[#E3FAF2] text-[#0D5C56] border-[#00D296]/40'
+                }`}
+              >
+                <Sparkles className="w-3 h-3 shrink-0" />
+                <span>Padrão Cirúrgico • Editar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenProfile && onOpenProfile('perfil')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border shrink-0 ${
+                  darkMode
+                    ? 'bg-[#142634] border-[#2A445A] text-slate-200'
+                    : 'bg-slate-100 border-slate-200 text-slate-700'
+                }`}
+              >
+                <User className="w-3 h-3 text-[#00D296] shrink-0" />
+                <span>{userProfile.crmv || 'Timbre'}</span>
+              </button>
+              {activeTab.status === 'done' && (
+                <button
+                  type="button"
+                  onClick={handleResetActiveTab}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1 border shrink-0 ${
+                    darkMode
+                      ? 'bg-slate-800/80 text-slate-200 border-slate-700'
+                      : 'bg-slate-100 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Novo</span>
+                </button>
+              )}
+            </div>
+          ) : (
           <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
             {activeTab.status === 'done' && (
               <button
@@ -674,6 +723,7 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
               <span>Timbre: {userProfile.crmv}</span>
             </button>
           </div>
+          )}
         </div>
 
         {/* Inputs ocultos */}
@@ -706,7 +756,9 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
 
             {/* Alternador de Modo: Digitar vs Arquivo */}
             <div
-              className={`p-1 rounded-xl flex items-center gap-1 border ${
+              className={`p-1 rounded-xl ${
+                isMobileLayout && newUiEnabled ? 'w-full grid grid-cols-2' : 'flex items-center'
+              } gap-1 border ${
                 darkMode ? 'bg-[#0E1B26] border-[#22374A]' : 'bg-[#E2EBE8] border-slate-300/80'
               }`}
             >
@@ -778,7 +830,7 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
               <textarea
                 value={activeTab.surgeryText}
                 onChange={(e) => updateTabById(activeTab.id, { surgeryText: e.target.value })}
-                rows={9}
+                rows={isMobileLayout && newUiEnabled ? 6 : 9}
                 placeholder={`Cole ou digite aqui as informações da cirurgia...
 
 Exemplo:
@@ -922,6 +974,33 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
           <div className="relative z-10 mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{activeTab.errorMessage}</span>
+          </div>
+        )}
+
+        {/* Barra flutuante de polegar no mobile (quando há texto/arquivo e ainda não foi gerado) */}
+        {isMobileLayout && newUiEnabled && (Boolean(activeTab.surgeryText?.trim()) || Boolean(activeTab.rawDocFile)) && activeTab.status !== 'done' && (
+          <div className="fixed bottom-[76px] left-3 right-3 z-20">
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isGenerating || isQueued || !podeEmitir}
+              className={`w-full min-h-[48px] py-3 px-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-2xl transition active:scale-[0.98] ${
+                !podeEmitir
+                  ? 'bg-slate-700 text-slate-300 cursor-not-allowed'
+                  : isQueued
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] ring-2 ring-[#00D296]/35'
+              }`}
+            >
+              <Wand2 className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+              <span>
+                {isGenerating
+                  ? 'Gerando relatório cirúrgico...'
+                  : isQueued
+                  ? 'Na fila de geração...'
+                  : 'Gerar Relatório Cirúrgico'}
+              </span>
+            </button>
           </div>
         )}
 

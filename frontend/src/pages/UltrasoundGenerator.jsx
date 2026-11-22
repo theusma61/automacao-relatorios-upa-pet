@@ -102,6 +102,7 @@ function loadSavedTabs(storageKey) {
 
 export default function UltrasoundGenerator({
   darkMode,
+  isMobileLayout = false,
   newUiEnabled = false,
   userProfile,
   layoutConfig,
@@ -545,26 +546,97 @@ export default function UltrasoundGenerator({
         <CardWaveBackground dark={darkMode} />
 
         {/* Cabeçalho */}
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+        <div
+          className={`relative z-10 flex flex-col sm:flex-row sm:items-start justify-between ${
+            isMobileLayout && newUiEnabled ? 'gap-2.5 mb-4' : 'gap-4 mb-6'
+          }`}
+        >
           <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
-                Laudo de Ultrassonografia Abdominal
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className={`${isMobileLayout && newUiEnabled ? 'text-base' : 'text-lg sm:text-xl'} font-extrabold tracking-tight`}>
+                {isMobileLayout && newUiEnabled ? 'Laudo de Ultrassonografia' : 'Laudo de Ultrassonografia Abdominal'}
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30">
                 {getTabLabel(activeTab)}
               </span>
             </div>
-            <p
-              className={`text-xs sm:text-sm mt-1 max-w-xl leading-relaxed ${
-                darkMode ? 'text-slate-300' : 'text-[#52657A]'
-              }`}
-            >
-              Envie as capturas de tela do Mindray com calipers e identificações para análise
-              automática. Você pode alternar entre abas enquanto outro laudo é gerado.
-            </p>
+            {!(isMobileLayout && newUiEnabled) && (
+              <p
+                className={`text-xs sm:text-sm mt-1 max-w-xl leading-relaxed ${
+                  darkMode ? 'text-slate-300' : 'text-[#52657A]'
+                }`}
+              >
+                Envie as capturas de tela do Mindray com calipers e identificações para análise
+                automática. Você pode alternar entre abas enquanto outro laudo é gerado.
+              </p>
+            )}
           </div>
 
+          {isMobileLayout && newUiEnabled ? (
+            /* Chips discretos mobile (mantém o upload logo acima da dobra) */
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
+              {cotaInfo && (
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border shrink-0 ${
+                    cotaInfo.admin || cotaInfo.ilimitado || userProfile?.role === 'admin'
+                      ? darkMode
+                        ? 'bg-emerald-950/40 border-emerald-500/35 text-emerald-300'
+                        : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : isCotaBloqueada
+                      ? 'bg-rose-950/50 border-rose-500/50 text-rose-300'
+                      : darkMode
+                      ? 'bg-[#142634] border-[#2A445A] text-slate-200'
+                      : 'bg-slate-100 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  {cotaInfo.admin || cotaInfo.ilimitado || userProfile?.role === 'admin' ? (
+                    <>
+                      <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Ilimitada</span>
+                    </>
+                  ) : isCotaBloqueada ? (
+                    <>
+                      <Lock className="w-3 h-3 text-rose-400 shrink-0" />
+                      <span>Cota esgotada</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>{cotaInfo.disponivel} rest.</span>
+                    </>
+                  )}
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={() => onOpenProfile('estilo')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 border shrink-0 transition active:scale-95 ${
+                  darkMode
+                    ? 'bg-[#0A141D] border-[#00D296]/35 text-[#00D296]'
+                    : 'bg-[#E3FAF2] border-[#00D296]/40 text-[#0D5C56]'
+                }`}
+              >
+                <Palette className="w-3 h-3 shrink-0" />
+                <span>Padrão ativo • Editar</span>
+              </button>
+
+              {activeTab.status === 'done' && (
+                <button
+                  type="button"
+                  onClick={handleResetActiveTab}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1 border shrink-0 transition active:scale-95 ${
+                    darkMode
+                      ? 'bg-slate-800/80 text-slate-200 border-slate-700'
+                      : 'bg-slate-100 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Novo</span>
+                </button>
+              )}
+            </div>
+          ) : (
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {activeTab.status === 'done' && (
               <button
@@ -650,6 +722,7 @@ export default function UltrasoundGenerator({
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Banner de Aviso de Cota Esgotada */}
@@ -743,7 +816,9 @@ export default function UltrasoundGenerator({
               handleFilesSelected(e.dataTransfer.files);
             }
           }}
-          className={`relative z-10 rounded-2xl border-2 border-dashed py-10 px-6 text-center transition group ${
+          className={`relative z-10 rounded-2xl border-2 border-dashed ${
+            isMobileLayout && newUiEnabled ? 'py-7 px-4 active:scale-[0.99]' : 'py-10 px-6'
+          } text-center transition group ${
             isCotaBloqueada
               ? darkMode
                 ? 'bg-rose-950/20 border-rose-800/40 opacity-75 cursor-not-allowed'
@@ -776,6 +851,8 @@ export default function UltrasoundGenerator({
           <p className="text-sm sm:text-base font-extrabold">
             {isCotaBloqueada
               ? 'Envio de Imagens Bloqueado por Limite de Cota'
+              : isMobileLayout && newUiEnabled
+              ? 'Toque para enviar as fotos do exame'
               : 'Clique para selecionar as fotos ou arraste até aqui'}
           </p>
           <p
@@ -785,8 +862,14 @@ export default function UltrasoundGenerator({
           >
             {isCotaBloqueada
               ? 'Faça upgrade do seu plano para liberar novas análises e laudos oficiais'
-              : 'Formatos aceitos: JPG, PNG, WEBP (até 25 fotos por exame)'}
+              : 'JPG, PNG ou WEBP • até 25 fotos por exame'}
           </p>
+          {isMobileLayout && newUiEnabled && !isCotaBloqueada && (
+            <span className="mt-3.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-extrabold bg-[#00D296] text-[#052925] shadow-sm">
+              <Plus className="w-3.5 h-3.5" />
+              <span>{activeTab.mindrayFiles.length > 0 ? 'Adicionar mais fotos' : 'Selecionar da Galeria'}</span>
+            </span>
+          )}
 
           {activeTab.mindrayFiles.length > 0 && (
             <div
@@ -827,6 +910,33 @@ export default function UltrasoundGenerator({
           <div className="relative z-10 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{activeTab.errorMessage}</span>
+          </div>
+        )}
+
+        {/* Barra flutuante de polegar no mobile (quando há fotos e ainda não foi gerado) */}
+        {isMobileLayout && newUiEnabled && activeTab.rawFiles.length > 0 && activeTab.status !== 'done' && (
+          <div className="fixed bottom-[76px] left-3 right-3 z-20">
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isGenerating || isQueued || !podeEmitir || isCotaBloqueada}
+              className={`w-full min-h-[48px] py-3 px-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-2xl transition active:scale-[0.98] ${
+                !podeEmitir || isCotaBloqueada
+                  ? 'bg-slate-700 text-slate-300 cursor-not-allowed'
+                  : isQueued
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] ring-2 ring-[#00D296]/35'
+              }`}
+            >
+              <Wand2 className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+              <span>
+                {isGenerating
+                  ? 'Gerando laudo com IA...'
+                  : isQueued
+                  ? 'Na fila de geração...'
+                  : `Gerar Laudo (${activeTab.rawFiles.length} ${activeTab.rawFiles.length === 1 ? 'foto' : 'fotos'})`}
+              </span>
+            </button>
           </div>
         )}
 
