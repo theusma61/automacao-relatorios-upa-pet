@@ -182,7 +182,51 @@ async function salvarLayout(dadosNovos = {}, usuario = null) {
   if (dadosNovos.writing_style_json !== undefined) payloadPrisma.writingStyleJson = dadosNovos.writing_style_json;
   if (dadosNovos.pdfs_referencia_qtd !== undefined) payloadPrisma.pdfsReferenciaQtd = Number(dadosNovos.pdfs_referencia_qtd) || 0;
 
-  if (temUsuarioId && usuario.role !== 'admin') {
+  // Sincroniza também os ajustes de tipografia/margens no PerfilLaudo do usuário, se existir
+  const sincronizarPerfilLaudoUsuario = async (uid) => {
+    if (!uid) return;
+    try {
+      const perfil = await prisma.perfilLaudo.findUnique({ where: { usuarioId: String(uid) } });
+      if (!perfil) return;
+      const layoutDet = {
+        ...(perfil.layoutDetectado && typeof perfil.layoutDetectado === 'object' ? perfil.layoutDetectado : {}),
+        fontFamily: payloadPrisma.fontFamily,
+        fontSizeBody: payloadPrisma.fontSizeBody,
+        fontSizeTitulo: payloadPrisma.fontSizeTitulo,
+        marginTop: payloadPrisma.marginTop,
+        marginBottom: payloadPrisma.marginBottom,
+        marginLeft: payloadPrisma.marginLeft,
+        marginRight: payloadPrisma.marginRight,
+        lineHeight: payloadPrisma.lineHeight,
+        paragraphSpacing: payloadPrisma.paragraphSpacing,
+        corPrimaria: payloadPrisma.corPrimaria,
+        corSecundaria: payloadPrisma.corSecundaria
+      };
+      const tVis = {
+        ...(perfil.templateVisual && typeof perfil.templateVisual === 'object' ? perfil.templateVisual : {}),
+        fontFamily: payloadPrisma.fontFamily,
+        fontSizeBody: payloadPrisma.fontSizeBody,
+        fontSizeTitulo: payloadPrisma.fontSizeTitulo,
+        marginTop: payloadPrisma.marginTop,
+        marginBottom: payloadPrisma.marginBottom,
+        marginLeft: payloadPrisma.marginLeft,
+        marginRight: payloadPrisma.marginRight,
+        lineHeight: payloadPrisma.lineHeight,
+        paragraphSpacing: payloadPrisma.paragraphSpacing,
+        corPrimaria: payloadPrisma.corPrimaria,
+        corSecundaria: payloadPrisma.corSecundaria
+      };
+      if (payloadPrisma.visualConfigJson) {
+        tVis.visualConfigClonado = payloadPrisma.visualConfigJson;
+      }
+      await prisma.perfilLaudo.update({
+        where: { usuarioId: String(uid) },
+        data: { layoutDetectado: layoutDet, templateVisual: tVis }
+      });
+    } catch (_) {}
+  };
+
+  if (temUsuarioId) {
     const row = await prisma.configuracaoLayout.upsert({
       where: { usuarioId: String(usuario.id) },
       update: payloadPrisma,
@@ -194,13 +238,8 @@ async function salvarLayout(dadosNovos = {}, usuario = null) {
         ...payloadPrisma
       }
     });
+    await sincronizarPerfilLaudoUsuario(usuario.id);
     return prismaParaSnakeCase(row);
-  }
-
-  if (temUsuarioId && usuario.role === 'admin') {
-    await prisma.configuracaoLayout.deleteMany({
-      where: { usuarioId: String(usuario.id) }
-    }).catch(() => {});
   }
 
   await garantirLayoutPadrao();

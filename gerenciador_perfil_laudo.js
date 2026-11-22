@@ -252,7 +252,16 @@ async function salvarPerfilLaudo(usuarioId, dados = {}) {
     updateUsuario.nome = dados.nomeDetectado;
   }
   if (ativosClonados.headerLogoUrl) {
-    updateUsuario.logoUrl = ativosClonados.headerLogoUrl;
+    try {
+      const usrAtual = await prisma.usuario.findUnique({
+        where: { id: String(usuarioId) },
+        select: { logoUrl: true }
+      });
+      const temLogoManual = typeof usrAtual?.logoUrl === 'string' && usrAtual.logoUrl.includes('/uploads/logos/');
+      if (!temLogoManual) {
+        updateUsuario.logoUrl = ativosClonados.headerLogoUrl;
+      }
+    } catch (_) {}
   }
   if (ativosClonados.assinaturaUrl) {
     updateUsuario.assinaturaUrl = ativosClonados.assinaturaUrl;

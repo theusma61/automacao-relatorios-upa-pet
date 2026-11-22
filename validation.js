@@ -147,20 +147,21 @@ const healthSchemas = {
 const layoutSchemas = {
   updateLayout: z.object({
     font_family: z.string().min(2).max(160).trim().optional(),
-    font_size_body: z.string().trim().regex(/^([8-9]|1[0-4])(\.[0-9]+)?pt$/, 'Tamanho do corpo deve ser entre 8pt e 14pt (ex: 11pt)').optional(),
-    font_size_titulo: z.string().trim().regex(/^(1[0-9]|2[0-4])(\.[0-9]+)?pt$/, 'Tamanho do título deve ser entre 10pt e 24pt (ex: 14pt)').optional(),
-    margin_top: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)mm$/, 'Margem superior deve ser entre 0mm e 50mm (ex: 20mm)').optional(),
-    margin_bottom: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)mm$/, 'Margem inferior deve ser entre 0mm e 50mm (ex: 20mm)').optional(),
-    margin_left: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)mm$/, 'Margem esquerda deve ser entre 0mm e 50mm (ex: 15mm)').optional(),
-    margin_right: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)mm$/, 'Margem direita deve ser entre 0mm e 50mm (ex: 15mm)').optional(),
+    font_size_body: z.string().trim().regex(/^([7-9]|1[0-8])(\.[0-9]+)?pt$/, 'Tamanho do corpo deve ser entre 7pt e 18pt (ex: 11pt)').optional(),
+    font_size_titulo: z.string().trim().regex(/^(1[0-9]|2[0-8])(\.[0-9]+)?pt$/, 'Tamanho do título deve ser entre 10pt e 28pt (ex: 14pt)').optional(),
+    margin_top: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)(\.[0-9]+)?mm$/, 'Margem superior deve ser entre 0mm e 50mm (ex: 20mm)').optional(),
+    margin_bottom: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)(\.[0-9]+)?mm$/, 'Margem inferior deve ser entre 0mm e 50mm (ex: 20mm)').optional(),
+    margin_left: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)(\.[0-9]+)?mm$/, 'Margem esquerda deve ser entre 0mm e 50mm (ex: 15mm)').optional(),
+    margin_right: z.string().trim().regex(/^([0-9]|[1-4][0-9]|50)(\.[0-9]+)?mm$/, 'Margem direita deve ser entre 0mm e 50mm (ex: 15mm)').optional(),
     line_height: z.union([
-      z.string().trim().regex(/^(1(\.[0-9]+)?|2(\.0+)?)$/, 'Entrelinha deve ser entre 1.0 e 2.0'),
-      z.number().min(1.0).max(2.0).transform(v => String(v))
+      z.string().trim().regex(/^(1(\.[0-9]+)?|2(\.[0-5]+)?)$/, 'Entrelinha deve ser entre 1.0 e 2.5'),
+      z.number().min(1.0).max(2.5).transform(v => String(v))
     ]).optional(),
-    paragraph_spacing: z.string().trim().regex(/^([0-9]|1[0-9]|2[0-4])(\.[0-9]+)?pt$/, 'Espaçamento entre parágrafos deve ser entre 0pt e 24pt (ex: 8pt)').optional(),
+    paragraph_spacing: z.string().trim().regex(/^([0-9]|1[0-9]|2[0-9]|30)(\.[0-9]+)?(pt|mm)$/, 'Espaçamento entre parágrafos deve ser entre 0 e 30pt/mm (ex: 8pt)').optional(),
     cor_primaria: z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Cor primária deve ser um hexadecimal válido (ex: #1B365D)').optional(),
     cor_secundaria: z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Cor secundária deve ser um hexadecimal válido (ex: #4A777A)').optional(),
-    modo_template: z.enum(['padrao_upa', 'clonado_pdf']).optional(),
+    modo_template: z.enum(['padrao_upa', 'padrao_vetaro', 'clonado_pdf']).optional(),
+    header_logo_url: z.string().nullable().optional(),
     header_banner_url: z.string().nullable().optional(),
     footer_logo_url: z.string().nullable().optional(),
     assinatura_extraida_url: z.string().nullable().optional(),

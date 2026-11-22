@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   User,
   CheckCircle2,
@@ -13,7 +13,12 @@ import {
   Lock,
   FileText,
   Upload,
-  Sparkles
+  Sparkles,
+  X,
+  Clock,
+  Loader2,
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react';
 import {
   VetaroLogo,
@@ -26,6 +31,83 @@ import ModeloCirurgicoModal from '../components/modals/ModeloCirurgicoModal';
 import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
 
+// Limites seguros calibrados para VPS Linux 2 vCPUs / 4 GB RAM
+// (Frontend limita 5 abas abertas e no máximo 2 gerações simultâneas; excedentes entram na fila automática)
+const MAX_SURGERY_TABS = 5;
+const MAX_CONCURRENT_GENERATIONS = 2;
+
+function createEmptyTab(seq) {
+  return {
+    id: `cir-tab-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 6)}`,
+    seq,
+    inputMode: 'text', // 'text' | 'file'
+    surgeryText: '',
+    surgeryDocFile: null,
+    rawDocFile: null,
+    surgeryPhotos: [],
+    rawPhotoFiles: [],
+    status: 'idle', // 'idle' | 'queued' | 'generating' | 'done' | 'error'
+    errorMessage: '',
+    generatedOutput: '',
+    downloadLinks: { pdfUrl: '', docxUrl: '' },
+    reportPageTab: 'p1',
+    reportParaEdicao: null
+  };
+}
+
+function getTabLabel(tab) {
+  const nomeGerado = tab.reportParaEdicao?.paciente?.nome;
+  if (nomeGerado && nomeGerado.trim() && nomeGerado.trim().toLowerCase() !== 'paciente') {
+    return nomeGerado.trim().slice(0, 22);
+  }
+  if (tab.surgeryText) {
+    const m = tab.surgeryText.match(/(?:paciente|nome)\s*[:\-]\s*([^\n|;,]{2,26})/i);
+    if (m && m[1] && m[1].trim()) {
+      return m[1].trim().slice(0, 22);
+    }
+  }
+  if (tab.surgeryDocFile?.name) {
+    return tab.surgeryDocFile.name.replace(/\.[^.]+$/, '').slice(0, 22);
+  }
+  return `Laudo #${tab.seq}`;
+}
+
+function revokeTabPhotos(tab) {
+  if (!tab || !Array.isArray(tab.surgeryPhotos)) return;
+  tab.surgeryPhotos.forEach((p) => {
+    if (p?.previewUrl && p.previewUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(p.previewUrl);
+      } catch (_) {}
+    }
+  });
+}
+
+function loadSavedTabs(storageKey) {
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed.slice(0, MAX_SURGERY_TABS).map((t, idx) => ({
+      ...createEmptyTab(t.seq || idx + 1),
+      id: t.id || createEmptyTab(idx + 1).id,
+      seq: t.seq || idx + 1,
+      inputMode: t.inputMode === 'file' ? 'file' : 'text',
+      surgeryText: typeof t.surgeryText === 'string' ? t.surgeryText : '',
+      status: t.status === 'done' ? 'done' : 'idle',
+      generatedOutput: typeof t.generatedOutput === 'string' ? t.generatedOutput : '',
+      downloadLinks: t.downloadLinks && typeof t.downloadLinks === 'object'
+        ? { pdfUrl: t.downloadLinks.pdfUrl || '', docxUrl: t.downloadLinks.docxUrl || '' }
+        : { pdfUrl: '', docxUrl: '' },
+      reportPageTab: t.reportPageTab === 'p2' ? 'p2' : 'p1',
+      reportParaEdicao: t.reportParaEdicao || null
+    }));
+  } catch (_) {
+    return null;
+  }
+}
+
 export default function SurgeryGenerator({
   darkMode,
   userProfile,
@@ -35,21 +117,76 @@ export default function SurgeryGenerator({
   onAddActivity,
   onToast
 }) {
+  const storageKey = `vetaro_surgery_tabs_${userProfile?.id || 'default'}`;
   const docInputRef = useRef(null);
   const photoInputRef = useRef(null);
+  const nextSeqRef = useRef(2);
+  const activeGenerationsRef = useRef(0);
+  const queueOrderRef = useRef([]);
 
-  const [surgeryDocFile, setSurgeryDocFile] = useState(null);
-  const [rawDocFile, setRawDocFile] = useState(null);
-  const [surgeryPhotos, setSurgeryPhotos] = useState([]);
-  const [rawPhotoFiles, setRawPhotoFiles] = useState([]);
-  const [inputMode, setInputMode] = useState('text'); // 'text' ou 'file'
-  const [surgeryText, setSurgeryText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedOutput, setGeneratedOutput] = useState('');
-  const [downloadLinks, setDownloadLinks] = useState({ pdfUrl: '', docxUrl: '' });
-  const [reportPageTab, setReportPageTab] = useState('p1');
-  const [reportParaEdicao, setReportParaEdicao] = useState(null);
-  const [previewModalAberto, setPreviewModalAberto] = useState(false);
+  const [tabs, setTabs] = useState(() => {
+    const restored = loadSavedTabs(storageKey);
+    if (restored && restored.length > 0) {
+      const maxSeq = restored.reduce((acc, t) => Math.max(acc, t.seq || 1), 1);
+      nextSeqRef.current = maxSeq + 1;
+      return restored;
+    }
+    return [createEmptyTab(1)];
+  });
+
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id || '');
+  const [previewModalTabId, setPreviewModalTabId] = useState(null);
+
+  const tabsRef = useRef(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  // Garante que sempre exista uma aba ativa válida
+  useEffect(() => {
+    if (!tabs.some((t) => t.id === activeTabId) && tabs.length > 0) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
+
+  // Persiste rascunhos/resultados textuais das abas em sessionStorage (sobrevive navegação no menu)
+  useEffect(() => {
+    try {
+      const serializable = tabs.map((t) => ({
+        id: t.id,
+        seq: t.seq,
+        inputMode: t.inputMode,
+        surgeryText: t.surgeryText,
+        status: t.status === 'done' ? 'done' : 'idle',
+        generatedOutput: t.generatedOutput,
+        downloadLinks: t.downloadLinks,
+        reportPageTab: t.reportPageTab,
+        reportParaEdicao: t.reportParaEdicao
+      }));
+      sessionStorage.setItem(storageKey, JSON.stringify(serializable));
+    } catch (_) {}
+  }, [tabs, storageKey]);
+
+  // Libera ObjectURLs das fotos ao desmontar componente (evita vazamento de RAM no navegador)
+  useEffect(() => {
+    return () => {
+      tabsRef.current.forEach((t) => revokeTabPhotos(t));
+    };
+  }, []);
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const previewTab = previewModalTabId
+    ? tabs.find((t) => t.id === previewModalTabId) || null
+    : null;
+
+  const updateTabById = useCallback((tabId, updater) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== tabId) return t;
+        return typeof updater === 'function' ? updater(t) : { ...t, ...updater };
+      })
+    );
+  }, []);
 
   const [modelos, setModelos] = useState([]);
   const [filtroOrigem, setFiltroOrigem] = useState('todos');
@@ -62,9 +199,76 @@ export default function SurgeryGenerator({
     userProfile?.role === 'admin' ||
     userProfile?.role === 'veterinario';
 
+  // Gerenciamento de Abas
+  const handleAddTab = () => {
+    if (tabs.length >= MAX_SURGERY_TABS) {
+      if (onToast) {
+        onToast(`Limite seguro de ${MAX_SURGERY_TABS} abas simultâneas atingido. Feche uma aba concluída para abrir outra.`);
+      }
+      return;
+    }
+    const seq = nextSeqRef.current++;
+    const nova = createEmptyTab(seq);
+    setTabs((prev) => [...prev, nova]);
+    setActiveTabId(nova.id);
+  };
+
+  const handleCloseTab = (e, tabId) => {
+    e.stopPropagation();
+    const target = tabs.find((t) => t.id === tabId);
+    if (!target) return;
+
+    if (target.status === 'generating') {
+      if (onToast) onToast('Aguarde a conclusão da geração antes de fechar esta aba.');
+      return;
+    }
+
+    const temConteudo =
+      Boolean(target.surgeryText?.trim()) ||
+      Boolean(target.rawDocFile) ||
+      target.rawPhotoFiles.length > 0;
+
+    if (temConteudo && target.status !== 'done') {
+      const confirmar = window.confirm(
+        `Deseja fechar a aba "${getTabLabel(target)}"? Os dados digitados não gerados serão perdidos.`
+      );
+      if (!confirmar) return;
+    }
+
+    // Remove da fila se estivesse aguardando
+    queueOrderRef.current = queueOrderRef.current.filter((id) => id !== tabId);
+    revokeTabPhotos(target);
+
+    if (tabs.length === 1) {
+      const seq = nextSeqRef.current++;
+      const fresh = createEmptyTab(seq);
+      setTabs([fresh]);
+      setActiveTabId(fresh.id);
+      return;
+    }
+
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    const restantes = tabs.filter((t) => t.id !== tabId);
+    setTabs(restantes);
+    if (activeTabId === tabId) {
+      const nextActive = restantes[Math.max(0, idx - 1)] || restantes[0];
+      setActiveTabId(nextActive.id);
+    }
+  };
+
+  const handleResetActiveTab = () => {
+    if (!activeTab || activeTab.status === 'generating') return;
+    revokeTabPhotos(activeTab);
+    updateTabById(activeTab.id, (t) => ({
+      ...createEmptyTab(t.seq),
+      id: t.id
+    }));
+    if (onToast) onToast('Aba limpa e pronta para um novo relatório!');
+  };
+
   const handleInsertTemplate = () => {
     const template = `Paciente: Thor | Espécie: Canina | Sexo: Macho | Idade: 5 anos | Peso: 14 kg
-Tutor: Carlos Silva | Data: ${new Date().toLocaleDateString('pt-BR')}
+Responsável: Carlos Silva | Data: ${new Date().toLocaleDateString('pt-BR')}
 Procedimento: Orquiectomia pré-escrotal eletiva
 Diagnóstico pré-cirúrgico: Esterilização eletiva
 
@@ -79,8 +283,8 @@ Síntese cutânea com fio Nylon 3-0 em pontos simples separados.
 Recuperação pós-anestésica:
 Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia ou sangramentos.`;
 
-    setSurgeryText(template);
-    if (onToast) onToast('Modelo de exemplo inserido no campo!');
+    updateTabById(activeTab.id, { surgeryText: template });
+    if (onToast) onToast('Modelo de exemplo inserido nesta aba!');
   };
 
   const carregarModelos = async () => {
@@ -98,48 +302,47 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
 
   const handleDocSelected = (fileList) => {
     const f = fileList && fileList[0];
-    if (!f) return;
-    setRawDocFile(f);
-    setSurgeryDocFile({
-      name: f.name,
-      size: `${(f.size / 1024).toFixed(1)} KB`
+    if (!f || !activeTab) return;
+    updateTabById(activeTab.id, {
+      rawDocFile: f,
+      surgeryDocFile: {
+        name: f.name,
+        size: `${(f.size / 1024).toFixed(1)} KB`
+      }
     });
-    onToast('Arquivo da cirurgia selecionado!');
+    if (docInputRef.current) docInputRef.current.value = '';
+    if (onToast) onToast(`Arquivo anexado na aba "${getTabLabel(activeTab)}"!`);
   };
 
   const handlePhotosSelected = (fileList) => {
     const arr = Array.from(fileList || []).slice(0, 5);
-    if (arr.length === 0) return;
-    setRawPhotoFiles(arr);
-    setSurgeryPhotos(
-      arr.map((f, i) => ({
+    if (arr.length === 0 || !activeTab) return;
+    revokeTabPhotos(activeTab);
+    updateTabById(activeTab.id, {
+      rawPhotoFiles: arr,
+      surgeryPhotos: arr.map((f, i) => ({
         name: f.name,
         label: `Foto ${i + 1} (${(f.size / 1024).toFixed(0)} KB)`,
         previewUrl: URL.createObjectURL(f)
       }))
-    );
-    onToast(`${arr.length} foto(s) intraoperatória(s) anexada(s)!`);
+    });
+    if (photoInputRef.current) photoInputRef.current.value = '';
+    if (onToast) onToast(`${arr.length} foto(s) anexada(s) nesta aba!`);
   };
 
-  const handleGenerate = async () => {
-    if (!podeEmitir) {
-      onToast('Sua conta não possui permissão para gerar relatórios cirúrgicos.');
-      return;
-    }
-    const hasText = Boolean(surgeryText && surgeryText.trim().length >= 8);
-    const hasDoc = Boolean(rawDocFile);
-    const hasPhotos = rawPhotoFiles.length > 0;
+  // Executa a geração de uma aba específica e dispara a próxima da fila automaticamente
+  const executeGenerationForTab = useCallback(async (tabId) => {
+    const currentTab = tabsRef.current.find((t) => t.id === tabId);
+    if (!currentTab) return;
 
-    if (!hasText && !hasDoc && !hasPhotos) {
-      onToast('Digite as informações da cirurgia ou selecione um arquivo/áudio antes de gerar.');
-      if (inputMode === 'file' && docInputRef.current) docInputRef.current.click();
-      return;
-    }
-
-    setIsGenerating(true);
-    setGeneratedOutput('');
-    setDownloadLinks({ pdfUrl: '', docxUrl: '' });
-    setReportPageTab('p1');
+    activeGenerationsRef.current += 1;
+    updateTabById(tabId, {
+      status: 'generating',
+      errorMessage: '',
+      generatedOutput: '',
+      downloadLinks: { pdfUrl: '', docxUrl: '' },
+      reportPageTab: 'p1'
+    });
 
     const now = new Date();
     const dateStr = `Gerado em ${String(now.getDate()).padStart(2, '0')}/${String(
@@ -151,9 +354,11 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
 
     try {
       const fd = new FormData();
-      if (rawDocFile) fd.append('documento', rawDocFile);
-      if (surgeryText && surgeryText.trim()) fd.append('textoDigitado', surgeryText.trim());
-      rawPhotoFiles.forEach((f) => fd.append('fotos', f));
+      if (currentTab.rawDocFile) fd.append('documento', currentTab.rawDocFile);
+      if (currentTab.surgeryText && currentTab.surgeryText.trim()) {
+        fd.append('textoDigitado', currentTab.surgeryText.trim());
+      }
+      currentTab.rawPhotoFiles.forEach((f) => fd.append('fotos', f));
 
       const res = await api.gerarCirurgia(fd);
       const pac = res.paciente || {};
@@ -173,10 +378,8 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
           cir.evolucaoConsideracoes || 'Paciente encaminhado para recuperação.'
         }`;
 
-      setGeneratedOutput(textReal);
-      setDownloadLinks({ pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' });
       const novoRelatorio = {
-        id: `cirurg-${Date.now()}`,
+        id: `cirurg-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         jobId: res.jobId,
         type: 'relatorio',
         title: `Relatório Cirúrgico — ${cir.procedimento || 'Oficial'}`,
@@ -192,23 +395,88 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
         fotos: Array.isArray(res.fotos) ? res.fotos : [],
         legendasFotos: Array.isArray(res.legendasFotos) ? res.legendasFotos : []
       };
-      setReportParaEdicao(novoRelatorio);
-      onAddActivity(novoRelatorio);
-      onToast('Relatório Cirúrgico Oficial concluído com sucesso!');
+
+      updateTabById(tabId, {
+        status: 'done',
+        errorMessage: '',
+        generatedOutput: textReal,
+        downloadLinks: { pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' },
+        reportParaEdicao: novoRelatorio
+      });
+
+      if (onAddActivity) onAddActivity(novoRelatorio);
+      if (onToast) {
+        onToast(`Relatório de ${pac.nome || getTabLabel(currentTab)} concluído!`);
+      }
     } catch (err) {
-      onToast('Erro ao processar cirurgia: ' + err.message);
+      updateTabById(tabId, {
+        status: 'error',
+        errorMessage: err.message || 'Erro ao processar cirurgia.'
+      });
+      if (onToast) onToast(`Erro na aba ${getTabLabel(currentTab)}: ${err.message}`);
     } finally {
-      setIsGenerating(false);
+      activeGenerationsRef.current = Math.max(0, activeGenerationsRef.current - 1);
+      // Desenfileira próxima aba aguardando, se houver
+      while (
+        activeGenerationsRef.current < MAX_CONCURRENT_GENERATIONS &&
+        queueOrderRef.current.length > 0
+      ) {
+        const nextTabId = queueOrderRef.current.shift();
+        const stillExists = tabsRef.current.some(
+          (t) => t.id === nextTabId && t.status === 'queued'
+        );
+        if (stillExists) {
+          executeGenerationForTab(nextTabId);
+          break;
+        }
+      }
     }
+  }, [updateTabById, userProfile, onAddActivity, onToast]);
+
+  const handleGenerate = async () => {
+    if (!activeTab) return;
+    if (!podeEmitir) {
+      if (onToast) onToast('Sua conta não possui permissão para gerar relatórios cirúrgicos.');
+      return;
+    }
+    if (activeTab.status === 'generating' || activeTab.status === 'queued') {
+      return;
+    }
+
+    const hasText = Boolean(activeTab.surgeryText && activeTab.surgeryText.trim().length >= 8);
+    const hasDoc = Boolean(activeTab.rawDocFile);
+    const hasPhotos = activeTab.rawPhotoFiles.length > 0;
+
+    if (!hasText && !hasDoc && !hasPhotos) {
+      if (onToast) onToast('Digite as informações da cirurgia ou selecione um arquivo/áudio antes de gerar.');
+      if (activeTab.inputMode === 'file' && docInputRef.current) docInputRef.current.click();
+      return;
+    }
+
+    // Se já houver MAX_CONCURRENT_GENERATIONS em andamento, coloca esta aba na fila automática
+    if (activeGenerationsRef.current >= MAX_CONCURRENT_GENERATIONS) {
+      if (!queueOrderRef.current.includes(activeTab.id)) {
+        queueOrderRef.current.push(activeTab.id);
+      }
+      updateTabById(activeTab.id, { status: 'queued', errorMessage: '' });
+      if (onToast) {
+        onToast(
+          `Aba "${getTabLabel(activeTab)}" adicionada à fila! Ela iniciará automaticamente assim que uma geração atual terminar.`
+        );
+      }
+      return;
+    }
+
+    executeGenerationForTab(activeTab.id);
   };
 
   const handleClonarModelo = async (id) => {
     try {
       const res = await api.clonarModeloCirurgico(id);
-      onToast(`Modelo duplicado para seu perfil como "${res.modelo?.nome || 'Meu Modelo'}"!`);
+      if (onToast) onToast(`Modelo duplicado para seu perfil como "${res.modelo?.nome || 'Meu Modelo'}"!`);
       await carregarModelos();
     } catch (err) {
-      onToast('Erro ao duplicar modelo: ' + err.message);
+      if (onToast) onToast('Erro ao duplicar modelo: ' + err.message);
     }
   };
 
@@ -224,8 +492,120 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
     return nome.includes(q) || proc.includes(q) || desc.includes(q) || sin.includes(q);
   });
 
+  const generatingCount = tabs.filter((t) => t.status === 'generating').length;
+  const queuedCount = tabs.filter((t) => t.status === 'queued').length;
+  const isGenerating = activeTab?.status === 'generating';
+  const isQueued = activeTab?.status === 'queued';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Barra de Abas Multi-Laudos Cirúrgicos */}
+      <div
+        className={`rounded-2xl p-2 border shadow-sm ${
+          darkMode ? 'bg-[#0C1720] border-[#1E3545]' : 'bg-slate-100/90 border-slate-200'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTab?.id;
+            const label = getTabLabel(tab);
+            return (
+              <div
+                key={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                role="tab"
+                aria-selected={isActive}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition shrink-0 border select-none ${
+                  isActive
+                    ? darkMode
+                      ? 'bg-[#0F1C26] text-white border-[#00D296]/70 shadow-md'
+                      : 'bg-white text-[#0A141D] border-[#0D5C56]/50 shadow-sm'
+                    : darkMode
+                    ? 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/60 hover:text-slate-200'
+                    : 'bg-transparent text-slate-600 border-transparent hover:bg-white/70 hover:text-slate-900'
+                }`}
+              >
+                {tab.status === 'generating' ? (
+                  <Loader2 className="w-3.5 h-3.5 text-[#00D296] animate-spin shrink-0" />
+                ) : tab.status === 'queued' ? (
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                ) : tab.status === 'done' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#00D296] shrink-0" />
+                ) : tab.status === 'error' ? (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                ) : (
+                  <FileText className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#00D296]' : 'opacity-60'}`} />
+                )}
+
+                <span className="max-w-[130px] truncate">{label}</span>
+
+                {tab.status === 'queued' && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    Fila
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={(e) => handleCloseTab(e, tab.id)}
+                  disabled={tab.status === 'generating'}
+                  title={
+                    tab.status === 'generating'
+                      ? 'Aguarde a geração terminar para fechar'
+                      : 'Fechar aba'
+                  }
+                  className={`p-0.5 rounded-md transition ${
+                    tab.status === 'generating'
+                      ? 'opacity-30 cursor-not-allowed'
+                      : 'opacity-50 group-hover:opacity-100 hover:bg-rose-500/20 hover:text-rose-400'
+                  }`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+
+          {/* Botão Nova Aba */}
+          <button
+            type="button"
+            onClick={handleAddTab}
+            disabled={tabs.length >= MAX_SURGERY_TABS}
+            title={
+              tabs.length >= MAX_SURGERY_TABS
+                ? `Máximo de ${MAX_SURGERY_TABS} abas simultâneas para manter o servidor rápido`
+                : 'Abrir nova aba para outro relatório cirúrgico'
+            }
+            className={`px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shrink-0 border border-dashed transition ${
+              tabs.length >= MAX_SURGERY_TABS
+                ? 'opacity-40 cursor-not-allowed border-slate-600 text-slate-500'
+                : darkMode
+                ? 'border-[#00D296]/40 text-[#00D296] hover:bg-[#00D296]/15'
+                : 'border-[#0D5C56]/40 text-[#0D5C56] hover:bg-[#0D5C56]/10'
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Nova Aba</span>
+            <span className="text-[10px] opacity-75">
+              ({tabs.length}/{MAX_SURGERY_TABS})
+            </span>
+          </button>
+
+          {/* Indicador de fila / gerações em segundo plano */}
+          {(generatingCount > 0 || queuedCount > 0) && (
+            <div className="ml-auto flex items-center gap-2 pl-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>
+                  {generatingCount} gerando{queuedCount > 0 ? ` • ${queuedCount} na fila` : ''}
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Card Principal da Aba Ativa */}
       <div
         className={`relative rounded-2xl p-5 sm:p-7 border overflow-hidden transition shadow-lg ${
           darkMode
@@ -238,20 +618,40 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
         {/* Cabeçalho */}
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
-              Relatório Cirúrgico Oficial
-            </h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
+                Relatório Cirúrgico Oficial
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30">
+                {getTabLabel(activeTab)}
+              </span>
+            </div>
             <p
               className={`text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed ${
                 darkMode ? 'text-slate-300' : 'text-[#52657A]'
               }`}
             >
               Envie o documento da cirurgia (.docx, .pages, .txt ou áudio gravado) e fotos
-              anexas opcionais.
+              anexas opcionais. Você pode alternar entre abas enquanto outro laudo é gerado.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
+            {activeTab.status === 'done' && (
+              <button
+                type="button"
+                onClick={handleResetActiveTab}
+                className={`px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 border transition ${
+                  darkMode
+                    ? 'bg-slate-800/80 text-slate-200 border-slate-700 hover:border-[#00D296]'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:border-[#0D5C56]'
+                }`}
+                title="Limpar esta aba para iniciar outro laudo"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Novo nesta aba</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onOpenProfile && onOpenProfile('estilo_cirurgia')}
@@ -311,9 +711,9 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
             >
               <button
                 type="button"
-                onClick={() => setInputMode('text')}
+                onClick={() => updateTabById(activeTab.id, { inputMode: 'text' })}
                 className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
-                  inputMode === 'text'
+                  activeTab.inputMode === 'text'
                     ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#0A1A24] shadow-sm'
                     : darkMode
                     ? 'text-slate-400 hover:text-white'
@@ -325,9 +725,9 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
               </button>
               <button
                 type="button"
-                onClick={() => setInputMode('file')}
+                onClick={() => updateTabById(activeTab.id, { inputMode: 'file' })}
                 className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
-                  inputMode === 'file'
+                  activeTab.inputMode === 'file'
                     ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#0A1A24] shadow-sm'
                     : darkMode
                     ? 'text-slate-400 hover:text-white'
@@ -340,7 +740,7 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
             </div>
           </div>
 
-          {inputMode === 'text' ? (
+          {activeTab.inputMode === 'text' ? (
             /* Modo 1: Digitar ou Colar Texto Livre Inteligente */
             <div
               className={`rounded-2xl border p-4 transition ${
@@ -362,10 +762,10 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
                   >
                     + Inserir Modelo de Exemplo
                   </button>
-                  {surgeryText && (
+                  {activeTab.surgeryText && (
                     <button
                       type="button"
-                      onClick={() => setSurgeryText('')}
+                      onClick={() => updateTabById(activeTab.id, { surgeryText: '' })}
                       className="text-[11px] font-bold text-slate-400 hover:text-rose-500 transition px-2 py-1"
                     >
                       Limpar
@@ -375,14 +775,14 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
               </div>
 
               <textarea
-                value={surgeryText}
-                onChange={(e) => setSurgeryText(e.target.value)}
+                value={activeTab.surgeryText}
+                onChange={(e) => updateTabById(activeTab.id, { surgeryText: e.target.value })}
                 rows={9}
                 placeholder={`Cole ou digite aqui as informações da cirurgia...
 
 Exemplo:
 Paciente: Thor | Espécie: Canina | Macho | 4 anos | Peso: 15 kg
-Tutor: Carlos Silva | Data: 19/11/2026
+Responsável: Carlos Silva | Data: 19/11/2026
 Procedimento: Celiotomia exploratória com enterotomia por corpo estranho.
 Descrição: Antissepsia rigorosa em 3 ciclos com clorexidina degermante e alcoólica. Incisão mediana pré e pós-umbilical. Localizado corpo estranho linear em jejuno proximal. Enterotomia com lâmina 11, retirada de fragmento plástico. Enterorrafia com PDS 3-0 em pontos simples separados e omentopexia. Síntese muscular com nylon 2-0 Reverdin, subcutâneo com poliglecaprone 3-0 intradérmico e pele com nylon 3-0 Sultan.
 Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
@@ -393,7 +793,7 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
 
               <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-500/15 text-slate-400">
                 <span>💡 Cole anotações do WhatsApp, prontuário ou bloco de notas livremente.</span>
-                <span className="font-mono">{surgeryText.length} caracteres</span>
+                <span className="font-mono">{activeTab.surgeryText.length} caracteres</span>
               </div>
             </div>
           ) : (
@@ -435,14 +835,14 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
                   Word (.docx), Pages (.pages), Texto (.txt) ou Áudios (.m4a, .mp3, .wav, .ogg)
                 </p>
 
-                {surgeryDocFile && (
+                {activeTab.surgeryDocFile && (
                   <div
                     onClick={(e) => e.stopPropagation()}
                     className="mt-4 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-xl bg-[#00D296]/20 border border-[#00D296] text-xs font-extrabold text-[#00D296]"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>{surgeryDocFile.name}</span>
-                    <span className="opacity-75">({surgeryDocFile.size})</span>
+                    <span>{activeTab.surgeryDocFile.name}</span>
+                    <span className="opacity-75">({activeTab.surgeryDocFile.size})</span>
                   </div>
                 )}
               </div>
@@ -451,8 +851,8 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
               <div className="mt-3">
                 <input
                   type="text"
-                  value={surgeryText}
-                  onChange={(e) => setSurgeryText(e.target.value)}
+                  value={activeTab.surgeryText}
+                  onChange={(e) => updateTabById(activeTab.id, { surgeryText: e.target.value })}
                   placeholder="Observação ou detalhe complementar opcional (ex: complicação inesperada, fio alternativo)..."
                   className={`w-full text-xs px-3.5 py-2 rounded-xl border outline-none ${
                     darkMode
@@ -498,12 +898,12 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
               Clique para adicionar fotos da peça cirúrgica ou procedimento
             </p>
 
-            {surgeryPhotos.length > 0 && (
+            {activeTab.surgeryPhotos.length > 0 && (
               <div
                 onClick={(e) => e.stopPropagation()}
                 className="mt-3 flex flex-wrap items-center justify-center gap-2"
               >
-                {surgeryPhotos.map((photo, index) => (
+                {activeTab.surgeryPhotos.map((photo, index) => (
                   <span
                     key={index}
                     className="px-3 py-1 rounded-lg bg-[#00D296]/15 border border-[#00D296]/40 text-[11px] font-bold text-[#00D296]"
@@ -516,14 +916,24 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
           </div>
         </div>
 
+        {/* Alerta de erro desta aba, se houver */}
+        {activeTab.status === 'error' && activeTab.errorMessage && (
+          <div className="relative z-10 mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{activeTab.errorMessage}</span>
+          </div>
+        )}
+
         {/* Botão Largo Principal */}
         <button
           type="button"
           onClick={handleGenerate}
-          disabled={isGenerating || !podeEmitir}
+          disabled={isGenerating || isQueued || !podeEmitir}
           className={`relative z-10 w-full py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ${
             !podeEmitir
               ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+              : isQueued
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-wait'
               : darkMode
               ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110'
               : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110'
@@ -533,6 +943,11 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
             <>
               <Lock className="w-5 h-5" />
               <span>Geração Cirúrgica Bloqueada (Sem Permissão)</span>
+            </>
+          ) : isQueued ? (
+            <>
+              <Clock className="w-5 h-5 animate-pulse" />
+              <span>Na fila de processamento (iniciará automaticamente)...</span>
             </>
           ) : (
             <>
@@ -547,8 +962,8 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
         </button>
       </div>
 
-      {/* Resultado Real Gerado pela IA */}
-      {generatedOutput && (
+      {/* Resultado Real Gerado pela IA (da aba ativa) */}
+      {activeTab.generatedOutput && (
         <div
           className={`p-5 sm:p-6 rounded-2xl border space-y-4 transition ${
             darkMode ? 'bg-[#0F1C26] border-[#00D296]/40' : 'bg-white border-slate-200'
@@ -559,46 +974,46 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
               {userProfile?.logoUrl ? (
                 <img
                   src={userProfile.logoUrl}
-                  alt={userProfile.clinicName || "Logo da Clínica"}
+                  alt={userProfile.clinicName || 'Logo da Clínica'}
                   className="h-7 max-w-[110px] object-contain rounded bg-white px-1.5 py-0.5"
                 />
               ) : (
                 <VetaroLogo size={22} dark={darkMode} textSize="text-base" />
               )}
               <span className="text-xs font-bold text-[#00D296]">
-                • Relatório Cirúrgico Concluído!
+                • Relatório Cirúrgico Concluído ({getTabLabel(activeTab)})!
               </span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setReportPageTab('p1')}
+                onClick={() => updateTabById(activeTab.id, { reportPageTab: 'p1' })}
                 className={`px-3 py-1 rounded-lg text-xs font-extrabold ${
-                  reportPageTab === 'p1'
+                  activeTab.reportPageTab === 'p1'
                     ? 'bg-[#00D296] text-[#062E2B]'
                     : 'bg-slate-500/10 text-slate-400'
                 }`}
               >
                 Página 1: Documento Oficial
               </button>
-              {surgeryPhotos.length > 0 && (
+              {activeTab.surgeryPhotos.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setReportPageTab('p2')}
+                  onClick={() => updateTabById(activeTab.id, { reportPageTab: 'p2' })}
                   className={`px-3 py-1 rounded-lg text-xs font-extrabold ${
-                    reportPageTab === 'p2'
+                    activeTab.reportPageTab === 'p2'
                       ? 'bg-[#00D296] text-[#062E2B]'
                       : 'bg-slate-500/10 text-slate-400'
                   }`}
                 >
-                  Página 2: Fotos da Cirurgia ({surgeryPhotos.length})
+                  Página 2: Fotos da Cirurgia ({activeTab.surgeryPhotos.length})
                 </button>
               )}
             </div>
           </div>
 
-          {reportPageTab === 'p1' ? (
+          {activeTab.reportPageTab === 'p1' ? (
             <pre
               className={`text-xs leading-relaxed whitespace-pre-wrap font-sans p-4 rounded-xl border ${
                 darkMode
@@ -606,11 +1021,11 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
                   : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
-              {generatedOutput}
+              {activeTab.generatedOutput}
             </pre>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {surgeryPhotos.map((img, i) => (
+              {activeTab.surgeryPhotos.map((img, i) => (
                 <div
                   key={i}
                   className={`p-3 rounded-xl border text-center ${
@@ -635,7 +1050,7 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
                   </div>
                   <p className="text-[11px] font-bold truncate">{img.name}</p>
                   <p className="text-[10px] text-slate-400 italic line-clamp-2 mt-0.5">
-                    {reportParaEdicao?.fotos?.[i]?.legenda || `Figura ${i + 1} - Registro fotográfico intraoperatório / peça cirúrgica`}
+                    {activeTab.reportParaEdicao?.fotos?.[i]?.legenda || `Figura ${i + 1} - Registro fotográfico intraoperatório / peça cirúrgica`}
                   </p>
                 </div>
               ))}
@@ -651,10 +1066,10 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
               ← Voltar ao Início
             </button>
             <div className="flex flex-wrap items-center gap-2">
-              {reportParaEdicao && (
+              {activeTab.reportParaEdicao && (
                 <button
                   type="button"
-                  onClick={() => setPreviewModalAberto(true)}
+                  onClick={() => setPreviewModalTabId(activeTab.id)}
                   className="px-4 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] flex items-center gap-1.5 shadow-md hover:brightness-110"
                 >
                   <Eye className="w-4 h-4" />
@@ -662,9 +1077,9 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
                 </button>
               )}
 
-              {downloadLinks.docxUrl && (
+              {activeTab.downloadLinks.docxUrl && (
                 <a
-                  href={downloadLinks.docxUrl}
+                  href={activeTab.downloadLinks.docxUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold border border-[#00D296]/40 text-[#00D296] flex items-center gap-1.5"
@@ -673,9 +1088,9 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
                 </a>
               )}
 
-              {downloadLinks.pdfUrl && (
+              {activeTab.downloadLinks.pdfUrl && (
                 <a
-                  href={downloadLinks.pdfUrl}
+                  href={activeTab.downloadLinks.pdfUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
@@ -862,16 +1277,19 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
         }}
         onToast={onToast}
       />
-      {/* Modal de Pré-Visualização e Edição da Cirurgia */}
-      {previewModalAberto && reportParaEdicao && (
+
+      {/* Modal de Pré-Visualização e Edição da Cirurgia (vinculado à aba que o abriu) */}
+      {previewTab && previewTab.reportParaEdicao && (
         <ReportPreviewModal
-          report={reportParaEdicao}
+          report={previewTab.reportParaEdicao}
           darkMode={darkMode}
-          onClose={() => setPreviewModalAberto(false)}
+          onClose={() => setPreviewModalTabId(null)}
           onToast={onToast}
           onUpdateReport={(updated) => {
-            setReportParaEdicao(updated);
-            setDownloadLinks({ pdfUrl: updated.pdfUrl, docxUrl: updated.docxUrl });
+            updateTabById(previewTab.id, {
+              reportParaEdicao: updated,
+              downloadLinks: { pdfUrl: updated.pdfUrl, docxUrl: updated.docxUrl }
+            });
           }}
         />
       )}

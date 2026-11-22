@@ -659,18 +659,18 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
   const margins = visual.margins || {};
 
   const fonte = usarModoClonado
-    ? extrairNomeFontePrincipal(bTypo.fontFamily || layout.font_family, 'Calibri')
+    ? extrairNomeFontePrincipal(layout.font_family || bTypo.fontFamily, 'Calibri')
     : (cfgDocx.fontFamily || 'Calibri');
   const szCorpo = usarModoClonado
-    ? ptParaHalfPoints(bTypo.fontSize || layout.font_size_body || '10pt', 20)
+    ? ptParaHalfPoints(layout.font_size_body || bTypo.fontSize || '10pt', 20)
     : (cfgDocx.szCorpo || 22);
   const szTitulo = usarModoClonado
-    ? ptParaHalfPoints(tCfg.fontSize || layout.font_size_titulo || '12pt', 24)
+    ? ptParaHalfPoints(layout.font_size_titulo || tCfg.fontSize || '12pt', 24)
     : (cfgDocx.szTitulo || 24);
   const spacingAfterCorpo = usarModoClonado
-    ? medidaParaTwips(bTypo.paragraphSpacing || layout.paragraph_spacing || '12pt', 240)
+    ? medidaParaTwips(layout.paragraph_spacing || bTypo.paragraphSpacing || '12pt', 240)
     : cfgDocx.spacingAfter;
-  const lineSpacingCorpo = Math.round((parseFloat(bTypo.lineHeight || layout.line_height) || 1.35) * 240);
+  const lineSpacingCorpo = Math.round((parseFloat(layout.line_height || bTypo.lineHeight) || 1.35) * 240);
 
   const headerLogoPath = resolverCaminhoArquivo(layout?.header_logo_url) ||
     resolverCaminhoArquivo(visual?.headerLogoUrl) ||
@@ -697,13 +697,13 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
   );
 
   // Margens A4 exatas em twips
-  const leftMm = parseFloat(String(margins.left || layout.margin_left || '20')) || 20;
-  const rightMm = parseFloat(String(margins.right || layout.margin_right || '20')) || 20;
+  const leftMm = parseFloat(String(layout.margin_left || margins.left || '20')) || 20;
+  const rightMm = parseFloat(String(layout.margin_right || margins.right || '20')) || 20;
   const larguraUtilMm = Math.max(120, 210 - leftMm - rightMm);
 
-  const marginLeftTwips = mmParaTwips(margins.left || layout.margin_left || '20mm', 1134);
-  const marginRightTwips = mmParaTwips(margins.right || layout.margin_right || '20mm', 1134);
-  const marginBottomTwips = mmParaTwips(margins.bottom || layout.margin_bottom || '16mm', 907);
+  const marginLeftTwips = mmParaTwips(layout.margin_left || margins.left || '20mm', 1134);
+  const marginRightTwips = mmParaTwips(layout.margin_right || margins.right || '20mm', 1134);
+  const marginBottomTwips = mmParaTwips(layout.margin_bottom || margins.bottom || '16mm', 907);
 
   // Quando o cabeçalho inline se repete via Word Header, o margin.top abre espaço limpo abaixo do cabeçalho
   const logoBox = visual.headerLogoBoxMm || { yMm: 10, heightMm: 15.6 };
