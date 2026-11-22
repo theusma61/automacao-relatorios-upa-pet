@@ -1,7 +1,7 @@
 import React from 'react';
-import { Home, FileText, Settings } from 'lucide-react';
+import { Home, FileText, Settings, Palette } from 'lucide-react';
 
-export default function MobileTabBar({ darkMode, activeNav, setActiveNav }) {
+export default function MobileTabBar({ darkMode, activeNav, setActiveNav, newUiEnabled = false }) {
   return (
     <div
       className={`border-t py-3 px-6 flex items-center justify-around text-xs font-bold ${
@@ -30,6 +30,18 @@ export default function MobileTabBar({ darkMode, activeNav, setActiveNav }) {
         <FileText className="w-5 h-5" />
         <span>Histórico</span>
       </button>
+      {newUiEnabled && (
+        <button
+          type="button"
+          onClick={() => setActiveNav('meus-padroes')}
+          className={`flex flex-col items-center gap-1 ${
+            activeNav === 'meus-padroes' ? 'text-[#00D296]' : ''
+          }`}
+        >
+          <Palette className="w-5 h-5" />
+          <span>Padrões</span>
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setActiveNav('configuracoes')}

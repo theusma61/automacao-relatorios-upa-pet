@@ -14,6 +14,8 @@ export default function TopHeader({
   onOpenAdminModal,
   onLogout,
   onBellClick,
+  newUiEnabled = false,
+  onToggleNewUi,
   compact = false
 }) {
   return (
@@ -78,6 +80,8 @@ export default function TopHeader({
             activeNav={activeNav}
             settingsTab={settingsTab}
             onSelectTab={onSelectTab}
+            newUiEnabled={newUiEnabled}
+            onToggleNewUi={onToggleNewUi}
             onOpenAdminModal={onOpenAdminModal}
             onLogout={onLogout}
           />

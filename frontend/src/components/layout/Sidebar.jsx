@@ -4,6 +4,7 @@ import {
   FileText,
   Settings,
   HelpCircle,
+  Palette,
   ArrowUpRight
 } from 'lucide-react';
 import { VetaroLogo, UltrasoundIcon } from '../icons/VetaroIcons';
@@ -14,12 +15,14 @@ export default function Sidebar({
   setActiveNav,
   compact = false,
   showWindowDots = true,
+  newUiEnabled = false,
   onHelpClick
 }) {
   const navItems = [
     { id: 'inicio', label: 'Início', icon: Home },
     { id: 'ultrassom', label: 'Ultrassom', icon: UltrasoundIcon },
     { id: 'relatorio', label: 'Relatório', icon: FileText },
+    ...(newUiEnabled ? [{ id: 'meus-padroes', label: 'Meus Padrões', icon: Palette, badge: 'Novo' }] : []),
     { id: 'configuracoes', label: 'Configurações', icon: Settings }
   ];
 
@@ -76,7 +79,12 @@ export default function Sidebar({
                   <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#00D296]" />
                 )}
                 <Icon className={compact ? 'w-4 h-4' : 'w-5 h-5'} />
-                <span>{item.label}</span>
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && !compact && (
+                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-[#00D296]/20 text-[#00D296] border border-[#00D296]/30">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}

@@ -22,7 +22,8 @@ import {
   Calendar,
   Zap,
   Image as ImageIcon,
-  Move
+  Move,
+  Palette
 } from 'lucide-react';
 import { UltrasoundIcon } from '../components/icons/VetaroIcons';
 import EstiloLaudoTab from '../components/EstiloLaudoTab';
@@ -39,6 +40,9 @@ export default function SettingsPage({
   userProfile,
   setUserProfile,
   activitiesCount = 142,
+  newUiEnabled = false,
+  onToggleNewUi,
+  onOpenMeusPadroes,
   onOpenAdminModal,
   onToast
 }) {
@@ -286,8 +290,12 @@ export default function SettingsPage({
         <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'perfil', label: `Meu perfil (${userProfile.greetingName})`, icon: User },
-            { id: 'estilo', label: 'Padrão de Ultrassom', icon: Sparkles },
-            { id: 'estilo_cirurgia', label: 'Padrão Cirúrgico', icon: Stethoscope },
+            ...(!newUiEnabled
+              ? [
+                  { id: 'estilo', label: 'Padrão de Ultrassom', icon: Sparkles },
+                  { id: 'estilo_cirurgia', label: 'Padrão Cirúrgico', icon: Stethoscope }
+                ]
+              : []),
             { id: 'assinatura', label: 'Plano e assinatura', icon: CreditCard },
             { id: 'preferencias', label: 'Configurações & IA', icon: Settings }
           ].map((tab) => {
@@ -324,6 +332,40 @@ export default function SettingsPage({
           </button>
         )}
       </div>
+
+      {newUiEnabled && onOpenMeusPadroes && (
+        <div
+          className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            darkMode
+              ? 'bg-[#0D2527]/70 border-[#00D296]/30 text-slate-200'
+              : 'bg-[#E9FBF5] border-[#00D296]/40 text-[#0A141D]'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#00D296]/20 text-[#00D296] flex items-center justify-center shrink-0">
+              <Palette className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-extrabold">
+                Padrões de Ultrassom e Cirurgia agora ficam no Hub Meus Padrões
+              </p>
+              <p className="text-[11px] opacity-80">
+                Edite fontes, cores, assinatura e veja seu PDF ao vivo em um só lugar.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => onOpenMeusPadroes('ultrassom')}
+              className="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] hover:bg-[#00ba84] transition inline-flex items-center gap-1.5"
+            >
+              <span>Abrir Meus Padrões</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ABA 1: MEU PERFIL */}
       {settingsTab === 'perfil' && (

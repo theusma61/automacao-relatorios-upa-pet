@@ -17,6 +17,7 @@ import DashboardHome from './pages/DashboardHome';
 import UltrasoundGenerator from './pages/UltrasoundGenerator';
 import SurgeryGenerator from './pages/SurgeryGenerator';
 import SettingsPage from './pages/SettingsPage';
+import MeusPadroesPage from './pages/MeusPadroesPage';
 
 function formatDatePtBr(dateInput) {
   if (!dateInput) return '';
@@ -48,6 +49,8 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [activeNav, setActiveNav] = useState('inicio');
   const [settingsTab, setSettingsTab] = useState('perfil');
+  const [padroesTab, setPadroesTab] = useState('ultrassom');
+  const [newUiEnabled, setNewUiEnabled] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
 
@@ -163,10 +166,52 @@ export default function App() {
   useEffect(() => {
     if (usuario) {
       carregarHistoricoServidor();
+      try {
+        const key = `vetaro_new_ui_v2_${usuario.id || usuario.email || 'default'}`;
+        setNewUiEnabled(localStorage.getItem(key) === 'true');
+      } catch (_) {}
     }
   }, [carregarHistoricoServidor, usuario]);
 
+  const handleToggleNewUi = (ativo) => {
+    setNewUiEnabled(ativo);
+    try {
+      const key = `vetaro_new_ui_v2_${usuario?.id || usuario?.email || 'default'}`;
+      localStorage.setItem(key, ativo ? 'true' : 'false');
+    } catch (_) {}
+    if (ativo) {
+      if (activeNav === 'configuracoes' && (settingsTab === 'estilo' || settingsTab === 'estilo_cirurgia')) {
+        setPadroesTab(settingsTab === 'estilo_cirurgia' ? 'cirurgia' : 'ultrassom');
+        setActiveNav('meus-padroes');
+      }
+      showToast('✨ Nova interface ativada para sua conta! O Hub "Meus Padrões" já está no menu.');
+    } else {
+      if (activeNav === 'meus-padroes') {
+        setSettingsTab(padroesTab === 'cirurgia' ? 'estilo_cirurgia' : 'estilo');
+        setActiveNav('configuracoes');
+      }
+      showToast('Interface clássica restaurada para sua conta.');
+    }
+  };
+
+  const openMeusPadroes = (tab = 'ultrassom') => {
+    setPadroesTab(tab);
+    if (newUiEnabled) {
+      setActiveNav('meus-padroes');
+    } else {
+      setSettingsTab(tab === 'cirurgia' ? 'estilo_cirurgia' : 'estilo');
+      setActiveNav('configuracoes');
+    }
+    setProfileMenuOpen(false);
+  };
+
   const openFromProfileMenu = (tab) => {
+    if (newUiEnabled && (tab === 'estilo' || tab === 'estilo_cirurgia')) {
+      setPadroesTab(tab === 'estilo_cirurgia' ? 'cirurgia' : 'ultrassom');
+      setActiveNav('meus-padroes');
+      setProfileMenuOpen(false);
+      return;
+    }
     setActiveNav('configuracoes');
     setSettingsTab(tab);
     setProfileMenuOpen(false);
@@ -286,16 +331,34 @@ export default function App() {
       );
     }
 
+    if (activeNav === 'meus-padroes' && newUiEnabled) {
+      return (
+        <MeusPadroesPage
+          darkMode={darkMode}
+          isMobileLayout={isMobile}
+          padroesTab={padroesTab}
+          setPadroesTab={setPadroesTab}
+          userProfile={usuario}
+          setUserProfile={atualizarUsuarioLocal}
+          onOpenPerfilMarca={() => openFromProfileMenu('perfil')}
+          onToast={showToast}
+        />
+      );
+    }
+
     return (
       <SettingsPage
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         isMobileLayout={isMobile}
-        settingsTab={settingsTab}
+        settingsTab={newUiEnabled && (settingsTab === 'estilo' || settingsTab === 'estilo_cirurgia') ? 'perfil' : settingsTab}
         setSettingsTab={setSettingsTab}
         userProfile={usuario}
         setUserProfile={atualizarUsuarioLocal}
         activitiesCount={activities.length}
+        newUiEnabled={newUiEnabled}
+        onToggleNewUi={handleToggleNewUi}
+        onOpenMeusPadroes={openMeusPadroes}
         onOpenAdminModal={() => setAdminModalOpen(true)}
         onToast={showToast}
       />
@@ -320,6 +383,7 @@ export default function App() {
           setActiveNav={setActiveNav}
           compact={isTablet}
           showWindowDots={false}
+          newUiEnabled={newUiEnabled}
           onHelpClick={() =>
             showToast('Suporte Técnico Veterinário Vetaro disponível!')
           }
@@ -336,7 +400,7 @@ export default function App() {
             : 'py-8 px-8 lg:px-12 h-full overflow-y-auto'
         } relative`}
       >
-        <div className="w-full max-w-5xl mx-auto flex flex-col">
+        <div className={`w-full ${activeNav === 'meus-padroes' && newUiEnabled ? 'max-w-7xl' : 'max-w-5xl'} mx-auto flex flex-col`}>
           {isMobile ? (
             <>
               <div className="flex items-center justify-between mb-5 relative">
@@ -371,6 +435,8 @@ export default function App() {
                     userProfile={usuario}
                     activeNav={activeNav}
                     settingsTab={settingsTab}
+                    newUiEnabled={newUiEnabled}
+                    onToggleNewUi={handleToggleNewUi}
                     onSelectTab={openFromProfileMenu}
                     onOpenAdminModal={() => {
                       setProfileMenuOpen(false);
@@ -406,6 +472,8 @@ export default function App() {
               }}
               onLogout={handleLogout}
               onBellClick={() => showToast('Nenhuma notificação pendente.')}
+              newUiEnabled={newUiEnabled}
+              onToggleNewUi={handleToggleNewUi}
               compact={isTablet}
             />
           )}
@@ -437,6 +505,7 @@ export default function App() {
             darkMode={darkMode}
             activeNav={activeNav}
             setActiveNav={setActiveNav}
+            newUiEnabled={newUiEnabled}
           />
         </div>
       )}
