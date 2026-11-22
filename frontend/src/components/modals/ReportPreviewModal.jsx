@@ -20,7 +20,11 @@ import {
   Camera,
   GripVertical,
   Palette,
-  RotateCcw
+  RotateCcw,
+  ArrowLeft,
+  User,
+  Layers,
+  LayoutGrid
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
@@ -195,6 +199,7 @@ function extrairOrgaosDeRelatorio(rep) {
 export default function ReportPreviewModal({
   report,
   darkMode,
+  newUiEnabled = false,
   onClose,
   onToast,
   onUpdateReport
@@ -225,6 +230,49 @@ export default function ReportPreviewModal({
   const [autoAtualizarPdf, setAutoAtualizarPdf] = useState(true);
   const loadedJobIdRef = useRef('');
   const recompilarControllerRef = useRef(null);
+  const studioContainerRef = useRef(null);
+  const [studioSection, setStudioSection] = useState('conteudo'); // 'conteudo' | 'paciente' | 'estilo' | 'todos'
+  const [studioSplitPct, setStudioSplitPct] = useState(() => {
+    try {
+      const saved = parseFloat(localStorage.getItem('vetaro_studio_split_pct') || '48');
+      return !isNaN(saved) && saved >= 30 && saved <= 70 ? saved : 48;
+    } catch (_) {
+      return 48;
+    }
+  });
+  const [isResizingSplit, setIsResizingSplit] = useState(false);
+
+  useEffect(() => {
+    if (!isResizingSplit) return;
+    const handleMove = (e) => {
+      if (!studioContainerRef.current) return;
+      const rect = studioContainerRef.current.getBoundingClientRect();
+      const relX = e.clientX - rect.left;
+      const pct = Math.max(30, Math.min(70, (relX / Math.max(1, rect.width)) * 100));
+      setStudioSplitPct(Number(pct.toFixed(1)));
+    };
+    const handleUp = () => {
+      setIsResizingSplit(false);
+      try {
+        localStorage.setItem('vetaro_studio_split_pct', String(studioSplitPct));
+      } catch (_) {}
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isResizingSplit, studioSplitPct]);
+
+  const selecionarSecaoStudio = (sec) => {
+    setStudioSection(sec);
+    if (sec === 'paciente') setDadosPacienteAbertos(true);
+    if (sec === 'estilo') {
+      if (isSurgery) setEstiloCirurgiaAberto(true);
+      else setEstiloUltrassomAberto(true);
+    }
+  };
   const [estiloPadraoCirurgia, setEstiloPadraoCirurgia] = useState(ESTILO_CIRURGIA_BASE);
   const [estiloCirurgiaForm, setEstiloCirurgiaForm] = useState(() => ({
     ...ESTILO_CIRURGIA_BASE,
@@ -782,16 +830,29 @@ export default function ReportPreviewModal({
     'OVÁRIOS'
   ];
 
+  const isStudioMode = Boolean(newUiEnabled);
+  const mostrarCardPaciente = !isStudioMode || studioSection === 'todos' || studioSection === 'paciente';
+  const mostrarCardEstilo = !isStudioMode || studioSection === 'todos' || studioSection === 'estilo';
+  const mostrarCardConteudo = !isStudioMode || studioSection === 'todos' || studioSection === 'conteudo';
+
   return (
     <div
-      onClick={onClose}
-      className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200"
+      onClick={isStudioMode ? undefined : onClose}
+      className={
+        isStudioMode
+          ? 'fixed inset-0 z-50 flex flex-col animate-in fade-in duration-150'
+          : 'fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200'
+      }
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-6xl h-[92vh] sm:h-[88vh] rounded-2xl border flex flex-col shadow-2xl overflow-hidden transition ${
+        className={`${
+          isStudioMode
+            ? 'w-screen h-screen rounded-none border-0'
+            : 'w-full max-w-6xl h-[92vh] sm:h-[88vh] rounded-2xl border shadow-2xl'
+        } flex flex-col overflow-hidden transition ${
           darkMode
-            ? 'bg-[#0B1622] border-slate-700/80 text-white'
+            ? 'bg-[#0A141D] border-slate-700/80 text-white'
             : 'bg-[#F8FAFC] border-slate-200 text-[#0A141D]'
         }`}
       >
@@ -802,13 +863,34 @@ export default function ReportPreviewModal({
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
+            {isStudioMode && (
+              <button
+                type="button"
+                onClick={onClose}
+                title="Voltar ao painel"
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-extrabold inline-flex items-center gap-1.5 transition shrink-0 ${
+                  darkMode
+                    ? 'border-slate-800 bg-[#0A141D] text-slate-300 hover:border-[#00D296] hover:text-white'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-[#0D5C56]'
+                }`}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Voltar</span>
+              </button>
+            )}
             <VetaroLogo size={24} dark={darkMode} showText={false} />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs sm:text-sm font-extrabold tracking-tight truncate">
-                  {isSurgery ? 'Relatório Cirúrgico' : 'Laudo de Ultrassonografia'} —{' '}
+                  {isStudioMode ? 'Vetaro Studio' : (isSurgery ? 'Relatório Cirúrgico' : 'Laudo de Ultrassonografia')} —{' '}
                   <span className="text-[#00D296]">{pacienteForm.nome || 'Paciente'}</span>
                 </span>
+                {isStudioMode && !hasUnsavedChanges && !isRecompiling && (
+                  <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30 items-center gap-1 shrink-0">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Salvo
+                  </span>
+                )}
                 {hasUnsavedChanges && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -872,6 +954,48 @@ export default function ReportPreviewModal({
               </button>
             </div>
 
+            {isStudioMode && (
+              <div className="hidden xl:flex items-center gap-1.5 pl-1 border-l border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => handleSalvarERecompilar()}
+                  disabled={isRecompiling}
+                  className="px-3 py-1.5 rounded-xl text-xs font-extrabold border border-slate-700 bg-[#0A141D] text-slate-200 hover:border-[#00D296] hover:text-white transition inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-[#00D296] ${isRecompiling ? 'animate-spin' : ''}`} />
+                  <span>{hasUnsavedChanges ? 'Salvar PDF' : 'Regerar'}</span>
+                </button>
+                {docxUrlLive && (
+                  <a
+                    href={docxUrlLive}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => onToast && onToast('Arquivo Word (.docx) baixado com sucesso!')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border inline-flex items-center gap-1.5 transition ${
+                      darkMode
+                        ? 'border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                        : 'border-slate-200 bg-slate-100 text-[#0A141D] hover:bg-slate-200'
+                    }`}
+                  >
+                    <FileCheck className="w-3.5 h-3.5 text-[#00D296]" />
+                    <span>Word</span>
+                  </a>
+                )}
+                {pdfUrlLive && (
+                  <a
+                    href={pdfUrlLive}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => onToast && onToast('PDF baixado com sucesso!')}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] inline-flex items-center gap-1.5 hover:brightness-110 shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Baixar PDF</span>
+                  </a>
+                )}
+              </div>
+            )}
+
             {/* Botão Fechar */}
             <button
               type="button"
@@ -887,18 +1011,67 @@ export default function ReportPreviewModal({
           </div>
         </div>
 
-        {/* CORPO DO MODAL (CONTEÚDO DINÂMICO CONFORME ABA) */}
+        {/* CORPO DO MODAL / STUDIO (CONTEÚDO DINÂMICO CONFORME ABA) */}
         <div
+          ref={studioContainerRef}
           className={`flex-1 overflow-hidden relative flex ${
-            activeTab === 'split' ? 'flex-row' : 'flex-col'
+            activeTab === 'split' || isStudioMode ? 'flex-row' : 'flex-col'
           }`}
         >
+          {/* TRILHO LATERAL DO VETARO STUDIO (SOMENTE NOVA INTERFACE) */}
+          {isStudioMode && (activeTab === 'edit' || activeTab === 'split') && (
+            <aside
+              className={`hidden md:flex w-[76px] shrink-0 border-r flex-col items-center py-4 gap-2 ${
+                darkMode ? 'bg-[#0C1720] border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
+              {[
+                { id: 'paciente', label: 'Paciente', icon: User },
+                { id: 'conteudo', label: isSurgery ? 'Seções' : 'Órgãos', icon: Layers },
+                { id: 'estilo', label: 'Estilo', icon: Palette },
+                { id: 'todos', label: 'Tudo', icon: LayoutGrid }
+              ].map((nav) => {
+                const Icon = nav.icon;
+                const ativo = studioSection === nav.id;
+                return (
+                  <button
+                    key={nav.id}
+                    type="button"
+                    onClick={() => selecionarSecaoStudio(nav.id)}
+                    className={`w-14 py-2.5 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-extrabold transition relative ${
+                      ativo
+                        ? darkMode
+                          ? 'bg-[#0D3131] text-[#00D296]'
+                          : 'bg-[#DDF7F0] text-[#0D5C56]'
+                        : darkMode
+                        ? 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                    }`}
+                  >
+                    {ativo && (
+                      <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#00D296]" />
+                    )}
+                    <Icon className="w-4 h-4" />
+                    <span>{nav.label}</span>
+                  </button>
+                );
+              })}
+            </aside>
+          )}
+
           {/* MODO EDITOR DE TEXTO / ÓRGÃOS (ESQUERDA NO MODO SPLIT) */}
           {(activeTab === 'edit' || activeTab === 'split') && (
             <div
+              style={
+                isStudioMode && activeTab === 'split'
+                  ? { width: `${studioSplitPct}%` }
+                  : undefined
+              }
               className={`h-full overflow-y-auto p-4 sm:p-6 space-y-4 ${
                 activeTab === 'split'
-                  ? 'w-1/2 border-r border-slate-800/80'
+                  ? isStudioMode
+                    ? 'shrink-0'
+                    : 'w-1/2 border-r border-slate-800/80'
                   : 'w-full max-w-4xl mx-auto'
               }`}
             >
@@ -910,6 +1083,7 @@ export default function ReportPreviewModal({
               )}
 
               {/* Card Colapsável: Dados do Paciente e Tutor */}
+              {mostrarCardPaciente && (
               <div
                 className={`rounded-2xl border transition ${
                   darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
@@ -1099,12 +1273,14 @@ export default function ReportPreviewModal({
                   </div>
                 )}
               </div>
+              )}
 
               {/* SEÇÃO ESPECÍFICA: CIRURGIA OU ULTRASSOM */}
               {isSurgery ? (
                 /* FORMULÁRIO DE RELATÓRIO CIRÚRGICO */
                 <div className="space-y-4">
                   {/* Card Colapsável: Diagramação & Estilo Exclusivo deste Relatório */}
+                  {mostrarCardEstilo && (
                   <div
                     className={`rounded-2xl border transition ${
                       darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
@@ -1459,6 +1635,9 @@ export default function ReportPreviewModal({
                       </div>
                     )}
                   </div>
+                  )}
+                  {mostrarCardConteudo && (
+                  <>
                   <div
                     className={`p-4 sm:p-5 rounded-2xl border space-y-3 ${
                       darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
@@ -1679,11 +1858,14 @@ export default function ReportPreviewModal({
                       </div>
                     </div>
                   )}
+                  </>
+                  )}
                 </div>
               ) : (
                 /* LISTA DE ÓRGÃOS DO LAUDO DE ULTRASSOM */
                 <div className="space-y-4">
                   {/* Card Colapsável: Diagramação & Estilo Exclusivo deste Laudo de Ultrassom */}
+                  {mostrarCardEstilo && (
                   <div
                     className={`rounded-2xl border transition ${
                       darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
@@ -1988,6 +2170,9 @@ export default function ReportPreviewModal({
                       </div>
                     )}
                   </div>
+                  )}
+                  {mostrarCardConteudo && (
+                  <>
                   <div className="flex items-center justify-between px-1">
                     <div className="flex items-center gap-2">
                       <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
@@ -2233,8 +2418,30 @@ export default function ReportPreviewModal({
                     </div>
                     );
                   })}
+                  </>
+                  )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* DIVISOR ARRASTÁVEL DO STUDIO (RESIZABLE SPLIT) */}
+          {isStudioMode && activeTab === 'split' && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizingSplit(true);
+              }}
+              title="Arraste para redimensionar editor e PDF"
+              className={`w-1.5 shrink-0 cursor-col-resize flex items-center justify-center transition-colors group ${
+                isResizingSplit
+                  ? 'bg-[#00D296]'
+                  : darkMode
+                  ? 'bg-slate-800 hover:bg-[#00D296]/70'
+                  : 'bg-slate-200 hover:bg-[#00D296]/70'
+              }`}
+            >
+              <div className="w-0.5 h-10 rounded-full bg-slate-500/60 group-hover:bg-white" />
             </div>
           )}
 
@@ -2242,7 +2449,7 @@ export default function ReportPreviewModal({
           {(activeTab === 'preview' || activeTab === 'split') && (
             <div
               className={`h-full min-h-0 flex flex-col bg-slate-900 ${
-                activeTab === 'split' ? 'w-1/2' : 'w-full'
+                activeTab === 'split' ? (isStudioMode ? 'flex-1 min-w-0' : 'w-1/2') : 'w-full'
               }`}
             >
               {pdfUrlLive ? (
@@ -2291,6 +2498,7 @@ export default function ReportPreviewModal({
                   </div>
 
                   <div className="flex-1 w-full min-h-0 relative bg-slate-900 overflow-hidden">
+                    {isResizingSplit && <div className="absolute inset-0 z-20 cursor-col-resize" />}
                     {pdfDirectUrl ? (
                       <iframe
                         key={pdfDirectUrl}
@@ -2328,9 +2536,11 @@ export default function ReportPreviewModal({
           )}
         </div>
 
-        {/* BARRA INFERIOR (FOOTER / ACTIONS) */}
+        {/* BARRA INFERIOR (FOOTER / ACTIONS) — oculta no xl desktop no Studio pois as ações já ficam no topo */}
         <div
           className={`px-4 sm:px-6 py-3.5 border-t flex flex-wrap items-center justify-between gap-3 shrink-0 ${
+            isStudioMode ? 'xl:hidden ' : ''
+          }${
             darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
           }`}
         >

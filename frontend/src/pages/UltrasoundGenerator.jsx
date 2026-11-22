@@ -102,6 +102,7 @@ function loadSavedTabs(storageKey) {
 
 export default function UltrasoundGenerator({
   darkMode,
+  newUiEnabled = false,
   userProfile,
   layoutConfig,
   setLayoutConfig,
@@ -1012,6 +1013,7 @@ export default function UltrasoundGenerator({
         <ReportPreviewModal
           report={previewTab.reportParaEdicao}
           darkMode={darkMode}
+          newUiEnabled={newUiEnabled}
           onClose={() => setPreviewModalTabId(null)}
           onToast={onToast}
           onUpdateReport={(updated) => {

@@ -110,6 +110,7 @@ function loadSavedTabs(storageKey) {
 
 export default function SurgeryGenerator({
   darkMode,
+  newUiEnabled = false,
   userProfile,
   layoutConfig,
   onOpenProfile,
@@ -1283,6 +1284,7 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
         <ReportPreviewModal
           report={previewTab.reportParaEdicao}
           darkMode={darkMode}
+          newUiEnabled={newUiEnabled}
           onClose={() => setPreviewModalTabId(null)}
           onToast={onToast}
           onUpdateReport={(updated) => {

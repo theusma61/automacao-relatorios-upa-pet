@@ -306,6 +306,7 @@ export default function App() {
       return (
         <UltrasoundGenerator
           darkMode={darkMode}
+          newUiEnabled={newUiEnabled}
           userProfile={usuario}
           layoutConfig={layoutConfig}
           setLayoutConfig={setLayoutConfig}
@@ -321,6 +322,7 @@ export default function App() {
       return (
         <SurgeryGenerator
           darkMode={darkMode}
+          newUiEnabled={newUiEnabled}
           userProfile={usuario}
           layoutConfig={layoutConfig}
           onOpenProfile={(tab = 'perfil') => openFromProfileMenu(tab)}
@@ -514,6 +516,7 @@ export default function App() {
       <ReportPreviewModal
         report={selectedReport}
         darkMode={darkMode}
+        newUiEnabled={newUiEnabled}
         onClose={() => setSelectedReport(null)}
         onToast={showToast}
         onUpdateReport={(updated) => {
