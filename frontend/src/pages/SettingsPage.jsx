@@ -221,10 +221,19 @@ export default function SettingsPage({
     }
   }, [settingsTab]);
 
+  useEffect(() => {
+    const onAtualizada = () => carregarMetricasUso();
+    window.addEventListener('vetaro:assinatura-atualizada', onAtualizada);
+    return () => window.removeEventListener('vetaro:assinatura-atualizada', onAtualizada);
+  }, []);
+
+  const [cicloModal, setCicloModal] = useState('mensal');
+  const [abrindoStripe, setAbrindoStripe] = useState(false);
+
   const handleTrocarPlano = async (novoPlano) => {
     setTrocandoPlano(true);
     try {
-      const res = await api.trocarPlanoAssinatura(novoPlano);
+      const res = await api.trocarPlanoAssinatura(novoPlano, cicloModal);
       if (res && res.sucesso) {
         setUsageData(res);
         onToast(`Plano alterado com sucesso para: ${res.plano?.nome || novoPlano}!`);
@@ -237,6 +246,38 @@ export default function SettingsPage({
       onToast(`Erro ao trocar de plano: ${err.message}`);
     } finally {
       setTrocandoPlano(false);
+    }
+  };
+
+  const handleAssinarStripe = async (plano, ciclo = cicloModal) => {
+    setAbrindoStripe(true);
+    try {
+      const res = await api.criarCheckoutStripe(plano, ciclo);
+      if (res?.url) {
+        window.location.href = res.url;
+        return;
+      }
+      onToast('Não foi possível abrir o checkout da Stripe. Tente novamente.');
+    } catch (err) {
+      onToast(`Erro ao iniciar pagamento Stripe: ${err.message}`);
+    } finally {
+      setAbrindoStripe(false);
+    }
+  };
+
+  const handleAbrirPortalStripe = async () => {
+    setAbrindoStripe(true);
+    try {
+      const res = await api.abrirPortalStripe();
+      if (res?.url) {
+        window.location.href = res.url;
+        return;
+      }
+      onToast('Não foi possível abrir o portal de assinatura da Stripe.');
+    } catch (err) {
+      onToast(`Erro ao abrir portal Stripe: ${err.message}`);
+    } finally {
+      setAbrindoStripe(false);
     }
   };
 
@@ -818,7 +859,22 @@ export default function SettingsPage({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {(p.stripeCustomerId || !isGratuito) && (
+                    <button
+                      type="button"
+                      disabled={abrindoStripe}
+                      onClick={handleAbrirPortalStripe}
+                      className={`px-3.5 py-2.5 rounded-xl text-xs font-extrabold border transition flex items-center gap-1.5 disabled:opacity-60 ${
+                        darkMode
+                          ? 'bg-[#0A141D] border-slate-700 text-slate-200 hover:border-[#00D296]'
+                          : 'bg-white border-slate-300 text-slate-800 hover:border-[#0D5C56]'
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-[#00D296]" />
+                      <span>{abrindoStripe ? 'Abrindo...' : 'Gerenciar Faturas e Cartão'}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setModalPlanoAberto(true)}
@@ -829,6 +885,34 @@ export default function SettingsPage({
                   </button>
                 </div>
               </div>
+
+              {p.status === 'PAST_DUE' && (
+                <div className="mt-4 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-rose-200">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Pagamento pendente:</strong> não conseguimos cobrar seu cartão na renovação. Atualize o cartão no portal Stripe para liberar novos laudos.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={abrindoStripe}
+                    onClick={handleAbrirPortalStripe}
+                    className="px-3 py-1.5 rounded-lg bg-rose-500 text-white font-extrabold shrink-0 hover:bg-rose-400 transition"
+                  >
+                    Atualizar Cartão
+                  </button>
+                </div>
+              )}
+
+              {p.cancelAtPeriodEnd && p.status !== 'CANCELED' && (
+                <div className="mt-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center gap-2 text-xs text-amber-200">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    Cancelamento agendado para <strong>{new Date(p.cicloFim).toLocaleDateString('pt-BR')}</strong>. Você pode reativar a qualquer momento em <strong>Gerenciar Faturas e Cartão</strong>.
+                  </span>
+                </div>
+              )}
 
               {/* Barra de Progresso de Cota Disponível */}
               <div className="pt-5 space-y-2.5">
@@ -866,9 +950,8 @@ export default function SettingsPage({
                   <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-200">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>
-                      Você já utilizou <strong>{c.porcentagem}%</strong> da sua cota mensal. Se
-                      ultrapassar o limite, os laudos seguintes continuam sendo emitidos normalmente no
-                      modelo avulso (R$ 1,50/laudo) ou você pode fazer upgrade para o plano superior.
+                      Você já utilizou <strong>{c.porcentagem}%</strong> da sua cota mensal. Ao atingir
+                      100% do limite, a emissão de novos laudos de ultrassom será pausada até a próxima renovação ou upgrade de plano.
                     </span>
                   </div>
                 )}
@@ -1039,19 +1122,19 @@ export default function SettingsPage({
                     </span>
                   </div>
 
-                  {/* Item 3: Excedente */}
+                  {/* Item 3: Proteção contra Excedentes */}
                   <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center">
                         <Zap className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold">Laudos Excedentes</p>
-                        <p className="text-[10px] text-slate-400">R$ 1,50 / laudo adicional</p>
+                        <p className="text-xs font-bold">Limite de Cota Protegido</p>
+                        <p className="text-[10px] text-slate-400">Sem cobranças surpresa ao atingir o limite</p>
                       </div>
                     </div>
-                    <span className="text-xs font-extrabold">
-                      {b.excedenteQtd} (R$ {Number(b.excedenteValor).toFixed(2).replace('.', ',')})
+                    <span className="text-xs font-extrabold text-[#00D296]">
+                      Bloqueio ativo
                     </span>
                   </div>
                 </div>
@@ -1105,13 +1188,39 @@ export default function SettingsPage({
                         </p>
                         <p className="text-[10px] text-slate-400">Comprovante de pagamento emitido</p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5 flex-wrap justify-end">
                         <span className="font-extrabold text-[#00D296]">
                           R$ {Number(fat.valor).toFixed(2).replace('.', ',')}
                         </span>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00D296]/15 text-[#00D296]">
-                          {fat.status === 'pago' ? 'Pago' : fat.status}
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            fat.status === 'pago'
+                              ? 'bg-[#00D296]/15 text-[#00D296]'
+                              : 'bg-amber-500/15 text-amber-400'
+                          }`}
+                        >
+                          {fat.status === 'pago' ? 'Pago' : fat.status === 'pendente' ? 'Pendente' : fat.status}
                         </span>
+                        {fat.pdfUrl && (
+                          <a
+                            href={fat.pdfUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold border border-slate-700 hover:border-[#00D296] text-slate-300 hover:text-white transition"
+                          >
+                            PDF
+                          </a>
+                        )}
+                        {fat.hostedInvoiceUrl && (
+                          <a
+                            href={fat.hostedInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold border border-slate-700 hover:border-[#00D296] text-slate-300 hover:text-white transition"
+                          >
+                            Recibo
+                          </a>
+                        )}
                       </div>
                     </div>
                   ))
@@ -1141,50 +1250,87 @@ export default function SettingsPage({
                     <X className="w-5 h-5" />
                   </button>
 
-                  <div>
-                    <h3 className="text-xl font-extrabold">Alterar Plano e Licença da Assinatura</h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Escolha a franquia mensal que melhor se adequa ao seu volume atual de exames ou ative a licença total:
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                    <div>
+                      <h3 className="text-xl font-extrabold">Escolha seu Plano Vetaro</h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Pagamento seguro com cartão de crédito via Stripe • Cancele quando quiser.
+                      </p>
+                    </div>
+
+                    {/* Seletor Mensal / Anual */}
+                    <div
+                      className={`p-1 rounded-xl border inline-flex items-center gap-1 self-start ${
+                        darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-100 border-slate-200'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setCicloModal('mensal')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${
+                          cicloModal === 'mensal'
+                            ? 'bg-[#00D296] text-[#062E2B]'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Mensal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCicloModal('anual')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1 ${
+                          cicloModal === 'anual'
+                            ? 'bg-[#00D296] text-[#062E2B]'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>Anual</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-950/50 text-[#00D296] font-black">
+                          -20%
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {/* Licença Administrador (Ilimitado) */}
-                    <div
-                      className={`p-5 rounded-2xl border flex flex-col justify-between sm:col-span-3 transition ${
-                        p.chave === 'ILIMITADO' || p.chave === 'ADMIN'
-                          ? 'border-emerald-500 bg-emerald-500/10'
-                          : darkMode
-                          ? 'border-emerald-500/40 bg-[#0E2822]'
-                          : 'border-emerald-300 bg-emerald-50/70'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500 text-[#062E2B]">
-                              ADMIN / ILIMITADO
-                            </span>
-                            <h4 className="text-sm font-extrabold text-emerald-400">Licença Administrador (Ilimitado)</h4>
+                    {/* Licença Administrador (somente para contas role === 'admin') */}
+                    {userProfile?.role === 'admin' && (
+                      <div
+                        className={`p-5 rounded-2xl border flex flex-col justify-between sm:col-span-3 transition ${
+                          p.chave === 'ILIMITADO' || p.chave === 'ADMIN'
+                            ? 'border-emerald-500 bg-emerald-500/10'
+                            : darkMode
+                            ? 'border-emerald-500/40 bg-[#0E2822]'
+                            : 'border-emerald-300 bg-emerald-50/70'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500 text-[#062E2B]">
+                                ADMIN / ILIMITADO
+                              </span>
+                              <h4 className="text-sm font-extrabold text-emerald-400">Licença Administrador (Ilimitado)</h4>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1">
+                              Acesso completo com emissão irrestrita de laudos de ultrassom e cirurgias sem trava de cota.
+                            </p>
                           </div>
-                          <p className="text-xs text-slate-400 mt-1">
-                            Acesso completo com emissão irrestrita de laudos de ultrassom e cirurgias sem nenhuma trava de cota.
-                          </p>
+                          <button
+                            type="button"
+                            disabled={trocandoPlano || p.chave === 'ILIMITADO' || p.chave === 'ADMIN'}
+                            onClick={() => handleTrocarPlano('ILIMITADO')}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-black transition shrink-0 ${
+                              p.chave === 'ILIMITADO' || p.chave === 'ADMIN'
+                                ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 cursor-default'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-[#062E2B]'
+                            }`}
+                          >
+                            {p.chave === 'ILIMITADO' || p.chave === 'ADMIN' ? '✓ Licença Ativa' : 'Ativar Licença Admin'}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          disabled={trocandoPlano || p.chave === 'ILIMITADO' || p.chave === 'ADMIN'}
-                          onClick={() => handleTrocarPlano('ILIMITADO')}
-                          className={`px-5 py-2.5 rounded-xl text-xs font-black transition shrink-0 ${
-                            p.chave === 'ILIMITADO' || p.chave === 'ADMIN'
-                              ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 cursor-default'
-                              : 'bg-emerald-500 hover:bg-emerald-400 text-[#062E2B]'
-                          }`}
-                        >
-                          {p.chave === 'ILIMITADO' || p.chave === 'ADMIN' ? '✓ Licença Ativa' : 'Ativar Licença Admin'}
-                        </button>
                       </div>
-                    </div>
+                    )}
 
                     {/* Solo */}
                     <div
@@ -1196,16 +1342,26 @@ export default function SettingsPage({
                     >
                       <div>
                         <h4 className="text-sm font-extrabold">Solo / Volante</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Até 40 laudos/mês</p>
-                        <p className="text-xl font-extrabold mt-3">R$ 79<span className="text-xs font-normal">/mês</span></p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Até 40 laudos/mês • Cirurgias ilimitadas</p>
+                        <p className="text-xl font-extrabold mt-3">
+                          R$ {cicloModal === 'anual' ? '63' : '79'}
+                          <span className="text-xs font-normal">/mês</span>
+                        </p>
+                        {cicloModal === 'anual' && (
+                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 756/ano no cartão</p>
+                        )}
                       </div>
                       <button
                         type="button"
-                        disabled={trocandoPlano || p.chave === 'SOLO'}
-                        onClick={() => handleTrocarPlano('SOLO')}
-                        className="mt-4 w-full py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:border-[#00D296] transition"
+                        disabled={abrindoStripe || (p.chave === 'SOLO' && p.ciclo === cicloModal)}
+                        onClick={() => handleAssinarStripe('SOLO', cicloModal)}
+                        className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:border-[#00D296] transition disabled:opacity-50"
                       >
-                        {p.chave === 'SOLO' ? 'Plano Atual' : 'Escolher Solo'}
+                        {p.chave === 'SOLO' && p.ciclo === cicloModal
+                          ? 'Plano Atual'
+                          : abrindoStripe
+                          ? 'Redirecionando...'
+                          : 'Assinar Solo'}
                       </button>
                     </div>
 
@@ -1222,16 +1378,26 @@ export default function SettingsPage({
                       </span>
                       <div>
                         <h4 className="text-sm font-extrabold">Especialista Pro</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Até 150 laudos/mês</p>
-                        <p className="text-xl font-extrabold mt-3">R$ 149<span className="text-xs font-normal">/mês</span></p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Até 150 laudos/mês • Cirurgias ilimitadas</p>
+                        <p className="text-xl font-extrabold mt-3">
+                          R$ {cicloModal === 'anual' ? '119' : '149'}
+                          <span className="text-xs font-normal">/mês</span>
+                        </p>
+                        {cicloModal === 'anual' && (
+                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 1.428/ano no cartão</p>
+                        )}
                       </div>
                       <button
                         type="button"
-                        disabled={trocandoPlano || p.chave === 'PRO'}
-                        onClick={() => handleTrocarPlano('PRO')}
-                        className="mt-4 w-full py-2 rounded-xl text-xs font-bold bg-[#00D296] text-[#062E2B] hover:bg-[#00e6a4] transition"
+                        disabled={abrindoStripe || (p.chave === 'PRO' && p.ciclo === cicloModal)}
+                        onClick={() => handleAssinarStripe('PRO', cicloModal)}
+                        className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold bg-[#00D296] text-[#062E2B] hover:bg-[#00e6a4] transition disabled:opacity-50"
                       >
-                        {p.chave === 'PRO' ? 'Plano Atual' : 'Escolher Pro'}
+                        {p.chave === 'PRO' && p.ciclo === cicloModal
+                          ? 'Plano Atual'
+                          : abrindoStripe
+                          ? 'Redirecionando...'
+                          : 'Assinar Pro'}
                       </button>
                     </div>
 
@@ -1245,32 +1411,44 @@ export default function SettingsPage({
                     >
                       <div>
                         <h4 className="text-sm font-extrabold">Clínica & Hospital</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Até 500 laudos/mês</p>
-                        <p className="text-xl font-extrabold mt-3">R$ 297<span className="text-xs font-normal">/mês</span></p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Até 500 laudos/mês • Cirurgias ilimitadas</p>
+                        <p className="text-xl font-extrabold mt-3">
+                          R$ {cicloModal === 'anual' ? '237' : '297'}
+                          <span className="text-xs font-normal">/mês</span>
+                        </p>
+                        {cicloModal === 'anual' && (
+                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 2.844/ano no cartão</p>
+                        )}
                       </div>
                       <button
                         type="button"
-                        disabled={trocandoPlano || p.chave === 'CLINICA'}
-                        onClick={() => handleTrocarPlano('CLINICA')}
-                        className="mt-4 w-full py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:border-[#00D296] transition"
+                        disabled={abrindoStripe || (p.chave === 'CLINICA' && p.ciclo === cicloModal)}
+                        onClick={() => handleAssinarStripe('CLINICA', cicloModal)}
+                        className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:border-[#00D296] transition disabled:opacity-50"
                       >
-                        {p.chave === 'CLINICA' ? 'Plano Atual' : 'Escolher Clínica'}
+                        {p.chave === 'CLINICA' && p.ciclo === cicloModal
+                          ? 'Plano Atual'
+                          : abrindoStripe
+                          ? 'Redirecionando...'
+                          : 'Assinar Clínica'}
                       </button>
                     </div>
 
-                    {/* Modo Degustação / Teste */}
-                    <div className="sm:col-span-3 pt-2 text-center">
-                      <button
-                        type="button"
-                        disabled={trocandoPlano || p.chave === 'GRATUITO'}
-                        onClick={() => handleTrocarPlano('GRATUITO')}
-                        className="text-xs text-slate-400 hover:text-slate-200 underline font-medium transition"
-                      >
-                        {p.chave === 'GRATUITO'
-                          ? 'Atualmente na Degustação Gratuita (10 laudos)'
-                          : 'Simular Modo Degustação Gratuita (10 laudos / Teste de Cota)'}
-                      </button>
-                    </div>
+                    {/* Modo Degustação / Teste (somente Admin) */}
+                    {userProfile?.role === 'admin' && (
+                      <div className="sm:col-span-3 pt-2 text-center">
+                        <button
+                          type="button"
+                          disabled={trocandoPlano || p.chave === 'GRATUITO'}
+                          onClick={() => handleTrocarPlano('GRATUITO')}
+                          className="text-xs text-slate-400 hover:text-slate-200 underline font-medium transition"
+                        >
+                          {p.chave === 'GRATUITO'
+                            ? 'Atualmente na Degustação Gratuita (10 laudos)'
+                            : 'Simular Modo Degustação Gratuita (10 laudos / Teste de Cota)'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

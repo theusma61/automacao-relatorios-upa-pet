@@ -136,6 +136,23 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plano, ciclo })
     }),
+  getStripeConfig: () => requestJson('/api/stripe/config'),
+  criarCheckoutStripe: (plano, ciclo = 'mensal') =>
+    requestJson('/api/stripe/checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plano, ciclo })
+    }),
+  abrirPortalStripe: () =>
+    requestJson('/api/stripe/portal-session', {
+      method: 'POST'
+    }),
+  confirmarSessaoStripe: (sessionId) =>
+    requestJson('/api/stripe/confirm-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    }),
 
   // Personalização e Aprendizado de Padrão de Laudo por IA (Multimodal)
   aprenderPadraoLaudo: (formData) =>

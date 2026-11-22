@@ -1,3 +1,4 @@
+try { require('dotenv').config(); } catch (_) {}
 const dns = require('dns');
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
@@ -64,6 +65,13 @@ const {
   atualizarPlanoAssinatura,
   verificarLimiteCotaUltrassom
 } = require('./gerenciador_assinatura');
+const {
+  isStripeConfigurado,
+  criarSessaoCheckout,
+  criarSessaoPortal,
+  confirmarSessaoCheckout,
+  processarWebhookStripe
+} = require('./servico_stripe');
 
 const { logger, requestLogger } = require('./logger');
 const {
@@ -97,6 +105,22 @@ const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : nul
 const app = express();
 app.use(cors());
 app.use(cookieParser());
+
+// Webhook Stripe MUST be registered BEFORE express.json() so raw payload signature verification works
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  if (!sig) {
+    return res.status(400).send('Stripe signature header ausente.');
+  }
+  try {
+    const resultado = await processarWebhookStripe(req.body, sig);
+    return res.json(resultado);
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao validar/processar webhook Stripe');
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestLogger());
@@ -1576,11 +1600,73 @@ app.get('/api/assinatura/uso', exigirAutenticacao, async (req, res) => {
 
 app.post('/api/assinatura/trocar-plano', exigirAutenticacao, async (req, res) => {
   try {
+    if (req.usuario?.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Para assinar ou alterar seu plano, utilize o checkout seguro da Stripe.'
+      });
+    }
     const { plano, ciclo } = req.body || {};
     const dados = await atualizarPlanoAssinatura(req.usuario.id, plano, ciclo);
     res.json({ sucesso: true, ...dados });
   } catch (err) {
     res.status(400).json({ error: 'Erro ao atualizar plano: ' + err.message });
+  }
+});
+
+// ==================== STRIPE BILLING, CHECKOUT & CUSTOMER PORTAL ====================
+app.get('/api/stripe/config', exigirAutenticacao, (req, res) => {
+  res.json({
+    habilitado: isStripeConfigurado()
+  });
+});
+
+app.post('/api/stripe/checkout-session', exigirAutenticacao, async (req, res) => {
+  try {
+    const { plano, ciclo } = req.body || {};
+    const planoKey = String(plano || '').toUpperCase();
+    if (!['SOLO', 'PRO', 'CLINICA'].includes(planoKey)) {
+      return res.status(400).json({ error: 'Plano inválido para checkout Stripe. Escolha SOLO, PRO ou CLINICA.' });
+    }
+    const originUrl = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const sessao = await criarSessaoCheckout({
+      usuario: req.usuario,
+      plano: planoKey,
+      ciclo: ciclo === 'anual' ? 'anual' : 'mensal',
+      originUrl
+    });
+    res.json({ sucesso: true, ...sessao });
+  } catch (err) {
+    logger.error({ err: err.message, usuarioId: req.usuario?.id }, 'Erro ao criar sessão Checkout Stripe');
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/stripe/portal-session', exigirAutenticacao, async (req, res) => {
+  try {
+    const originUrl = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const sessao = await criarSessaoPortal({
+      usuario: req.usuario,
+      originUrl
+    });
+    res.json({ sucesso: true, ...sessao });
+  } catch (err) {
+    logger.error({ err: err.message, usuarioId: req.usuario?.id }, 'Erro ao criar sessão Portal Stripe');
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/stripe/confirm-session', exigirAutenticacao, async (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId é obrigatório.' });
+    }
+    const resultado = await confirmarSessaoCheckout(sessionId, req.usuario.id);
+    const metricas = await obterMetricasUsoAssinatura(req.usuario.id);
+    res.json({ sucesso: true, ...resultado, assinatura: metricas });
+  } catch (err) {
+    logger.error({ err: err.message, usuarioId: req.usuario?.id }, 'Erro ao confirmar sessão Checkout Stripe');
+    res.status(400).json({ error: err.message });
   }
 });
 

@@ -171,8 +171,44 @@ export default function App() {
         const savedUi = localStorage.getItem(key);
         setNewUiEnabled(savedUi === null ? true : savedUi === 'true');
       } catch (_) {}
+
+      // Trata retorno do Stripe Checkout / Customer Portal
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const stripeStatus = params.get('stripe_status');
+        const sessionId = params.get('session_id');
+        if (stripeStatus) {
+          setActiveNav('configuracoes');
+          setSettingsTab('assinatura');
+          if (stripeStatus === 'success' && sessionId) {
+            api
+              .confirmarSessaoStripe(sessionId)
+              .then((res) => {
+                showToast(
+                  res?.plano
+                    ? `✅ Assinatura ${res.plano} ativada! Sua nova cota já está liberada.`
+                    : '✅ Pagamento confirmado! Sua assinatura foi atualizada.'
+                );
+                window.dispatchEvent(new CustomEvent('vetaro:assinatura-atualizada'));
+              })
+              .catch(() => {
+                showToast('✅ Pagamento confirmado! Aguardando sincronização do webhook...');
+              });
+          } else if (stripeStatus === 'success') {
+            showToast('✅ Pagamento confirmado! Sua assinatura e cota estão sendo atualizadas.');
+          } else if (stripeStatus === 'cancel') {
+            showToast('Checkout cancelado. Nenhuma cobrança foi realizada.');
+          } else if (stripeStatus === 'portal') {
+            showToast('Dados da assinatura sincronizados com a Stripe.');
+          }
+          params.delete('stripe_status');
+          params.delete('session_id');
+          const cleanUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+          window.history.replaceState({}, '', cleanUrl);
+        }
+      } catch (_) {}
     }
-  }, [carregarHistoricoServidor, usuario]);
+  }, [carregarHistoricoServidor, usuario, showToast]);
 
   const handleToggleNewUi = (ativo) => {
     setNewUiEnabled(ativo);
@@ -529,11 +565,11 @@ export default function App() {
               <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <p className="font-extrabold text-amber-300">
-                  Acesso em Modo de Consulta / Aguardando Liberação
+                  Conta em Modo de Consulta / Suspensa
                 </p>
                 <p className="mt-0.5 opacity-90">
                   Você está conectado como <strong>{usuario.email}</strong>, mas sua conta
-                  ainda não possui permissão para emitir laudos e relatórios oficiais.
+                  está restrita ao modo somente visualização. Entre em contato com o suporte para reativar a emissão de laudos.
                 </p>
               </div>
             </div>
