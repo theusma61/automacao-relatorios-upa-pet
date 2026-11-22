@@ -72,24 +72,37 @@ describe('Auto-Fit Dinâmico e Agnóstico da Página Textual de Ultrassom', () =
     expect(utero.diagDif).toBe('ALTERAÇÃO HORMONAL, PIOMETRA INICIAL, MUCOMETRA.');
   });
 
-  test('calcularAutoFitLaudoTextual deve selecionar tier compact e ajustar margens e fontes proporcionalmente', () => {
-    const layoutBase = {
+  test('calcularAutoFitLaudoTextual deve selecionar tier compact sem layout explícito e preservar fontes/margens configuradas pelo usuário', () => {
+    // 1. Sem preferências explícitas de fonte/margem: aplica auto-fit compacto padrão
+    const autoFitPadrao = calcularAutoFitLaudoTextual(laudoLuaReal, {});
+    expect(autoFitPadrao.tier).toBe('compact');
+    expect(autoFitPadrao.modoPaginacao).toBe('single_page');
+    expect(parseFloat(autoFitPadrao.fontSizeBody)).toBeLessThanOrEqual(10.0);
+    expect(parseFloat(autoFitPadrao.lineHeight)).toBeLessThanOrEqual(1.3);
+    expect(parseFloat(autoFitPadrao.marginTop)).toBeLessThanOrEqual(12);
+
+    // 2. Com preferências explícitas do usuário: preserva exatamente fonte, título, margens e espaçamentos escolhidos
+    const layoutUsuario = {
       font_family: 'Calibri, sans-serif',
-      font_size_body: '11pt',
-      font_size_titulo: '14pt',
-      margin_top: '20mm',
+      font_size_body: '12pt',
+      font_size_titulo: '16pt',
+      margin_top: '22mm',
       margin_bottom: '20mm',
-      line_height: '1.4',
-      paragraph_spacing: '8pt'
+      margin_left: '18mm',
+      margin_right: '18mm',
+      line_height: '1.5',
+      paragraph_spacing: '10pt'
     };
 
-    const autoFit = calcularAutoFitLaudoTextual(laudoLuaReal, layoutBase);
-    expect(autoFit.tier).toBe('compact');
-    expect(autoFit.modoPaginacao).toBe('single_page');
-    expect(parseFloat(autoFit.fontSizeBody)).toBeLessThanOrEqual(10.0);
-    expect(parseFloat(autoFit.lineHeight)).toBeLessThanOrEqual(1.26);
-    expect(parseFloat(autoFit.paragraphSpacing)).toBeLessThanOrEqual(2.5);
-    expect(parseFloat(autoFit.marginTop)).toBeLessThanOrEqual(12);
+    const autoFitUsuario = calcularAutoFitLaudoTextual(laudoLuaReal, layoutUsuario);
+    expect(autoFitUsuario.fontSizeBody).toBe('12pt');
+    expect(autoFitUsuario.fontSizeTitulo).toBe('16pt');
+    expect(autoFitUsuario.marginTop).toBe('22mm');
+    expect(autoFitUsuario.marginBottom).toBe('20mm');
+    expect(autoFitUsuario.marginLeft).toBe('18mm');
+    expect(autoFitUsuario.marginRight).toBe('18mm');
+    expect(autoFitUsuario.lineHeight).toBe('1.5');
+    expect(autoFitUsuario.paragraphSpacing).toBe('10pt');
   });
 
   test('construirHtmlLaudo com Auto-Fit deve gerar exatamente 1 página de texto no PDF (sem folha órfã)', async () => {

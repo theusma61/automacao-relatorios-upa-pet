@@ -503,7 +503,7 @@ function calcularAutoFitLaudoTextual(laudoArray = [], layoutBase = {}, opcoes = 
 
   const tier = (qtdOrgaos <= 7 && score <= 2400)
     ? 'normal'
-    : (qtdOrgaos <= 11 && score <= 4000 ? 'compact' : 'ultra_compact');
+    : (qtdOrgaos <= 11 && score <= 4300 ? 'compact' : 'ultra_compact');
 
   return {
     laudoAjustado: laudo,
