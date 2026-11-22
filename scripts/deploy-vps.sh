@@ -65,16 +65,13 @@ if [ -n "$PREV_COMMIT" ] && [ "$PREV_COMMIT" != "$NEW_COMMIT" ]; then
   fi
 fi
 
-# 6. Sincroniza código backend, prisma, scripts e frontend/dist no container upa_app
-echo "📦 4. Sincronizando código backend e frontend/dist no container upa_app..."
-for f in /var/www/vetaro/*.js; do
-  [ -f "$f" ] && docker cp "$f" upa_app:/app/ 2>/dev/null || true
-done
-docker cp /var/www/vetaro/prisma upa_app:/app/ 2>/dev/null || true
-docker cp /var/www/vetaro/scripts upa_app:/app/ 2>/dev/null || true
-if [ -d "/var/www/vetaro/frontend/dist" ]; then
-  docker compose exec -T app sh -c "rm -rf /app/frontend/dist && mkdir -p /app/frontend/dist" 2>/dev/null || true
-  docker cp /var/www/vetaro/frontend/dist/. upa_app:/app/frontend/dist/ 2>/dev/null || true
+# 6. Valida frontend/dist no bind mount (./:/app) sem nunca apagar o build enviado via SCP
+echo "📦 4. Validando frontend/dist no container upa_app (bind mount ./:/app)..."
+if docker compose exec -T app test -f /app/frontend/dist/index.html; then
+  echo "✅ frontend/dist/index.html já presente e atualizado (preservado)."
+else
+  echo "⚠️ frontend/dist/index.html ausente. Compilando frontend dentro do container..."
+  docker compose exec -T app sh -c "cd /app/frontend && npm install --include=dev --no-audit --no-fund && npm run build && rm -rf node_modules"
 fi
 
 # 7. Gera Prisma Client e sincroniza schema do banco de dados (PostgreSQL)
@@ -87,7 +84,7 @@ docker compose exec -T app node scripts/ensure-schema.js || true
 echo "🔄 6. Reiniciando container upa_app..."
 docker compose restart app
 
-# 9. Verificação de Saúde (Healthcheck)
+# 9. Verificação de Saúde (Healthcheck do servidor e do frontend)
 echo "🩺 7. Verificando integridade da aplicação na porta 3000..."
 sleep 3
 
@@ -106,6 +103,7 @@ done
 if [ "$SUCCESS" = false ]; then
   echo "⚠️ [ALERTA] Servidor demorou para responder. Últimos logs do container upa_app:"
   docker logs --tail 30 upa_app
+  exit 1
 fi
 
 echo "========================================================"
