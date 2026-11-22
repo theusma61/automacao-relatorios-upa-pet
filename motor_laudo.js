@@ -594,7 +594,10 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   ` : '';
 
   const maxFotosPorPagina = (imgCfg.columns || 2) * (imgCfg.rowsPerPage || 4);
-  const paginasImagens = distribuirFotosEquilibradas(imagensPaths, maxFotosPorPagina || 8);
+  const paginasImagens = distribuirFotosEquilibradas(imagensPaths, maxFotosPorPagina || 8, {
+    colunas: imgCfg.columns || 2,
+    modo: layout.paginacao_texto || visual.paginacaoTexto || opcoes.paginacaoTexto || 'preencher'
+  });
 
   const bgLayerPag1Html = ehStationeryFullPage
     ? `<img src="${pageBackgroundUri}" class="stationery-bg-img" alt="">`

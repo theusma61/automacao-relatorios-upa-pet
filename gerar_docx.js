@@ -1001,8 +1001,12 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
     const padH = Math.max(20, Math.round((colGapMm / 2) * MM_TO_TWIPS));
     const padV = Math.max(20, Math.round((rowGapMm / 2) * MM_TO_TWIPS));
 
-    for (let i = 0; i < imagensPaths.length; i += fotosPorPagina) {
-      const loteFotos = imagensPaths.slice(i, i + fotosPorPagina);
+    const { distribuirFotosEquilibradas } = require('./renderizador_layout_laudo');
+    const lotesImagensDocx = distribuirFotosEquilibradas(imagensPaths, fotosPorPagina, {
+      colunas: cols,
+      modo: layout?.paginacao_texto || visual?.paginacaoTexto || 'preencher'
+    });
+    for (const loteFotos of lotesImagensDocx) {
       children.push(new Paragraph({ children: [new PageBreak()] }));
 
       if (loteFotos.length === 1 && imgCfg.centerLastOddImage && fs.existsSync(loteFotos[0])) {

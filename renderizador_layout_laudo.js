@@ -666,23 +666,64 @@ function calcularAutoFitLaudoTextual(laudoArray = [], layoutBase = {}, opcoes = 
 }
 
 /**
- * Distribui fotos equilibradamente entre páginas evitando páginas com apenas 1 ou 2 fotos órfãs
+ * Distribui fotos de forma agnóstica respeitando a grade de colunas do modelo:
+ * - modo 'preencher' (padrão): preenche o máximo por página (ex: 14 fotos em grade 2x4 -> 8 + 6).
+ * - modo 'equilibrar': equilibra entre páginas mantendo todas as páginas anteriores múltiplos de `colunas`
+ *   (nunca gera páginas intermediárias ímpares com buracos vazios como 7 + 7 em grade de 2 colunas).
  */
-function distribuirFotosEquilibradas(fotos = [], maxPorPagina = 8) {
+function distribuirFotosEquilibradas(fotos = [], maxPorPagina = 8, opcoes = {}) {
   if (!Array.isArray(fotos) || fotos.length === 0) return [];
   const total = fotos.length;
-  if (total <= maxPorPagina) return [fotos];
+  const maxPag = Math.max(1, Number(maxPorPagina) || 8);
+  if (total <= maxPag) return [fotos];
 
-  const numPaginas = Math.ceil(total / maxPorPagina);
-  const basePorPagina = Math.floor(total / numPaginas);
-  const resto = total % numPaginas;
+  const colunas = Math.max(1, Number(opcoes.colunas) || 2);
+  const modo = String(opcoes.modo || 'preencher').toLowerCase();
+
+  // Modo padrão ('preencher'): preenche até maxPorPagina em cada página na ordem
+  if (modo !== 'equilibrar') {
+    const paginas = [];
+    for (let i = 0; i < total; i += maxPag) {
+      paginas.push(fotos.slice(i, i + maxPag));
+    }
+    return paginas;
+  }
+
+  // Modo 'equilibrar' alinhado por linhas completas (múltiplo de colunas em páginas não-finais)
+  const numPaginas = Math.ceil(total / maxPag);
+  const maxLinhasPorPag = Math.max(1, Math.floor(maxPag / colunas));
+  const totalLinhasCompletas = Math.floor(total / colunas);
+  const sobraImpar = total % colunas;
+
+  const linhasPorPag = [];
+  const baseLinhas = Math.floor(totalLinhasCompletas / numPaginas);
+  let restoLinhas = totalLinhasCompletas % numPaginas;
+
+  for (let p = 0; p < numPaginas; p++) {
+    let l = baseLinhas + (restoLinhas > 0 ? 1 : 0);
+    if (restoLinhas > 0) restoLinhas--;
+    linhasPorPag.push(Math.min(maxLinhasPorPag, l));
+  }
+
+  // Redistribui caso algum limite tenha truncado linhas
+  let somaLinhas = linhasPorPag.reduce((a, b) => a + b, 0);
+  for (let p = 0; p < numPaginas && somaLinhas < totalLinhasCompletas; p++) {
+    while (linhasPorPag[p] < maxLinhasPorPag && somaLinhas < totalLinhasCompletas) {
+      linhasPorPag[p]++;
+      somaLinhas++;
+    }
+  }
 
   const paginas = [];
   let offset = 0;
   for (let p = 0; p < numPaginas; p++) {
-    const qtdDestaPagina = basePorPagina + (p < resto ? 1 : 0);
-    paginas.push(fotos.slice(offset, offset + qtdDestaPagina));
-    offset += qtdDestaPagina;
+    const ehUltima = p === numPaginas - 1;
+    let qtd = linhasPorPag[p] * colunas + (ehUltima ? sobraImpar : 0);
+    if (ehUltima) qtd = total - offset;
+    if (qtd > 0) {
+      paginas.push(fotos.slice(offset, offset + qtd));
+      offset += qtd;
+    }
   }
   return paginas;
 }
