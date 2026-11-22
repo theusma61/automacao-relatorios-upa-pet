@@ -771,11 +771,13 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   const ehTextoLongo = textoTotal.length > 1750;
   const ehTextoMuitoLongo = textoTotal.length > 2300;
 
-  const fontSizePt = ehTextoMuitoLongo ? '9.3pt' : (ehTextoLongo ? '10.2pt' : (ctx.layout.font_size_body || '11pt'));
-  const lineHeight = ehTextoMuitoLongo ? '1.24' : (ehTextoLongo ? '1.28' : (ctx.layout.line_height || '1.35'));
-  const marginBottomP = ehTextoMuitoLongo ? '6px' : (ehTextoLongo ? '8px' : '11px');
-  const margemVertical = ehTextoMuitoLongo ? '1.2cm' : (ehTextoLongo ? '1.5cm' : (ctx.layout.margin_top || '1.8cm'));
-  const margemHorizontal = ehTextoMuitoLongo ? '1.8cm' : (ctx.layout.margin_left || '2.0cm');
+  const fontSizePt = ctx.layout.font_size_body || (ehTextoMuitoLongo ? '9.3pt' : (ehTextoLongo ? '10.2pt' : '11pt'));
+  const lineHeight = ctx.layout.line_height || (ehTextoMuitoLongo ? '1.24' : (ehTextoLongo ? '1.28' : '1.35'));
+  const marginBottomP = ctx.layout.paragraph_spacing || (ehTextoMuitoLongo ? '6px' : (ehTextoLongo ? '8px' : '11px'));
+  const margemTop = ctx.layout.margin_top || (ehTextoMuitoLongo ? '1.2cm' : (ehTextoLongo ? '1.5cm' : '1.8cm'));
+  const margemBottom = ctx.layout.margin_bottom || margemTop;
+  const margemLeft = ctx.layout.margin_left || (ehTextoMuitoLongo ? '1.8cm' : '2.0cm');
+  const margemRight = ctx.layout.margin_right || margemLeft;
   const logoWidth = ehTextoMuitoLongo ? '110px' : (ehTextoLongo ? '120px' : '135px');
   const marginHeader = ehTextoMuitoLongo ? '12px' : '18px';
   const marginTitulo = ehTextoMuitoLongo ? '10px 0 12px 0' : (ehTextoLongo ? '14px 0 16px 0' : '18px 0 20px 0');
@@ -956,7 +958,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   <style>
     @page {
       size: A4 portrait;
-      margin: ${margemVertical} ${margemHorizontal};
+      margin: ${margemTop} ${margemRight} ${margemBottom} ${margemLeft};
     }
     * {
       box-sizing: border-box;

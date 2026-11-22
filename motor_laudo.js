@@ -574,13 +574,14 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   const repetirCabecalhoInlinePag2 = ehInlineLogoHeader && Boolean(visual.repeatPatientHeaderOnTextPages || visual.repeatHeaderOnTextPage2);
   const repetirCabecalhoInlineFotos = ehInlineLogoHeader;
 
-  // Calcula padding-top efetivo do corpo abaixo do cabeçalho inline (quando houver)
+  // Calcula padding-top efetivo do corpo respeitando margin_top configurada pelo usuário
   const titleMarginTopNum = parseMmNumber(tCfg.marginTopMm, 5);
+  const userMarginTopMm = parseMmNumber(margins.topFirstPage, 16);
   const paddingTopPag1 = ehStationeryFullPage
     ? (margins.topFirstPage || '50mm')
     : (ehInlineLogoHeader
-        ? `${Math.max(2, titleMarginTopNum - 2)}mm`
-        : (headerBannerUri ? '4mm' : (margins.topFirstPage || '20mm')));
+        ? `${Math.max(2, Number(Math.max(titleMarginTopNum - 2, userMarginTopMm - 12).toFixed(1)))}mm`
+        : (headerBannerUri ? `${Math.max(4, Number((userMarginTopMm - 10).toFixed(1)))}mm` : (margins.topFirstPage || '20mm')));
 
   const topContNum = parseMmNumber(margins.topContinuationPages, 22);
   const paddingTopPag2 = repetirCabecalhoInlinePag2
@@ -690,13 +691,13 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       display: block;
     }
     .page-1-body {
-      padding: ${paddingTopPag1} ${margins.right || '20mm'} ${ehStationeryFullPage ? '30mm' : '4mm'} ${margins.left || '20mm'};
+      padding: ${paddingTopPag1} ${margins.right || '20mm'} ${ehStationeryFullPage ? '30mm' : (margins.bottom || '12mm')} ${margins.left || '20mm'};
       flex: 1;
       display: flex;
       flex-direction: column;
     }
     .page-2-body {
-      padding: ${paddingTopPag2} ${margins.right || '20mm'} 4mm ${margins.left || '20mm'};
+      padding: ${paddingTopPag2} ${margins.right || '20mm'} ${margins.bottom || '12mm'} ${margins.left || '20mm'};
       flex: 1;
       display: flex;
       flex-direction: column;

@@ -891,21 +891,39 @@ export default function EstiloLaudoTab({
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                        Tamanho do Corpo
-                      </label>
-                      <input
-                        type="text"
-                        value={tv.fontSizeBody || '11pt'}
-                        onChange={(e) => setPerfilEditando({
-                          ...perfilEditando,
-                          templateVisual: { ...tv, fontSizeBody: e.target.value }
-                        })}
-                        className={`w-full px-3 py-2 rounded-xl text-xs border font-medium ${
-                          darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
-                        }`}
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                          Tamanho do Corpo
+                        </label>
+                        <input
+                          type="text"
+                          value={tv.fontSizeBody || '11pt'}
+                          onChange={(e) => setPerfilEditando({
+                            ...perfilEditando,
+                            templateVisual: { ...tv, fontSizeBody: e.target.value }
+                          })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs border font-medium ${
+                            darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                          Tamanho do Título
+                        </label>
+                        <input
+                          type="text"
+                          value={tv.fontSizeTitulo || '14pt'}
+                          onChange={(e) => setPerfilEditando({
+                            ...perfilEditando,
+                            templateVisual: { ...tv, fontSizeTitulo: e.target.value }
+                          })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs border font-medium ${
+                            darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                          }`}
+                        />
+                      </div>
                     </div>
                   </div>
 

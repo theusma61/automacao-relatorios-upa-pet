@@ -72,20 +72,38 @@ export default function LayoutEditorDrawer({
     }
   };
 
+  const normalizeUnit = (val, unit) => {
+    const s = String(val ?? '').trim();
+    if (!s) return undefined;
+    return /^[0-9]+(\.[0-9]+)?$/.test(s) ? `${s}${unit}` : s;
+  };
+
   const handleSaveServerLayout = async () => {
     setSaving(true);
     try {
-      const res = await api.saveLayoutConfig(serverLayout);
+      // Envia apenas os campos editáveis para o servidor mesclar com o template clonado sem sobrescrever com JSON antigo
+      const payloadLimpo = {
+        font_family: serverLayout.font_family,
+        font_size_body: normalizeUnit(serverLayout.font_size_body, 'pt'),
+        font_size_titulo: normalizeUnit(serverLayout.font_size_titulo, 'pt'),
+        margin_top: normalizeUnit(serverLayout.margin_top, 'mm'),
+        margin_bottom: normalizeUnit(serverLayout.margin_bottom, 'mm'),
+        margin_left: normalizeUnit(serverLayout.margin_left, 'mm'),
+        margin_right: normalizeUnit(serverLayout.margin_right, 'mm'),
+        line_height: String(serverLayout.line_height || '1.4'),
+        paragraph_spacing: normalizeUnit(serverLayout.paragraph_spacing, 'pt'),
+        cor_primaria: serverLayout.cor_primaria,
+        cor_secundaria: serverLayout.cor_secundaria
+      };
+      const res = await api.saveLayoutConfig(payloadLimpo);
       if (res && res.layout) {
         setServerLayout({ ...DEFAULT_LAYOUT, ...res.layout });
       }
-      onToast('Preferências do Editor de Layout salvas no PostgreSQL!');
+      onToast('Tipografia e margens salvas com sucesso! Os próximos laudos já usarão estes valores.');
       setAdvancedOpen(false);
       onClose();
     } catch (err) {
-      onToast('Preferências locais aplicadas! (' + err.message + ')');
-      setAdvancedOpen(false);
-      onClose();
+      onToast('Erro ao salvar layout no servidor: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -225,12 +243,17 @@ export default function LayoutEditorDrawer({
                       : 'bg-white border-slate-300 text-[#0A141D]'
                   }`}
                 >
+                  <option value="9pt">9pt</option>
                   <option value="9.5pt">9.5pt</option>
                   <option value="10pt">10pt</option>
                   <option value="10.5pt">10.5pt</option>
                   <option value="11pt">11pt (Padrão)</option>
                   <option value="11.5pt">11.5pt</option>
                   <option value="12pt">12pt</option>
+                  <option value="13pt">13pt</option>
+                  <option value="14pt">14pt</option>
+                  <option value="15pt">15pt</option>
+                  <option value="16pt">16pt</option>
                 </select>
               </div>
               <div>
@@ -253,6 +276,9 @@ export default function LayoutEditorDrawer({
                   <option value="14pt">14pt (Padrão)</option>
                   <option value="15pt">15pt</option>
                   <option value="16pt">16pt</option>
+                  <option value="18pt">18pt</option>
+                  <option value="20pt">20pt</option>
+                  <option value="22pt">22pt</option>
                 </select>
               </div>
             </div>

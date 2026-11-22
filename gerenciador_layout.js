@@ -124,20 +124,36 @@ async function obterLayout(usuarioId = null) {
   return prismaParaSnakeCase(row);
 }
 
+function normalizarMedidaCss(val, unidadePadrao) {
+  if (val === undefined || val === null) return undefined;
+  const s = String(val).trim();
+  if (!s) return undefined;
+  if (/^[0-9]+(\.[0-9]+)?$/.test(s)) return `${s}${unidadePadrao}`;
+  return s;
+}
+
 async function salvarLayout(dadosNovos = {}, usuario = null) {
   const temUsuarioId = Boolean(usuario && usuario.id);
   const atual = await obterLayout(temUsuarioId ? usuario.id : null);
 
+  const fontSizeBodyNorm = normalizarMedidaCss(dadosNovos.font_size_body, 'pt');
+  const fontSizeTituloNorm = normalizarMedidaCss(dadosNovos.font_size_titulo, 'pt');
+  const marginTopNorm = normalizarMedidaCss(dadosNovos.margin_top, 'mm');
+  const marginBottomNorm = normalizarMedidaCss(dadosNovos.margin_bottom, 'mm');
+  const marginLeftNorm = normalizarMedidaCss(dadosNovos.margin_left, 'mm');
+  const marginRightNorm = normalizarMedidaCss(dadosNovos.margin_right, 'mm');
+  const paragraphSpacingNorm = normalizarMedidaCss(dadosNovos.paragraph_spacing, 'pt');
+
   const payloadPrisma = {
     fontFamily: dadosNovos.font_family || atual.font_family,
-    fontSizeBody: dadosNovos.font_size_body || atual.font_size_body,
-    fontSizeTitulo: dadosNovos.font_size_titulo || atual.font_size_titulo,
-    marginTop: dadosNovos.margin_top || atual.margin_top,
-    marginBottom: dadosNovos.margin_bottom || atual.margin_bottom,
-    marginLeft: dadosNovos.margin_left || atual.margin_left,
-    marginRight: dadosNovos.margin_right || atual.margin_right,
+    fontSizeBody: fontSizeBodyNorm || atual.font_size_body,
+    fontSizeTitulo: fontSizeTituloNorm || atual.font_size_titulo,
+    marginTop: marginTopNorm || atual.margin_top,
+    marginBottom: marginBottomNorm || atual.margin_bottom,
+    marginLeft: marginLeftNorm || atual.margin_left,
+    marginRight: marginRightNorm || atual.margin_right,
     lineHeight: dadosNovos.line_height !== undefined ? String(dadosNovos.line_height) : atual.line_height,
-    paragraphSpacing: dadosNovos.paragraph_spacing || atual.paragraph_spacing,
+    paragraphSpacing: paragraphSpacingNorm || atual.paragraph_spacing,
     corPrimaria: dadosNovos.cor_primaria || atual.cor_primaria,
     corSecundaria: dadosNovos.cor_secundaria || atual.cor_secundaria
   };
@@ -155,29 +171,35 @@ async function salvarLayout(dadosNovos = {}, usuario = null) {
 
   if (dadosNovos.assinatura_extraida_url !== undefined) payloadPrisma.assinaturaExtraidaUrl = dadosNovos.assinatura_extraida_url;
   else if (atual.assinatura_extraida_url) payloadPrisma.assinaturaExtraidaUrl = atual.assinatura_extraida_url;
-  if (dadosNovos.visual_config_json !== undefined) {
-    payloadPrisma.visualConfigJson = sanitizarVisualConfigClonado(dadosNovos.visual_config_json);
-  } else if (atual.visual_config_json && typeof atual.visual_config_json === 'object') {
-    // Propaga edições manuais do editor (espaçamento entre categorias, entrelinha, fonte, margens) para o template clonado
-    const vc = JSON.parse(JSON.stringify(atual.visual_config_json));
+  const baseVc = (dadosNovos.visual_config_json && typeof dadosNovos.visual_config_json === 'object')
+    ? dadosNovos.visual_config_json
+    : (atual.visual_config_json && typeof atual.visual_config_json === 'object' ? atual.visual_config_json : null);
+
+  if (baseVc) {
+    // Sempre propaga edições manuais (fonte, título, entrelinha, espaçamento, margens, cor) para o template clonado
+    const vc = JSON.parse(JSON.stringify(baseVc));
     vc.bodyTypography = {
       ...(vc.bodyTypography || {}),
       ...(dadosNovos.font_family ? { fontFamily: dadosNovos.font_family } : {}),
-      ...(dadosNovos.font_size_body ? { fontSize: dadosNovos.font_size_body } : {}),
+      ...(fontSizeBodyNorm ? { fontSize: fontSizeBodyNorm } : {}),
       ...(dadosNovos.line_height !== undefined ? { lineHeight: String(dadosNovos.line_height) } : {}),
-      ...(dadosNovos.paragraph_spacing ? { paragraphSpacing: dadosNovos.paragraph_spacing } : {})
+      ...(paragraphSpacingNorm ? { paragraphSpacing: paragraphSpacingNorm } : {})
     };
-    if (dadosNovos.font_size_titulo) {
-      vc.titleConfig = { ...(vc.titleConfig || {}), fontSize: dadosNovos.font_size_titulo };
-    }
+    vc.titleConfig = {
+      ...(vc.titleConfig || {}),
+      ...(fontSizeTituloNorm ? { fontSize: fontSizeTituloNorm } : {}),
+      ...(dadosNovos.cor_primaria ? { color: dadosNovos.cor_primaria } : {})
+    };
     vc.margins = {
       ...(vc.margins || {}),
-      ...(dadosNovos.margin_top ? { topFirstPage: dadosNovos.margin_top } : {}),
-      ...(dadosNovos.margin_bottom ? { bottom: dadosNovos.margin_bottom } : {}),
-      ...(dadosNovos.margin_left ? { left: dadosNovos.margin_left } : {}),
-      ...(dadosNovos.margin_right ? { right: dadosNovos.margin_right } : {})
+      ...(marginTopNorm ? { topFirstPage: marginTopNorm, topContinuationPages: marginTopNorm } : {}),
+      ...(marginBottomNorm ? { bottom: marginBottomNorm } : {}),
+      ...(marginLeftNorm ? { left: marginLeftNorm } : {}),
+      ...(marginRightNorm ? { right: marginRightNorm } : {})
     };
     payloadPrisma.visualConfigJson = sanitizarVisualConfigClonado(vc);
+  } else if (dadosNovos.visual_config_json === null) {
+    payloadPrisma.visualConfigJson = null;
   }
   if (dadosNovos.writing_style_json !== undefined) payloadPrisma.writingStyleJson = dadosNovos.writing_style_json;
   if (dadosNovos.pdfs_referencia_qtd !== undefined) payloadPrisma.pdfsReferenciaQtd = Number(dadosNovos.pdfs_referencia_qtd) || 0;
