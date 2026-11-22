@@ -449,112 +449,82 @@ function calcularAutoFitLaudoTextual(laudoArray = [], layoutBase = {}, opcoes = 
     return acc + ((item?.texto || '').split(/\r?\n/).length - 1);
   }, 0);
 
-  // Score de Densidade Vertical (considera comprimento de texto, quantidade de órgãos e quebras de linha)
-  const score = totalChars + (qtdOrgaos * 130) + (qtdQuebras * 80);
+  // Lê valores explícitos configurados pelo usuário no Editor de Layout ou Padrão de Laudo
+  const userFontBody = layoutBase.font_size_body || layoutBase.fontSizeBody || null;
+  const userFontTitulo = layoutBase.font_size_titulo || layoutBase.fontSizeTitulo || null;
+  const userLineHeight = layoutBase.line_height || layoutBase.lineHeight || null;
+  const userParagraphSpacing = layoutBase.paragraph_spacing || layoutBase.paragraphSpacing || null;
+  const userMarginTop = layoutBase.margin_top || layoutBase.marginTop || null;
+  const userMarginBottom = layoutBase.margin_bottom || layoutBase.marginBottom || null;
+  const userMarginLeft = layoutBase.margin_left || layoutBase.marginLeft || null;
+  const userMarginRight = layoutBase.margin_right || layoutBase.marginRight || null;
 
-  // Lê valores base do layout fornecido (aceita tanto snake_case do banco quanto camelCase do template)
-  const fontBase = layoutBase.font_family || layoutBase.fontFamily || 'Calibri, sans-serif';
-  const corPrimaria = layoutBase.cor_primaria || layoutBase.corPrimaria || '#1B365D';
-  const corSecundaria = layoutBase.cor_secundaria || layoutBase.corSecundaria || '#4A777A';
+  // Fator de escala vertical baseado na tipografia escolhida pelo usuário
+  const bodyPtNum = parseFloat(String(userFontBody || '10.5')) || 10.5;
+  const lhNum = parseFloat(String(userLineHeight || '1.35')) || 1.35;
+  const spNum = parseFloat(String(userParagraphSpacing || '8')) || 8;
+  const mTopNum = parseFloat(String(userMarginTop || '16')) || 16;
+  const mBotNum = parseFloat(String(userMarginBottom || '16')) || 16;
+  const fatorEscala = (bodyPtNum / 10.5) * (lhNum / 1.35);
 
-  // Configuração padrão relaxada (laudos pequenos: <= 7 órgãos ou score <= 2400)
-  if (qtdOrgaos <= 7 && score <= 2400) {
+  // Score de Densidade Vertical considerando texto, órgãos, quebras e tipografia escolhida
+  const scoreBruto = totalChars + (qtdOrgaos * (120 + spNum * 3)) + (qtdQuebras * 80);
+  const score = Math.round(scoreBruto * fatorEscala + Math.max(0, (mTopNum + mBotNum - 32) * 35));
+
+  // Quando o usuário definiu explicitamente tipografia/margens, NUNCA sobrescreve seus valores!
+  // Apenas decide de forma inteligente se o texto cabe em 1 folha ou flui para 2 folhas equilibradas.
+  const precisaDuasPaginas = qtdOrgaos > 14 || score > 5200;
+
+  if (precisaDuasPaginas) {
+    const corte = Math.ceil(qtdOrgaos / 2);
     return {
       laudoAjustado: laudo,
-      modoPaginacao: 'single_page',
+      modoPaginacao: 'two_page_balanced',
+      cortePagina1: corte,
       score,
-      tier: 'normal',
-      fontSizeBody: layoutBase.font_size_body || layoutBase.fontSizeBody || '10.5pt',
-      fontSizeTitulo: layoutBase.font_size_titulo || layoutBase.fontSizeTitulo || '13.5pt',
-      subtitleFontSize: '8pt',
-      lineHeight: layoutBase.line_height || layoutBase.lineHeight || '1.36',
-      paragraphSpacing: layoutBase.paragraph_spacing || layoutBase.paragraphSpacing || '3.5mm',
-      marginTop: layoutBase.margin_top || layoutBase.marginTop || '16mm',
-      marginBottom: layoutBase.margin_bottom || layoutBase.marginBottom || '16mm',
-      marginLeft: layoutBase.margin_left || layoutBase.marginLeft || '15mm',
-      marginRight: layoutBase.margin_right || layoutBase.marginRight || '15mm',
-      marginHeaderBottom: '6px',
-      paddingHeaderBottom: '6px',
-      marginTitleBox: '6px 0 8px 0',
-      marginSignatureTop: '6px',
+      tier: 'two_page_balanced',
+      fontSizeBody: userFontBody || '10pt',
+      fontSizeTitulo: userFontTitulo || '13pt',
+      subtitleFontSize: '7.8pt',
+      lineHeight: userLineHeight ? String(userLineHeight) : '1.32',
+      paragraphSpacing: userParagraphSpacing || '3.0mm',
+      marginTop: userMarginTop || '15mm',
+      marginBottom: userMarginBottom || '15mm',
+      marginLeft: userMarginLeft || '15mm',
+      marginRight: userMarginRight || '15mm',
+      marginHeaderBottom: '5px',
+      paddingHeaderBottom: '5px',
+      marginTitleBox: '6px 0 6px 0',
+      marginSignatureTop: '8px',
       signatureMaxHeight: '44px',
-      logoMaxHeight: '52px'
+      logoMaxHeight: '48px'
     };
   }
 
-  // Nível 1: Compact Auto-Fit (8 a 11 órgãos ou score entre 2401 e 4300 - Caso típico de Lua e ultrassons completos)
-  if (qtdOrgaos <= 11 && score <= 4300) {
-    return {
-      laudoAjustado: laudo,
-      modoPaginacao: 'single_page',
-      score,
-      tier: 'compact',
-      fontSizeBody: '9.4pt',
-      fontSizeTitulo: '12pt',
-      subtitleFontSize: '7.5pt',
-      lineHeight: '1.24',
-      paragraphSpacing: '2.0mm',
-      marginTop: '11mm',
-      marginBottom: '10mm',
-      marginLeft: layoutBase.margin_left || layoutBase.marginLeft || '14mm',
-      marginRight: layoutBase.margin_right || layoutBase.marginRight || '14mm',
-      marginHeaderBottom: '3px',
-      paddingHeaderBottom: '3px',
-      marginTitleBox: '4px 0 4px 0',
-      marginSignatureTop: '3px',
-      signatureMaxHeight: '38px',
-      logoMaxHeight: '44px'
-    };
-  }
+  const tier = (qtdOrgaos <= 7 && score <= 2400)
+    ? 'normal'
+    : (qtdOrgaos <= 11 && score <= 4000 ? 'compact' : 'ultra_compact');
 
-  // Nível 2: Ultra-Compact Auto-Fit (12 a 14 órgãos ou score entre 4301 e 5600)
-  if (qtdOrgaos <= 14 && score <= 5600) {
-    return {
-      laudoAjustado: laudo,
-      modoPaginacao: 'single_page',
-      score,
-      tier: 'ultra_compact',
-      fontSizeBody: '8.8pt',
-      fontSizeTitulo: '11pt',
-      subtitleFontSize: '7.0pt',
-      lineHeight: '1.18',
-      paragraphSpacing: '1.5mm',
-      marginTop: '9mm',
-      marginBottom: '8mm',
-      marginLeft: '13mm',
-      marginRight: '13mm',
-      marginHeaderBottom: '2px',
-      paddingHeaderBottom: '2px',
-      marginTitleBox: '2px 0 3px 0',
-      marginSignatureTop: '2px',
-      signatureMaxHeight: '32px',
-      logoMaxHeight: '38px'
-    };
-  }
-
-  // Nível 3: Laudo Gigantesco (> 14 órgãos ou score > 5600) -> 2 Páginas Equilibradas (sem folha vazia!)
-  const corte = Math.ceil(qtdOrgaos / 2);
   return {
     laudoAjustado: laudo,
-    modoPaginacao: 'two_page_balanced',
-    cortePagina1: corte,
+    modoPaginacao: 'single_page',
     score,
-    tier: 'two_page_balanced',
-    fontSizeBody: '10pt',
-    fontSizeTitulo: '13pt',
-    subtitleFontSize: '7.8pt',
-    lineHeight: '1.32',
-    paragraphSpacing: '3.0mm',
-    marginTop: '15mm',
-    marginBottom: '15mm',
-    marginLeft: '15mm',
-    marginRight: '15mm',
-    marginHeaderBottom: '5px',
-    paddingHeaderBottom: '5px',
-    marginTitleBox: '6px 0 6px 0',
-    marginSignatureTop: '8px',
-    signatureMaxHeight: '44px',
-    logoMaxHeight: '48px'
+    tier,
+    fontSizeBody: userFontBody || (tier === 'normal' ? '10.5pt' : (tier === 'compact' ? '9.8pt' : '9.2pt')),
+    fontSizeTitulo: userFontTitulo || (tier === 'normal' ? '13.5pt' : '12.5pt'),
+    subtitleFontSize: tier === 'normal' ? '8pt' : '7.5pt',
+    lineHeight: userLineHeight ? String(userLineHeight) : (tier === 'normal' ? '1.36' : (tier === 'compact' ? '1.28' : '1.22')),
+    paragraphSpacing: userParagraphSpacing || (tier === 'normal' ? '8pt' : (tier === 'compact' ? '6pt' : '4pt')),
+    marginTop: userMarginTop || (tier === 'normal' ? '16mm' : '12mm'),
+    marginBottom: userMarginBottom || (tier === 'normal' ? '16mm' : '12mm'),
+    marginLeft: userMarginLeft || '15mm',
+    marginRight: userMarginRight || '15mm',
+    marginHeaderBottom: tier === 'normal' ? '6px' : '4px',
+    paddingHeaderBottom: tier === 'normal' ? '6px' : '4px',
+    marginTitleBox: tier === 'normal' ? '6px 0 8px 0' : '4px 0 5px 0',
+    marginSignatureTop: tier === 'normal' ? '6px' : '4px',
+    signatureMaxHeight: tier === 'normal' ? '44px' : '38px',
+    logoMaxHeight: tier === 'normal' ? '52px' : '46px'
   };
 }
 

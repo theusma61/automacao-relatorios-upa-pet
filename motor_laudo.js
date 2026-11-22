@@ -223,12 +223,12 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     (visual.stationeryMode === 'inline_logo_header' || visual.headerMode === 'inline_logo_beside_patient' || headerLogoUri)
   );
 
-  const margins = visual.margins || {
-    topFirstPage: '20mm',
-    topContinuationPages: '20mm',
-    bottom: '20mm',
-    left: '20mm',
-    right: '20mm'
+  const margins = {
+    topFirstPage: layout.margin_top || visual.margins?.topFirstPage || '20mm',
+    topContinuationPages: layout.margin_top || visual.margins?.topContinuationPages || '20mm',
+    bottom: layout.margin_bottom || visual.margins?.bottom || '20mm',
+    left: layout.margin_left || visual.margins?.left || '20mm',
+    right: layout.margin_right || visual.margins?.right || '20mm'
   };
 
   // Compatível tanto com patientHeader (novo formato agnóstico) quanto com patientGrid (legado)
@@ -253,7 +253,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     ]
   };
 
-  const tCfg = visual.titleConfig || {
+  const tCfg = {
     showTextTitle: !ehStationeryFullPage,
     text: 'LAUDO ULTRASSONOGRÁFICO',
     subtitle: null,
@@ -265,10 +265,13 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     underline: false,
     alignment: 'center',
     marginTopMm: '5mm',
-    marginBottomMm: '6mm'
+    marginBottomMm: '6mm',
+    ...(visual.titleConfig || {}),
+    ...(layout.font_size_titulo ? { fontSize: layout.font_size_titulo } : {}),
+    ...(layout.cor_primaria ? { color: layout.cor_primaria } : {})
   };
 
-  const bTypo = visual.bodyTypography || {
+  const bTypo = {
     fontFamily: 'Calibri, Carlito, Arial, sans-serif',
     fontSize: '10.5pt',
     lineHeight: '1.35',
@@ -277,7 +280,12 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     organLabelCase: 'UPPERCASE',
     organLabelBold: true,
     paginationMode: 'two_page_flow',
-    firstPageOrganCount: 8
+    firstPageOrganCount: 8,
+    ...(visual.bodyTypography || {}),
+    ...(layout.font_family ? { fontFamily: layout.font_family } : {}),
+    ...(layout.font_size_body ? { fontSize: layout.font_size_body } : {}),
+    ...(layout.line_height ? { lineHeight: String(layout.line_height) } : {}),
+    ...(layout.paragraph_spacing ? { paragraphSpacing: layout.paragraph_spacing } : {})
   };
 
   const sCfg = visual.signatureConfig || {

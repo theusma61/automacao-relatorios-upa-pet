@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   User,
   Palette,
@@ -11,7 +11,13 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ShieldCheck,
-  Zap
+  Zap,
+  Plus,
+  X,
+  Clock,
+  Loader2,
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react';
 import {
   VetaroLogo,
@@ -23,6 +29,77 @@ import LayoutEditorDrawer from '../components/modals/LayoutEditorDrawer';
 import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
 
+// Limites seguros calibrados para VPS Linux 2 vCPUs / 4 GB RAM
+// (Ultrassom carrega até 25 capturas Mindray por aba -> 4 abas abertas e até 2 gerações simultâneas; excedentes entram em fila)
+const MAX_ULTRASOUND_TABS = 4;
+const MAX_CONCURRENT_GENERATIONS = 2;
+
+function createEmptyTab(seq) {
+  return {
+    id: `us-tab-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 6)}`,
+    seq,
+    mindrayFiles: [],
+    rawFiles: [],
+    status: 'idle', // 'idle' | 'queued' | 'generating' | 'done' | 'error'
+    errorMessage: '',
+    generatedOutput: '',
+    downloadLinks: { pdfUrl: '', docxUrl: '' },
+    reportPageTab: 'p1',
+    reportParaEdicao: null
+  };
+}
+
+function getTabLabel(tab) {
+  const nomeGerado = tab.reportParaEdicao?.paciente?.nome;
+  if (
+    nomeGerado &&
+    nomeGerado.trim() &&
+    nomeGerado.trim().toLowerCase() !== 'paciente' &&
+    nomeGerado.trim().toLowerCase() !== 'não identificado'
+  ) {
+    return nomeGerado.trim().slice(0, 22);
+  }
+  if (tab.mindrayFiles.length > 0) {
+    return `Exame #${tab.seq} (${tab.mindrayFiles.length})`;
+  }
+  return `Exame #${tab.seq}`;
+}
+
+function revokeTabFiles(tab) {
+  if (!tab || !Array.isArray(tab.mindrayFiles)) return;
+  tab.mindrayFiles.forEach((f) => {
+    if (f?.previewUrl && f.previewUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(f.previewUrl);
+      } catch (_) {}
+    }
+  });
+}
+
+function loadSavedTabs(storageKey) {
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed.slice(0, MAX_ULTRASOUND_TABS).map((t, idx) => ({
+      ...createEmptyTab(t.seq || idx + 1),
+      id: t.id || createEmptyTab(idx + 1).id,
+      seq: t.seq || idx + 1,
+      status: t.status === 'done' ? 'done' : 'idle',
+      generatedOutput: typeof t.generatedOutput === 'string' ? t.generatedOutput : '',
+      downloadLinks:
+        t.downloadLinks && typeof t.downloadLinks === 'object'
+          ? { pdfUrl: t.downloadLinks.pdfUrl || '', docxUrl: t.downloadLinks.docxUrl || '' }
+          : { pdfUrl: '', docxUrl: '' },
+      reportPageTab: t.reportPageTab === 'p2' ? 'p2' : 'p1',
+      reportParaEdicao: t.reportParaEdicao || null
+    }));
+  } catch (_) {
+    return null;
+  }
+}
+
 export default function UltrasoundGenerator({
   darkMode,
   userProfile,
@@ -33,20 +110,78 @@ export default function UltrasoundGenerator({
   onAddActivity,
   onToast
 }) {
+  const storageKey = `vetaro_ultrasound_tabs_${userProfile?.id || 'default'}`;
   const fileInputRef = useRef(null);
+  const nextSeqRef = useRef(2);
+  const activeGenerationsRef = useRef(0);
+  const queueOrderRef = useRef([]);
+
   const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
-  const [mindrayFiles, setMindrayFiles] = useState([]);
-  const [rawFiles, setRawFiles] = useState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedOutput, setGeneratedOutput] = useState('');
-  const [downloadLinks, setDownloadLinks] = useState({ pdfUrl: '', docxUrl: '' });
-  const [reportPageTab, setReportPageTab] = useState('p1');
-  const [reportParaEdicao, setReportParaEdicao] = useState(null);
-  const [previewModalAberto, setPreviewModalAberto] = useState(false);
   const [cotaInfo, setCotaInfo] = useState(null);
   const [carregandoCota, setCarregandoCota] = useState(true);
 
-  const carregarStatusCota = async () => {
+  const [tabs, setTabs] = useState(() => {
+    const restored = loadSavedTabs(storageKey);
+    if (restored && restored.length > 0) {
+      const maxSeq = restored.reduce((acc, t) => Math.max(acc, t.seq || 1), 1);
+      nextSeqRef.current = maxSeq + 1;
+      return restored;
+    }
+    return [createEmptyTab(1)];
+  });
+
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id || '');
+  const [previewModalTabId, setPreviewModalTabId] = useState(null);
+
+  const tabsRef = useRef(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  useEffect(() => {
+    if (!tabs.some((t) => t.id === activeTabId) && tabs.length > 0) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
+
+  // Persiste abas e laudos gerados em sessionStorage (sobrevive navegação entre telas)
+  useEffect(() => {
+    try {
+      const serializable = tabs.map((t) => ({
+        id: t.id,
+        seq: t.seq,
+        status: t.status === 'done' ? 'done' : 'idle',
+        generatedOutput: t.generatedOutput,
+        downloadLinks: t.downloadLinks,
+        reportPageTab: t.reportPageTab,
+        reportParaEdicao: t.reportParaEdicao
+      }));
+      sessionStorage.setItem(storageKey, JSON.stringify(serializable));
+    } catch (_) {}
+  }, [tabs, storageKey]);
+
+  // Libera ObjectURLs das capturas Mindray ao desmontar componente
+  useEffect(() => {
+    return () => {
+      tabsRef.current.forEach((t) => revokeTabFiles(t));
+    };
+  }, []);
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const previewTab = previewModalTabId
+    ? tabs.find((t) => t.id === previewModalTabId) || null
+    : null;
+
+  const updateTabById = useCallback((tabId, updater) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== tabId) return t;
+        return typeof updater === 'function' ? updater(t) : { ...t, ...updater };
+      })
+    );
+  }, []);
+
+  const carregarStatusCota = useCallback(async () => {
     try {
       const res = await api.getStatusCota();
       if (res && res.sucesso) {
@@ -57,11 +192,11 @@ export default function UltrasoundGenerator({
     } finally {
       setCarregandoCota(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     carregarStatusCota();
-  }, []);
+  }, [carregarStatusCota]);
 
   const isCotaBloqueada =
     cotaInfo?.bloqueado === true &&
@@ -74,43 +209,104 @@ export default function UltrasoundGenerator({
     userProfile?.role === 'admin' ||
     userProfile?.role === 'veterinario';
 
+  // Gerenciamento de Abas
+  const handleAddTab = () => {
+    if (tabs.length >= MAX_ULTRASOUND_TABS) {
+      if (onToast) {
+        onToast(
+          `Limite seguro de ${MAX_ULTRASOUND_TABS} abas simultâneas de ultrassom atingido. Feche uma aba concluída para abrir outra.`
+        );
+      }
+      return;
+    }
+    const seq = nextSeqRef.current++;
+    const nova = createEmptyTab(seq);
+    setTabs((prev) => [...prev, nova]);
+    setActiveTabId(nova.id);
+  };
+
+  const handleCloseTab = (e, tabId) => {
+    e.stopPropagation();
+    const target = tabs.find((t) => t.id === tabId);
+    if (!target) return;
+
+    if (target.status === 'generating') {
+      if (onToast) onToast('Aguarde a conclusão da geração antes de fechar esta aba.');
+      return;
+    }
+
+    if (target.rawFiles.length > 0 && target.status !== 'done') {
+      const confirmar = window.confirm(
+        `Deseja fechar a aba "${getTabLabel(target)}"? As imagens selecionadas não geradas serão descartadas.`
+      );
+      if (!confirmar) return;
+    }
+
+    queueOrderRef.current = queueOrderRef.current.filter((id) => id !== tabId);
+    revokeTabFiles(target);
+
+    if (tabs.length === 1) {
+      const seq = nextSeqRef.current++;
+      const fresh = createEmptyTab(seq);
+      setTabs([fresh]);
+      setActiveTabId(fresh.id);
+      return;
+    }
+
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    const restantes = tabs.filter((t) => t.id !== tabId);
+    setTabs(restantes);
+    if (activeTabId === tabId) {
+      const nextActive = restantes[Math.max(0, idx - 1)] || restantes[0];
+      setActiveTabId(nextActive.id);
+    }
+  };
+
+  const handleResetActiveTab = () => {
+    if (!activeTab || activeTab.status === 'generating') return;
+    revokeTabFiles(activeTab);
+    updateTabById(activeTab.id, (t) => ({
+      ...createEmptyTab(t.seq),
+      id: t.id
+    }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (onToast) onToast('Aba limpa e pronta para um novo exame!');
+  };
+
   const handleFilesSelected = (fileList) => {
+    if (!activeTab) return;
     if (isCotaBloqueada) {
-      onToast('Limite de cota mensal atingido. Faça upgrade do plano para enviar novas imagens.');
+      if (onToast) onToast('Limite de cota mensal atingido. Faça upgrade do plano para enviar novas imagens.');
       return;
     }
     const arr = Array.from(fileList || []).slice(0, 25);
     if (arr.length === 0) return;
-    setRawFiles(arr);
-    setMindrayFiles(
-      arr.map((f) => ({
+
+    revokeTabFiles(activeTab);
+    updateTabById(activeTab.id, {
+      rawFiles: arr,
+      mindrayFiles: arr.map((f) => ({
         name: f.name,
         measure: `${(f.size / 1024).toFixed(0)} KB`,
         previewUrl: URL.createObjectURL(f)
       }))
-    );
-    onToast(`${arr.length} imagem(ns) selecionada(s) para análise!`);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (onToast) onToast(`${arr.length} imagem(ns) selecionada(s) na aba "${getTabLabel(activeTab)}"!`);
   };
 
-  const handleGenerate = async () => {
-    if (isCotaBloqueada) {
-      onToast('Limite de cota mensal atingido. Faça upgrade do seu plano para gerar laudos.');
-      return;
-    }
-    if (!podeEmitir) {
-      onToast('Sua conta não possui permissão para gerar laudos.');
-      return;
-    }
-    if (rawFiles.length === 0) {
-      onToast('Selecione pelo menos uma captura de ultrassom antes de gerar o laudo.');
-      if (fileInputRef.current) fileInputRef.current.click();
-      return;
-    }
+  const executeGenerationForTab = useCallback(async (tabId) => {
+    const currentTab = tabsRef.current.find((t) => t.id === tabId);
+    if (!currentTab) return;
 
-    setIsGenerating(true);
-    setGeneratedOutput('');
-    setDownloadLinks({ pdfUrl: '', docxUrl: '' });
-    setReportPageTab('p1');
+    activeGenerationsRef.current += 1;
+    updateTabById(tabId, {
+      status: 'generating',
+      errorMessage: '',
+      generatedOutput: '',
+      downloadLinks: { pdfUrl: '', docxUrl: '' },
+      reportPageTab: 'p1'
+    });
 
     const now = new Date();
     const dateStr = `Gerado em ${String(now.getDate()).padStart(2, '0')}/${String(
@@ -122,22 +318,20 @@ export default function UltrasoundGenerator({
 
     try {
       const fd = new FormData();
-      rawFiles.forEach((f) => fd.append('imagens', f));
+      currentTab.rawFiles.forEach((f) => fd.append('imagens', f));
       const res = await api.gerarUltrassom(fd);
       const pac = res.paciente || {};
       const resumoReal =
         `LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL\n` +
         `Paciente: ${pac.nome || 'Não identificado'} (${pac.especie || 'Canina'}${
           pac.idade ? `, ${pac.idade}` : ''
-        }) | Tutor: ${pac.tutor || 'Não informado'}\n` +
+        }) | Responsável: ${pac.tutor || 'Não informado'}\n` +
         `Responsável Técnico: ${userProfile.name} (${userProfile.crmv}) — ${userProfile.clinicName}\n` +
         `--------------------------------------------------------------------------------\n` +
-        `Laudo oficial em PDF e Word (.docx) compilado com sucesso a partir de ${rawFiles.length} captura(s) do aparelho.`;
+        `Laudo oficial em PDF e Word (.docx) compilado com sucesso a partir de ${currentTab.rawFiles.length} captura(s) do aparelho.`;
 
-      setGeneratedOutput(resumoReal);
-      setDownloadLinks({ pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' });
       const novoRelatorio = {
-        id: `ultra-${Date.now()}`,
+        id: `ultra-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         jobId: res.jobId,
         type: 'ultrassom',
         title: 'Laudo de Ultrassom',
@@ -151,22 +345,195 @@ export default function UltrasoundGenerator({
         paciente: res.paciente,
         laudo: res.laudo
       };
-      setReportParaEdicao(novoRelatorio);
-      onAddActivity(novoRelatorio);
-      onToast('Laudo Oficial de Ultrassom gerado com sucesso!');
+
+      updateTabById(tabId, {
+        status: 'done',
+        errorMessage: '',
+        generatedOutput: resumoReal,
+        downloadLinks: { pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' },
+        reportParaEdicao: novoRelatorio
+      });
+
+      if (onAddActivity) onAddActivity(novoRelatorio);
+      if (onToast) {
+        onToast(`Laudo de ${pac.nome || getTabLabel(currentTab)} concluído com sucesso!`);
+      }
       carregarStatusCota();
     } catch (err) {
       if (err.codigo === 'COTA_ATINGIDA' || err.message?.includes('cota')) {
         carregarStatusCota();
       }
-      onToast('Erro ao processar ultrassom: ' + err.message);
+      updateTabById(tabId, {
+        status: 'error',
+        errorMessage: err.message || 'Erro ao processar ultrassom.'
+      });
+      if (onToast) onToast(`Erro na aba ${getTabLabel(currentTab)}: ${err.message}`);
     } finally {
-      setIsGenerating(false);
+      activeGenerationsRef.current = Math.max(0, activeGenerationsRef.current - 1);
+      while (
+        activeGenerationsRef.current < MAX_CONCURRENT_GENERATIONS &&
+        queueOrderRef.current.length > 0
+      ) {
+        const nextTabId = queueOrderRef.current.shift();
+        const stillExists = tabsRef.current.some(
+          (t) => t.id === nextTabId && t.status === 'queued'
+        );
+        if (stillExists) {
+          executeGenerationForTab(nextTabId);
+          break;
+        }
+      }
     }
+  }, [updateTabById, userProfile, onAddActivity, onToast, carregarStatusCota]);
+
+  const handleGenerate = async () => {
+    if (!activeTab) return;
+    if (isCotaBloqueada) {
+      if (onToast) onToast('Limite de cota mensal atingido. Faça upgrade do seu plano para gerar laudos.');
+      return;
+    }
+    if (!podeEmitir) {
+      if (onToast) onToast('Sua conta não possui permissão para gerar laudos.');
+      return;
+    }
+    if (activeTab.status === 'generating' || activeTab.status === 'queued') {
+      return;
+    }
+    if (activeTab.rawFiles.length === 0) {
+      if (onToast) onToast('Selecione pelo menos uma captura de ultrassom antes de gerar o laudo.');
+      if (fileInputRef.current) fileInputRef.current.click();
+      return;
+    }
+
+    if (activeGenerationsRef.current >= MAX_CONCURRENT_GENERATIONS) {
+      if (!queueOrderRef.current.includes(activeTab.id)) {
+        queueOrderRef.current.push(activeTab.id);
+      }
+      updateTabById(activeTab.id, { status: 'queued', errorMessage: '' });
+      if (onToast) {
+        onToast(
+          `Aba "${getTabLabel(activeTab)}" adicionada à fila! Ela iniciará automaticamente assim que uma geração atual terminar.`
+        );
+      }
+      return;
+    }
+
+    executeGenerationForTab(activeTab.id);
   };
 
+  const generatingCount = tabs.filter((t) => t.status === 'generating').length;
+  const queuedCount = tabs.filter((t) => t.status === 'queued').length;
+  const isGenerating = activeTab?.status === 'generating';
+  const isQueued = activeTab?.status === 'queued';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Barra de Mini-Abas Multi-Exames de Ultrassom */}
+      <div
+        className={`rounded-2xl p-2 border shadow-sm ${
+          darkMode ? 'bg-[#0C1720] border-[#1E3545]' : 'bg-slate-100/90 border-slate-200'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTab?.id;
+            const label = getTabLabel(tab);
+            return (
+              <div
+                key={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                role="tab"
+                aria-selected={isActive}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition shrink-0 border select-none ${
+                  isActive
+                    ? darkMode
+                      ? 'bg-[#0F1C26] text-white border-[#00D296]/70 shadow-md'
+                      : 'bg-white text-[#0A141D] border-[#0D5C56]/50 shadow-sm'
+                    : darkMode
+                    ? 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/60 hover:text-slate-200'
+                    : 'bg-transparent text-slate-600 border-transparent hover:bg-white/70 hover:text-slate-900'
+                }`}
+              >
+                {tab.status === 'generating' ? (
+                  <Loader2 className="w-3.5 h-3.5 text-[#00D296] animate-spin shrink-0" />
+                ) : tab.status === 'queued' ? (
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                ) : tab.status === 'done' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#00D296] shrink-0" />
+                ) : tab.status === 'error' ? (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                ) : (
+                  <UltrasoundIcon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#00D296]' : 'opacity-60'}`} />
+                )}
+
+                <span className="max-w-[140px] truncate">{label}</span>
+
+                {tab.status === 'queued' && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    Fila
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={(e) => handleCloseTab(e, tab.id)}
+                  disabled={tab.status === 'generating'}
+                  title={
+                    tab.status === 'generating'
+                      ? 'Aguarde a geração terminar para fechar'
+                      : 'Fechar aba'
+                  }
+                  className={`p-0.5 rounded-md transition ${
+                    tab.status === 'generating'
+                      ? 'opacity-30 cursor-not-allowed'
+                      : 'opacity-50 group-hover:opacity-100 hover:bg-rose-500/20 hover:text-rose-400'
+                  }`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+
+          {/* Botão Nova Aba */}
+          <button
+            type="button"
+            onClick={handleAddTab}
+            disabled={tabs.length >= MAX_ULTRASOUND_TABS}
+            title={
+              tabs.length >= MAX_ULTRASOUND_TABS
+                ? `Máximo de ${MAX_ULTRASOUND_TABS} abas simultâneas para manter o servidor rápido`
+                : 'Abrir nova aba para outro exame de ultrassom'
+            }
+            className={`px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shrink-0 border border-dashed transition ${
+              tabs.length >= MAX_ULTRASOUND_TABS
+                ? 'opacity-40 cursor-not-allowed border-slate-600 text-slate-500'
+                : darkMode
+                ? 'border-[#00D296]/40 text-[#00D296] hover:bg-[#00D296]/15'
+                : 'border-[#0D5C56]/40 text-[#0D5C56] hover:bg-[#0D5C56]/10'
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Nova Aba</span>
+            <span className="text-[10px] opacity-75">
+              ({tabs.length}/{MAX_ULTRASOUND_TABS})
+            </span>
+          </button>
+
+          {/* Indicador de gerações em segundo plano */}
+          {(generatingCount > 0 || queuedCount > 0) && (
+            <div className="ml-auto flex items-center gap-2 pl-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>
+                  {generatingCount} gerando{queuedCount > 0 ? ` • ${queuedCount} na fila` : ''}
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div
         className={`relative rounded-2xl p-5 sm:p-7 border overflow-hidden transition shadow-lg ${
           darkMode
@@ -179,20 +546,41 @@ export default function UltrasoundGenerator({
         {/* Cabeçalho */}
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
-              Laudo de Ultrassonografia Abdominal
-            </h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
+                Laudo de Ultrassonografia Abdominal
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#00D296]/15 text-[#00D296] border border-[#00D296]/30">
+                {getTabLabel(activeTab)}
+              </span>
+            </div>
             <p
               className={`text-xs sm:text-sm mt-1 max-w-xl leading-relaxed ${
                 darkMode ? 'text-slate-300' : 'text-[#52657A]'
               }`}
             >
               Envie as capturas de tela do Mindray com calipers e identificações para análise
-              automática.
+              automática. Você pode alternar entre abas enquanto outro laudo é gerado.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {activeTab.status === 'done' && (
+              <button
+                type="button"
+                onClick={handleResetActiveTab}
+                className={`px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 border transition ${
+                  darkMode
+                    ? 'bg-slate-800/80 text-slate-200 border-slate-700 hover:border-[#00D296]'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:border-[#0D5C56]'
+                }`}
+                title="Limpar esta aba para iniciar outro exame"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Novo nesta aba</span>
+              </button>
+            )}
+
             {cotaInfo && (
               <div
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition ${
@@ -336,7 +724,7 @@ export default function UltrasoundGenerator({
         <div
           onClick={() => {
             if (isCotaBloqueada) {
-              onToast('Limite de cota mensal atingido. Faça upgrade do plano na aba Assinatura.');
+              if (onToast) onToast('Limite de cota mensal atingido. Faça upgrade do plano na aba Assinatura.');
               return;
             }
             if (fileInputRef.current) fileInputRef.current.click();
@@ -347,7 +735,7 @@ export default function UltrasoundGenerator({
           onDrop={(e) => {
             e.preventDefault();
             if (isCotaBloqueada) {
-              onToast('Limite de cota atingido. Faça upgrade do plano para enviar novas imagens.');
+              if (onToast) onToast('Limite de cota atingido. Faça upgrade do plano para enviar novas imagens.');
               return;
             }
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -399,12 +787,12 @@ export default function UltrasoundGenerator({
               : 'Formatos aceitos: JPG, PNG, WEBP (até 25 fotos por exame)'}
           </p>
 
-          {mindrayFiles.length > 0 && (
+          {activeTab.mindrayFiles.length > 0 && (
             <div
               onClick={(e) => e.stopPropagation()}
               className="mt-5 pt-4 border-t border-teal-500/20 flex flex-wrap items-center justify-center gap-2"
             >
-              {mindrayFiles.map((file, idx) => (
+              {activeTab.mindrayFiles.map((file, idx) => (
                 <span
                   key={idx}
                   className={`px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-2 border ${
@@ -421,8 +809,8 @@ export default function UltrasoundGenerator({
               <button
                 type="button"
                 onClick={() => {
-                  setMindrayFiles([]);
-                  setRawFiles([]);
+                  revokeTabFiles(activeTab);
+                  updateTabById(activeTab.id, { mindrayFiles: [], rawFiles: [] });
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 className="text-[11px] font-bold underline text-rose-400 ml-2"
@@ -433,11 +821,19 @@ export default function UltrasoundGenerator({
           )}
         </div>
 
+        {/* Alerta de erro desta aba, se houver */}
+        {activeTab.status === 'error' && activeTab.errorMessage && (
+          <div className="relative z-10 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{activeTab.errorMessage}</span>
+          </div>
+        )}
+
         {/* Botão Largo Principal */}
         <button
           type="button"
           onClick={handleGenerate}
-          disabled={isGenerating || !podeEmitir || isCotaBloqueada}
+          disabled={isGenerating || isQueued || !podeEmitir || isCotaBloqueada}
           className={`relative z-10 w-full mt-5 py-3.5 sm:py-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg transition ${
             !podeEmitir
               ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
@@ -445,6 +841,8 @@ export default function UltrasoundGenerator({
               ? darkMode
                 ? 'bg-rose-950/60 border border-rose-500/50 text-rose-300 cursor-not-allowed'
                 : 'bg-rose-100 border border-rose-300 text-rose-700 cursor-not-allowed'
+              : isQueued
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-wait'
               : darkMode
               ? 'bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] hover:brightness-110'
               : 'bg-gradient-to-r from-[#0D5C56] to-[#00A878] text-white hover:brightness-110'
@@ -462,6 +860,11 @@ export default function UltrasoundGenerator({
                 🔒 Limite de Cota Atingido ({cotaInfo?.consumido}/{cotaInfo?.limite} laudos) — Faça Upgrade
               </span>
             </>
+          ) : isQueued ? (
+            <>
+              <Clock className="w-5 h-5 animate-pulse" />
+              <span>Na fila de processamento (iniciará automaticamente)...</span>
+            </>
           ) : (
             <>
               <Wand2 className={`w-5 h-5 ${isGenerating ? 'animate-spin' : ''}`} />
@@ -475,8 +878,8 @@ export default function UltrasoundGenerator({
         </button>
       </div>
 
-      {/* Resultado Real Gerado pela IA */}
-      {generatedOutput && (
+      {/* Resultado Real Gerado pela IA (da aba ativa) */}
+      {activeTab.generatedOutput && (
         <div
           className={`p-5 sm:p-6 rounded-2xl border space-y-4 transition ${
             darkMode ? 'bg-[#0F1C26] border-[#00D296]/40' : 'bg-white border-slate-200'
@@ -486,16 +889,16 @@ export default function UltrasoundGenerator({
             <div className="flex items-center gap-2">
               <VetaroLogo size={22} dark={darkMode} textSize="text-base" />
               <span className="text-xs font-bold text-[#00D296]">
-                • Laudo Gerado com Sucesso!
+                • Laudo Gerado com Sucesso ({getTabLabel(activeTab)})!
               </span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setReportPageTab('p1')}
+                onClick={() => updateTabById(activeTab.id, { reportPageTab: 'p1' })}
                 className={`px-3 py-1 rounded-lg text-xs font-extrabold ${
-                  reportPageTab === 'p1'
+                  activeTab.reportPageTab === 'p1'
                     ? 'bg-[#00D296] text-[#062E2B]'
                     : 'bg-slate-500/10 text-slate-400'
                 }`}
@@ -504,19 +907,19 @@ export default function UltrasoundGenerator({
               </button>
               <button
                 type="button"
-                onClick={() => setReportPageTab('p2')}
+                onClick={() => updateTabById(activeTab.id, { reportPageTab: 'p2' })}
                 className={`px-3 py-1 rounded-lg text-xs font-extrabold ${
-                  reportPageTab === 'p2'
+                  activeTab.reportPageTab === 'p2'
                     ? 'bg-[#00D296] text-[#062E2B]'
                     : 'bg-slate-500/10 text-slate-400'
                 }`}
               >
-                Página 2: Imagens Enviadas ({mindrayFiles.length})
+                Página 2: Imagens Enviadas ({activeTab.mindrayFiles.length})
               </button>
             </div>
           </div>
 
-          {reportPageTab === 'p1' ? (
+          {activeTab.reportPageTab === 'p1' ? (
             <pre
               className={`text-xs leading-relaxed whitespace-pre-wrap font-sans p-4 rounded-xl border ${
                 darkMode
@@ -524,11 +927,11 @@ export default function UltrasoundGenerator({
                   : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
-              {generatedOutput}
+              {activeTab.generatedOutput}
             </pre>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {mindrayFiles.map((img, i) => (
+              {activeTab.mindrayFiles.map((img, i) => (
                 <div
                   key={i}
                   className={`p-3 rounded-xl border text-center ${
@@ -567,10 +970,10 @@ export default function UltrasoundGenerator({
             </button>
 
             <div className="flex flex-wrap items-center gap-2">
-              {reportParaEdicao && (
+              {activeTab.reportParaEdicao && (
                 <button
                   type="button"
-                  onClick={() => setPreviewModalAberto(true)}
+                  onClick={() => setPreviewModalTabId(activeTab.id)}
                   className="px-4 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-[#00D296] to-[#00B884] text-[#052925] flex items-center gap-1.5 shadow-md hover:brightness-110"
                 >
                   <Eye className="w-4 h-4" />
@@ -578,9 +981,9 @@ export default function UltrasoundGenerator({
                 </button>
               )}
 
-              {downloadLinks.docxUrl && (
+              {activeTab.downloadLinks.docxUrl && (
                 <a
-                  href={downloadLinks.docxUrl}
+                  href={activeTab.downloadLinks.docxUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold border border-[#00D296]/40 text-[#00D296] flex items-center gap-1.5"
@@ -589,9 +992,9 @@ export default function UltrasoundGenerator({
                 </a>
               )}
 
-              {downloadLinks.pdfUrl && (
+              {activeTab.downloadLinks.pdfUrl && (
                 <a
-                  href={downloadLinks.pdfUrl}
+                  href={activeTab.downloadLinks.pdfUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl text-xs font-extrabold bg-[#00D296] text-[#062E2B] flex items-center gap-1.5 shadow-sm"
@@ -604,26 +1007,29 @@ export default function UltrasoundGenerator({
         </div>
       )}
 
-      {/* Modal de Pré-Visualização e Edição de Texto / Órgãos */}
-      {previewModalAberto && reportParaEdicao && (
+      {/* Modal de Pré-Visualização e Edição de Texto / Órgãos (vinculado à aba que o abriu) */}
+      {previewTab && previewTab.reportParaEdicao && (
         <ReportPreviewModal
-          report={reportParaEdicao}
+          report={previewTab.reportParaEdicao}
           darkMode={darkMode}
-          onClose={() => setPreviewModalAberto(false)}
+          onClose={() => setPreviewModalTabId(null)}
           onToast={onToast}
           onUpdateReport={(updated) => {
-            setReportParaEdicao(updated);
-            setDownloadLinks({ pdfUrl: updated.pdfUrl, docxUrl: updated.docxUrl });
-            if (updated.paciente) {
-              const pac = updated.paciente;
-              setGeneratedOutput(
-                `LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL (ATUALIZADO)\n` +
-                `Paciente: ${pac.nome || 'Paciente'} (${pac.especie || 'Canina'}${pac.idade ? `, ${pac.idade}` : ''}) | Tutor: ${pac.tutor || 'Não informado'}\n` +
+            const novoResumo = updated.paciente
+              ? `LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL (ATUALIZADO)\n` +
+                `Paciente: ${updated.paciente.nome || 'Paciente'} (${updated.paciente.especie || 'Canina'}${
+                  updated.paciente.idade ? `, ${updated.paciente.idade}` : ''
+                }) | Responsável: ${updated.paciente.tutor || 'Não informado'}\n` +
                 `Responsável Técnico: ${userProfile.name} (${userProfile.crmv}) — ${userProfile.clinicName}\n` +
                 `--------------------------------------------------------------------------------\n` +
                 `Laudo oficial atualizado e recompilado com ${updated.laudo?.length || 0} órgão(s) avaliados.`
-              );
-            }
+              : previewTab.generatedOutput;
+
+            updateTabById(previewTab.id, {
+              reportParaEdicao: updated,
+              downloadLinks: { pdfUrl: updated.pdfUrl, docxUrl: updated.docxUrl },
+              generatedOutput: novoResumo
+            });
           }}
         />
       )}
