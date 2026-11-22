@@ -20,7 +20,10 @@ import {
   Check,
   Eye,
   Layout,
-  Table as TableIcon
+  Table as TableIcon,
+  GripVertical,
+  Columns,
+  RefreshCw
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -31,6 +34,12 @@ const FONTES_DISPONIVEIS = [
   'Roboto, sans-serif',
   'Times New Roman, serif',
   'Segoe UI, sans-serif'
+];
+
+const TAMANHOS_FONTE_LAUDO = [
+  '8pt', '8.5pt', '9pt', '9.5pt', '10pt', '10.5pt', '11pt', '11.5pt',
+  '12pt', '13pt', '14pt', '15pt', '16pt', '18pt', '20pt', '22pt',
+  '24pt', '26pt', '28pt', '30pt'
 ];
 
 export default function EstiloLaudoTab({
@@ -55,7 +64,17 @@ export default function EstiloLaudoTab({
   const [perfilEditando, setPerfilEditando] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [redefinindo, setRedefinindo] = useState(false);
-  const [abaVisualAtiva, setAbaVisualAtiva] = useState('design'); // 'design', 'clinico', 'preview'
+  const [abaVisualAtiva, setAbaVisualAtiva] = useState('design');
+  const [modoSplitPdf, setModoSplitPdf] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth >= 1024
+  );
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [gerandoPdfPreview, setGerandoPdfPreview] = useState(false);
+  const [erroPdfPreview, setErroPdfPreview] = useState('');
+  const previewAbortRef = useRef(0);
+  const previewControllerRef = useRef(null);
+  const [draggedOrgaoIdx, setDraggedOrgaoIdx] = useState(null);
+  const [dragOverOrgaoIdx, setDragOverOrgaoIdx] = useState(null); // 'design', 'clinico', 'preview'
 
   const carregarPerfil = async () => {
     setCarregando(true);
@@ -91,13 +110,17 @@ export default function EstiloLaudoTab({
               corBordaTabelas: tVisual.corBordaTabelas || '#E2E8F0',
               fontFamily: tVisual.fontFamily || res.layout?.font_family || 'Calibri, sans-serif',
               fontSizeBody: tVisual.fontSizeBody || res.layout?.font_size_body || '11pt',
+              fontSizeCabecalho: tVisual.fontSizeCabecalho || res.layout?.font_size_cabecalho || tVisual.visualConfigClonado?.patientHeader?.fontSize || '10pt',
               fontSizeTitulo: tVisual.fontSizeTitulo || res.layout?.font_size_titulo || '14pt',
               marginTop: tVisual.marginTop || res.layout?.margin_top || '20mm',
               marginBottom: tVisual.marginBottom || res.layout?.margin_bottom || '20mm',
               marginLeft: tVisual.marginLeft || res.layout?.margin_left || '15mm',
               marginRight: tVisual.marginRight || res.layout?.margin_right || '15mm',
               lineHeight: tVisual.lineHeight || res.layout?.line_height || '1.4',
-              paragraphSpacing: tVisual.paragraphSpacing || res.layout?.paragraph_spacing || '8pt'
+              paragraphSpacing: tVisual.paragraphSpacing || res.layout?.paragraph_spacing || '8pt',
+              paginacaoTexto: tVisual.paginacaoTexto || 'preencher',
+              mostrarAssinaturaImagem: tVisual.mostrarAssinaturaImagem !== undefined ? Boolean(tVisual.mostrarAssinaturaImagem) : true,
+              mostrarAssinaturaTexto: tVisual.mostrarAssinaturaTexto !== undefined ? Boolean(tVisual.mostrarAssinaturaTexto) : true
             },
             ordemOrgaos: Array.isArray(res.perfil.ordemOrgaos) ? [...res.perfil.ordemOrgaos] : [],
             frasesNormalidade: res.perfil.frasesNormalidade || {},
@@ -120,6 +143,68 @@ export default function EstiloLaudoTab({
 
   useEffect(() => {
     carregarPerfil();
+  }, []);
+
+  const gerarPreviewPdfAoVivo = async (perfilAtual) => {
+    const alvo = perfilAtual || perfilEditando;
+    if (!alvo) return;
+    const reqId = ++previewAbortRef.current;
+    if (previewControllerRef.current) {
+      previewControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    previewControllerRef.current = controller;
+    setGerandoPdfPreview(true);
+    setErroPdfPreview('');
+    try {
+      const blob = await api.previewPadraoLaudo({
+        nomeDetectado: alvo.nomeDetectado,
+        crmvDetectado: alvo.crmvDetectado,
+        clinicaDetectada: alvo.clinicaDetectada,
+        templateVisual: alvo.templateVisual,
+        ordemOrgaos: alvo.ordemOrgaos,
+        frasesNormalidade: alvo.frasesNormalidade,
+        estiloConclusao: alvo.estiloConclusao
+      }, { signal: controller.signal });
+      if (reqId !== previewAbortRef.current) return;
+      const novaUrl = URL.createObjectURL(blob);
+      setPdfPreviewUrl((antiga) => {
+        if (antiga) {
+          setTimeout(() => URL.revokeObjectURL(antiga), 2000);
+        }
+        return novaUrl;
+      });
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      if (reqId === previewAbortRef.current) {
+        setErroPdfPreview(err.message || 'Falha ao gerar pré-visualização PDF.');
+      }
+    } finally {
+      if (reqId === previewAbortRef.current) {
+        setGerandoPdfPreview(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!perfilEditando) return;
+    if (!modoSplitPdf && abaVisualAtiva !== 'preview') return;
+    const timer = setTimeout(() => {
+      gerarPreviewPdfAoVivo(perfilEditando);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [perfilEditando, modoSplitPdf, abaVisualAtiva]);
+
+  useEffect(() => {
+    return () => {
+      if (previewControllerRef.current) {
+        previewControllerRef.current.abort();
+      }
+      setPdfPreviewUrl((antiga) => {
+        if (antiga) URL.revokeObjectURL(antiga);
+        return '';
+      });
+    };
   }, []);
 
   const formatarTamanho = (bytes) => {
@@ -226,13 +311,17 @@ export default function EstiloLaudoTab({
             corBordaTabelas: tVisual.corBordaTabelas || '#E2E8F0',
             fontFamily: tVisual.fontFamily || 'Calibri, sans-serif',
             fontSizeBody: tVisual.fontSizeBody || '11pt',
+            fontSizeCabecalho: tVisual.fontSizeCabecalho || tVisual.visualConfigClonado?.patientHeader?.fontSize || '10pt',
             fontSizeTitulo: tVisual.fontSizeTitulo || '14pt',
             marginTop: tVisual.marginTop || '20mm',
             marginBottom: tVisual.marginBottom || '20mm',
             marginLeft: tVisual.marginLeft || '15mm',
             marginRight: tVisual.marginRight || '15mm',
             lineHeight: tVisual.lineHeight || '1.4',
-            paragraphSpacing: tVisual.paragraphSpacing || '8pt'
+            paragraphSpacing: tVisual.paragraphSpacing || '8pt',
+            paginacaoTexto: tVisual.paginacaoTexto || 'preencher',
+              mostrarAssinaturaImagem: tVisual.mostrarAssinaturaImagem !== undefined ? Boolean(tVisual.mostrarAssinaturaImagem) : true,
+              mostrarAssinaturaTexto: tVisual.mostrarAssinaturaTexto !== undefined ? Boolean(tVisual.mostrarAssinaturaTexto) : true
           },
           ordemOrgaos: detectado.ordemOrgaos || [],
           frasesNormalidade: detectado.frasesNormalidade || {},
@@ -331,6 +420,16 @@ export default function EstiloLaudoTab({
     if (alvo < 0 || alvo >= lista.length) return;
     const item = lista.splice(index, 1)[0];
     lista.splice(alvo, 0, item);
+    setPerfilEditando(prev => ({ ...prev, ordemOrgaos: lista }));
+  };
+
+  const reordenarOrgao = (origemIdx, destinoIdx) => {
+    if (origemIdx === null || destinoIdx === null || origemIdx === destinoIdx) return;
+    if (!perfilEditando || !Array.isArray(perfilEditando.ordemOrgaos)) return;
+    const lista = [...perfilEditando.ordemOrgaos];
+    if (origemIdx < 0 || origemIdx >= lista.length || destinoIdx < 0 || destinoIdx >= lista.length) return;
+    const [movido] = lista.splice(origemIdx, 1);
+    lista.splice(destinoIdx, 0, movido);
     setPerfilEditando(prev => ({ ...prev, ordemOrgaos: lista }));
   };
 
@@ -569,19 +668,41 @@ export default function EstiloLaudoTab({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAbaVisualAtiva('preview')}
+                  onClick={() => {
+                    setModoSplitPdf(false);
+                    setAbaVisualAtiva('preview');
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    abaVisualAtiva === 'preview'
+                    abaVisualAtiva === 'preview' && !modoSplitPdf
                       ? 'bg-[#00D296] text-[#062E2B]'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Pré-visualização</span>
+                  <span>PDF Real</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const proximo = !modoSplitPdf;
+                    setModoSplitPdf(proximo);
+                    if (proximo && abaVisualAtiva === 'preview') setAbaVisualAtiva('design');
+                  }}
+                  title="Editar ao lado do PDF real"
+                  className={`hidden lg:flex px-3 py-1.5 rounded-lg text-xs font-bold items-center gap-1.5 transition ${
+                    modoSplitPdf
+                      ? 'bg-[#00D296] text-[#062E2B]'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span>Split PDF</span>
                 </button>
               </div>
             </div>
 
+            <div className={modoSplitPdf ? 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start' : ''}>
+            <div className={modoSplitPdf ? 'lg:col-span-6 space-y-5' : 'space-y-5'}>
             {/* ABA 1: DESIGN VISUAL & DIAGRAMAÇÃO */}
             {abaVisualAtiva === 'design' && (
               <div className="space-y-5">
@@ -814,7 +935,7 @@ export default function EstiloLaudoTab({
                     <span>Identidade Visual, Cores & Tipografia</span>
                   </h5>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-400 mb-1">
                         Cor Primária (Títulos e Barras)
@@ -890,14 +1011,36 @@ export default function EstiloLaudoTab({
                         ))}
                       </select>
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Fonte do Cabeçalho
+                      </label>
+                        <select
+                          value={tv.fontSizeCabecalho || '10pt'}
+                          onChange={(e) => setPerfilEditando({
+                            ...perfilEditando,
+                            templateVisual: { ...tv, fontSizeCabecalho: e.target.value }
+                          })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs border font-medium ${
+                            darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
+                          }`}
+                        >
+                          {TAMANHOS_FONTE_LAUDO.map(sz => (
+                            <option key={sz} value={sz}>{sz}</option>
+                          ))}
+                          {tv.fontSizeCabecalho && !TAMANHOS_FONTE_LAUDO.includes(tv.fontSizeCabecalho) && (
+                            <option value={tv.fontSizeCabecalho}>{tv.fontSizeCabecalho} (Extraído)</option>
+                          )}
+                        </select>
+                      </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-400 mb-1">
                           Tamanho do Corpo
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={tv.fontSizeBody || '11pt'}
                           onChange={(e) => setPerfilEditando({
                             ...perfilEditando,
@@ -906,14 +1049,20 @@ export default function EstiloLaudoTab({
                           className={`w-full px-3 py-2 rounded-xl text-xs border font-medium ${
                             darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
                           }`}
-                        />
+                        >
+                          {TAMANHOS_FONTE_LAUDO.map(sz => (
+                            <option key={sz} value={sz}>{sz}</option>
+                          ))}
+                          {tv.fontSizeBody && !TAMANHOS_FONTE_LAUDO.includes(tv.fontSizeBody) && (
+                            <option value={tv.fontSizeBody}>{tv.fontSizeBody} (Extraído)</option>
+                          )}
+                        </select>
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-400 mb-1">
                           Tamanho do Título
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={tv.fontSizeTitulo || '14pt'}
                           onChange={(e) => setPerfilEditando({
                             ...perfilEditando,
@@ -922,10 +1071,16 @@ export default function EstiloLaudoTab({
                           className={`w-full px-3 py-2 rounded-xl text-xs border font-medium ${
                             darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
                           }`}
-                        />
+                        >
+                          {TAMANHOS_FONTE_LAUDO.map(sz => (
+                            <option key={sz} value={sz}>{sz}</option>
+                          ))}
+                          {tv.fontSizeTitulo && !TAMANHOS_FONTE_LAUDO.includes(tv.fontSizeTitulo) && (
+                            <option value={tv.fontSizeTitulo}>{tv.fontSizeTitulo} (Extraído)</option>
+                          )}
+                        </select>
                       </div>
                     </div>
-                  </div>
 
                   {/* Margens */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
@@ -987,7 +1142,7 @@ export default function EstiloLaudoTab({
                     </div>
                   </div>
 
-                  {/* Espaçamento entre Categorias / Órgãos e Entrelinha */}
+                  {/* Espaçamento entre Categorias / Órgãos, Entrelinha e Quebra de Página */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-400 mb-1">
@@ -1035,20 +1190,49 @@ export default function EstiloLaudoTab({
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                        Tamanho do Título
+                        Quebra de Página (Paginação)
                       </label>
-                      <input
-                        type="text"
-                        value={tv.fontSizeTitulo || '12pt'}
+                      <select
+                        value={tv.paginacaoTexto || 'preencher'}
                         onChange={(e) => setPerfilEditando({
                           ...perfilEditando,
-                          templateVisual: { ...tv, fontSizeTitulo: e.target.value }
+                          templateVisual: { ...tv, paginacaoTexto: e.target.value }
                         })}
-                        className={`w-full px-3 py-1.5 rounded-lg text-xs border ${
-                          darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200'
+                        className={`w-full px-3 py-1.5 rounded-lg text-xs border font-medium ${
+                          darkMode ? 'bg-[#0A141D] border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'
                         }`}
-                      />
+                      >
+                        <option value="preencher">Preencher máximo da página</option>
+                        <option value="equilibrar">Equilibrar conteúdo entre páginas</option>
+                      </select>
                     </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-4 pt-1">
+                    <label className="inline-flex items-center gap-2 text-xs font-bold cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={tv.mostrarAssinaturaImagem !== false}
+                        onChange={(e) => setPerfilEditando({
+                          ...perfilEditando,
+                          templateVisual: { ...tv, mostrarAssinaturaImagem: e.target.checked }
+                        })}
+                        className="rounded border-slate-600 accent-[#00D296]"
+                      />
+                      <span className="text-slate-300">Exibir imagem da assinatura</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-xs font-bold cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={tv.mostrarAssinaturaTexto !== false}
+                        onChange={(e) => setPerfilEditando({
+                          ...perfilEditando,
+                          templateVisual: { ...tv, mostrarAssinaturaTexto: e.target.checked }
+                        })}
+                        className="rounded border-slate-600 accent-[#00D296]"
+                      />
+                      <span className="text-slate-300">Exibir nome e CRMV</span>
+                    </label>
                   </div>
 
                   {/* Aviso legal e contato */}
@@ -1096,11 +1280,17 @@ export default function EstiloLaudoTab({
               <div className="space-y-5">
                 {/* Sequência de órgãos */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-black uppercase text-[#00D296] tracking-wider flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" />
-                      <span>Sequência dos Órgãos Laudados ({perfilEditando.ordemOrgaos?.length || 0})</span>
-                    </h5>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h5 className="text-xs font-black uppercase text-[#00D296] tracking-wider flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Sequência dos Órgãos Laudados ({perfilEditando.ordemOrgaos?.length || 0})</span>
+                      </h5>
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+                        <GripVertical className="w-3 h-3" />
+                        Arraste para reorganizar
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={adicionarOrgao}
@@ -1112,46 +1302,108 @@ export default function EstiloLaudoTab({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {perfilEditando.ordemOrgaos?.map((orgao, idx) => (
+                    {perfilEditando.ordemOrgaos?.map((orgao, idx) => {
+                      const isDragging = draggedOrgaoIdx === idx;
+                      const isDragOver = dragOverOrgaoIdx === idx && draggedOrgaoIdx !== null && draggedOrgaoIdx !== idx;
+                      return (
                       <div
                         key={`${orgao}-${idx}`}
-                        className={`px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-xs font-bold ${
-                          darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200'
-                        }`}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedOrgaoIdx(idx);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', String(idx));
+                        }}
+                        onDragOver={(e) => {
+                          if (draggedOrgaoIdx === null) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (dragOverOrgaoIdx !== idx) setDragOverOrgaoIdx(idx);
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverOrgaoIdx === idx) setDragOverOrgaoIdx(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedOrgaoIdx !== null && draggedOrgaoIdx !== idx) {
+                            reordenarOrgao(draggedOrgaoIdx, idx);
+                          }
+                          setDraggedOrgaoIdx(null);
+                          setDragOverOrgaoIdx(null);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedOrgaoIdx(null);
+                          setDragOverOrgaoIdx(null);
+                        }}
+                        className={`px-2.5 py-2 rounded-xl border flex items-center justify-between gap-2 text-xs font-bold cursor-grab active:cursor-grabbing transition-all duration-150 select-none ${
+                          isDragging
+                            ? 'opacity-50 scale-[0.98] border-[#00D296]/50 ring-1 ring-[#00D296]/40'
+                            : isDragOver
+                            ? 'border-[#00D296] ring-2 ring-[#00D296]/30 shadow-md shadow-[#00D296]/10'
+                            : darkMode
+                            ? 'bg-[#0A141D] border-slate-800 hover:border-slate-700'
+                            : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                        } ${isDragging || isDragOver ? (darkMode ? 'bg-[#0A141D]' : 'bg-slate-50') : ''}`}
                       >
-                        <div className="flex items-center gap-2 truncate">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <GripVertical className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                           <span className="w-5 h-5 rounded-full bg-[#00D296]/20 text-[#00D296] text-[10px] flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
                           <span className="truncate">{orgao}</span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => moverOrgao(idx, -1)}
-                            className="p-1 hover:text-[#00D296] disabled:opacity-20 text-slate-400"
+                          <div
+                            className={`inline-flex items-center rounded-lg border overflow-hidden ${
+                              darkMode
+                                ? 'bg-[#0F1C26] border-slate-700/80'
+                                : 'bg-white border-slate-200'
+                            }`}
                           >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === perfilEditando.ordemOrgaos.length - 1}
-                            onClick={() => moverOrgao(idx, 1)}
-                            className="p-1 hover:text-[#00D296] disabled:opacity-20 text-slate-400"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => moverOrgao(idx, -1)}
+                              title="Subir posição"
+                              className={`p-1 transition ${
+                                idx === 0
+                                  ? 'opacity-25 cursor-not-allowed text-slate-500'
+                                  : darkMode
+                                  ? 'text-slate-300 hover:bg-[#00D296]/15 hover:text-[#00D296]'
+                                  : 'text-slate-600 hover:bg-[#00D296]/15 hover:text-[#0D5C56]'
+                              }`}
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </button>
+                            <div className={`w-px h-3 ${darkMode ? 'bg-slate-700/80' : 'bg-slate-200'}`} />
+                            <button
+                              type="button"
+                              disabled={idx === perfilEditando.ordemOrgaos.length - 1}
+                              onClick={() => moverOrgao(idx, 1)}
+                              title="Descer posição"
+                              className={`p-1 transition ${
+                                idx === perfilEditando.ordemOrgaos.length - 1
+                                  ? 'opacity-25 cursor-not-allowed text-slate-500'
+                                  : darkMode
+                                  ? 'text-slate-300 hover:bg-[#00D296]/15 hover:text-[#00D296]'
+                                  : 'text-slate-600 hover:bg-[#00D296]/15 hover:text-[#0D5C56]'
+                              }`}
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </div>
                           <button
                             type="button"
                             onClick={() => removerOrgao(idx)}
-                            className="p-1 hover:text-rose-400 text-slate-400"
+                            title="Remover órgão"
+                            className="p-1 rounded-lg hover:bg-rose-500/15 hover:text-rose-400 text-slate-400 transition"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1388,6 +1640,65 @@ export default function EstiloLaudoTab({
                 </div>
               </div>
             )}
+            </div>
+
+            {/* PAINEL LATERAL OU ABA DE PDF REAL AO VIVO */}
+            {(modoSplitPdf || abaVisualAtiva === 'preview') && (
+              <div
+                className={`${modoSplitPdf ? 'lg:col-span-6 lg:sticky lg:top-4' : 'mt-4'} rounded-2xl border overflow-hidden flex flex-col ${
+                  darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-100 border-slate-300'
+                }`}
+                style={{ height: '720px' }}
+              >
+                <div
+                  className={`px-4 py-2.5 border-b flex items-center justify-between gap-2 shrink-0 ${
+                    darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="w-4 h-4 text-[#00D296] shrink-0" />
+                    <span className="text-xs font-extrabold truncate">
+                      Pré-visualização Real em PDF (Seu Padrão)
+                    </span>
+                    {gerandoPdfPreview && (
+                      <span className="text-[10px] font-bold text-[#00D296] animate-pulse">
+                        Atualizando...
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={gerandoPdfPreview}
+                    onClick={() => gerarPreviewPdfAoVivo(perfilEditando)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-700 hover:border-[#00D296] text-slate-300 hover:text-white transition inline-flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${gerandoPdfPreview ? 'animate-spin' : ''}`} />
+                    <span>Atualizar PDF</span>
+                  </button>
+                </div>
+                <div className="flex-1 relative bg-slate-900">
+                  {erroPdfPreview ? (
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center text-rose-400 text-xs gap-2">
+                      <p className="font-bold">Não foi possível gerar o PDF de pré-visualização.</p>
+                      <p className="text-slate-400">{erroPdfPreview}</p>
+                    </div>
+                  ) : pdfPreviewUrl ? (
+                    <iframe
+                      key={pdfPreviewUrl}
+                      title="Pré-visualização PDF do Padrão de Laudo"
+                      src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&view=FitH`}
+                      className="w-full h-full border-0 block"
+                    />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center text-slate-400 text-xs gap-2">
+                      <RefreshCw className="w-6 h-6 animate-spin text-[#00D296]" />
+                      <p className="font-bold">Gerando pré-visualização real do seu PDF...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            </div>
 
             {/* BOTÕES DE AÇÃO: SALVAR OU DESCARTAR */}
             <div className="border-t pt-4 border-slate-700/40 flex flex-col sm:flex-row items-center justify-end gap-3">

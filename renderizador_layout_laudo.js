@@ -458,73 +458,210 @@ function calcularAutoFitLaudoTextual(laudoArray = [], layoutBase = {}, opcoes = 
   const userMarginBottom = layoutBase.margin_bottom || layoutBase.marginBottom || null;
   const userMarginLeft = layoutBase.margin_left || layoutBase.marginLeft || null;
   const userMarginRight = layoutBase.margin_right || layoutBase.marginRight || null;
+  const paginacaoPref = String(
+    opcoes.paginacaoTexto ||
+    layoutBase.paginacao_texto ||
+    layoutBase.paginacaoTexto ||
+    layoutBase.visual_config_json?.paginacaoTexto ||
+    'preencher'
+  ).toLowerCase() === 'equilibrar' ? 'equilibrar' : 'preencher';
 
-  // Fator de escala vertical baseado na tipografia escolhida pelo usuário
-  const bodyPtNum = parseFloat(String(userFontBody || '10.5')) || 10.5;
-  const lhNum = parseFloat(String(userLineHeight || '1.35')) || 1.35;
-  const spNum = parseFloat(String(userParagraphSpacing || '8')) || 8;
-  const mTopNum = parseFloat(String(userMarginTop || '16')) || 16;
-  const mBotNum = parseFloat(String(userMarginBottom || '16')) || 16;
-  const fatorEscala = (bodyPtNum / 10.5) * (lhNum / 1.35);
+  const temConfigUsuario = Boolean(userFontBody || userLineHeight || userParagraphSpacing || userMarginTop || userMarginBottom);
 
-  // Score de Densidade Vertical considerando texto, órgãos, quebras e tipografia escolhida
-  const scoreBruto = totalChars + (qtdOrgaos * (120 + spNum * 3)) + (qtdQuebras * 80);
-  const score = Math.round(scoreBruto * fatorEscala + Math.max(0, (mTopNum + mBotNum - 32) * 35));
+  const scoreBruto = totalChars + (qtdOrgaos * 144) + (qtdQuebras * 80);
+  const tierBase = (qtdOrgaos <= 7 && scoreBruto <= 2400)
+    ? 'normal'
+    : (qtdOrgaos <= 11 && scoreBruto <= 4300 ? 'compact' : 'ultra_compact');
 
-  // Quando o usuário definiu explicitamente tipografia/margens, NUNCA sobrescreve seus valores!
-  // Apenas decide de forma inteligente se o texto cabe em 1 folha ou flui para 2 folhas equilibradas.
-  const precisaDuasPaginas = qtdOrgaos > 14 || score > 5200;
+  // Tipografia efetiva para medição geométrica real (em milímetros sobre folha A4 210x297mm)
+  const efetivoFontBody = userFontBody || (tierBase === 'normal' ? '10.5pt' : (tierBase === 'compact' ? '9.8pt' : '9.2pt'));
+  const efetivoFontTitulo = userFontTitulo || (tierBase === 'normal' ? '13.5pt' : '12.5pt');
+  const efetivoLineHeight = userLineHeight ? String(userLineHeight) : (tierBase === 'normal' ? '1.36' : (tierBase === 'compact' ? '1.28' : '1.22'));
+  const efetivoSpacing = userParagraphSpacing || (tierBase === 'normal' ? '8pt' : (tierBase === 'compact' ? '6pt' : '4pt'));
+  const efetivoMTop = userMarginTop || (tierBase === 'normal' ? '16mm' : '12mm');
+  const efetivoMBot = userMarginBottom || (tierBase === 'normal' ? '16mm' : '12mm');
+  const efetivoMLeft = userMarginLeft || '15mm';
+  const efetivoMRight = userMarginRight || '15mm';
 
-  if (precisaDuasPaginas) {
-    const corte = Math.ceil(qtdOrgaos / 2);
+  const bodyPtNum = parseFloat(String(efetivoFontBody)) || 10.5;
+  const lhNum = parseFloat(String(efetivoLineHeight)) || 1.35;
+  const spValNum = parseFloat(String(efetivoSpacing)) || 8;
+  const spMm = String(efetivoSpacing).toLowerCase().includes('mm') ? spValNum : (spValNum * 0.3528);
+  const mTopMm = parseFloat(String(efetivoMTop)) || 16;
+  const mBotMm = parseFloat(String(efetivoMBot)) || 16;
+  const mLeftMm = parseFloat(String(efetivoMLeft)) || 15;
+  const mRightMm = parseFloat(String(efetivoMRight)) || 15;
+
+  // Cálculo geométrico agnóstico: largura útil e quebra de linha real (calibrado para fontes proporcionais PT-BR)
+  const larguraUtilMm = Math.max(85, 210 - mLeftMm - mRightMm);
+  const charWidthMm = bodyPtNum * 0.3528 * 0.455;
+  const charsPorLinha = Math.max(16, Math.floor(larguraUtilMm / Math.max(0.45, charWidthMm)));
+  const alturaLinhaMm = bodyPtNum * 0.3528 * lhNum;
+
+  const alturasItensMm = laudo.map((item) => {
+    const orgaoTxt = `${item?.orgao || ''}: `;
+    const corpoTxt = String(item?.texto || '');
+    const diagTxt = item?.diagDif ? ` DIAG DIF.: ${item.diagDif}` : '';
+    const textoCompleto = `${orgaoTxt}${corpoTxt}${diagTxt}`;
+    const sublinhas = textoCompleto.split(/\r?\n/);
+    const totalLinhas = sublinhas.reduce((acc, l) => acc + Math.max(1, Math.ceil(l.length / charsPorLinha)), 0);
+    return (totalLinhas * alturaLinhaMm) + spMm;
+  });
+
+  // Reserva real de cabeçalho, título, rodapé e assinatura (respeitando o modelo agnóstico e toggles de assinatura)
+  const temRodape = opcoes.temRodape !== false;
+  const temAssinaturaImg = opcoes.temAssinaturaImg !== false;
+  const temAssinaturaTexto = opcoes.temAssinaturaTexto !== false;
+  const topoPag1Mm = typeof opcoes.alturaTopoPag1Mm === 'number'
+    ? opcoes.alturaTopoPag1Mm
+    : Math.max(46, mTopMm + 32);
+  const topoContMm = typeof opcoes.alturaTopoContMm === 'number'
+    ? opcoes.alturaTopoContMm
+    : Math.max(26, mTopMm + 12);
+  const rodapeMm = temRodape ? Math.max(14, mBotMm + 8) : Math.max(8, mBotMm);
+  const assinaturaMm = (temAssinaturaImg ? 20 : 0) + (temAssinaturaTexto ? 11 : 0);
+  const folgaSegurancaMm = 4;
+
+  const alturaUtilPag1Mm = Math.max(80, 297 - topoPag1Mm - rodapeMm - folgaSegurancaMm);
+  const alturaUtilContMm = Math.max(95, 297 - topoContMm - rodapeMm - folgaSegurancaMm);
+  const somaTotalAlturasMm = alturasItensMm.reduce((a, b) => a + b, 0);
+
+  const score = Math.round(scoreBruto * Math.pow(bodyPtNum / 10.5, 2) * (lhNum / 1.35));
+
+  // Se tudo (órgãos + assinatura + rodapé) cabe com folga na Página 1, mantém Página Única
+  const cabeEmUmaPagina = (somaTotalAlturasMm + assinaturaMm) <= alturaUtilPag1Mm && (temConfigUsuario || qtdOrgaos <= 14);
+
+  if (cabeEmUmaPagina || qtdOrgaos === 0) {
     return {
       laudoAjustado: laudo,
-      modoPaginacao: 'two_page_balanced',
-      cortePagina1: corte,
+      paginasIndices: qtdOrgaos > 0 ? [laudo.map((_, i) => i)] : [[]],
+      modoPaginacao: 'single_page',
+      paginacaoTexto: paginacaoPref,
       score,
-      tier: 'two_page_balanced',
-      fontSizeBody: userFontBody || '10pt',
-      fontSizeTitulo: userFontTitulo || '13pt',
-      subtitleFontSize: '7.8pt',
-      lineHeight: userLineHeight ? String(userLineHeight) : '1.32',
-      paragraphSpacing: userParagraphSpacing || '3.0mm',
-      marginTop: userMarginTop || '15mm',
-      marginBottom: userMarginBottom || '15mm',
-      marginLeft: userMarginLeft || '15mm',
-      marginRight: userMarginRight || '15mm',
-      marginHeaderBottom: '5px',
-      paddingHeaderBottom: '5px',
-      marginTitleBox: '6px 0 6px 0',
-      marginSignatureTop: '8px',
-      signatureMaxHeight: '44px',
-      logoMaxHeight: '48px'
+      tier: tierBase,
+      fontSizeBody: efetivoFontBody,
+      fontSizeTitulo: efetivoFontTitulo,
+      subtitleFontSize: tierBase === 'normal' ? '8pt' : '7.5pt',
+      lineHeight: efetivoLineHeight,
+      paragraphSpacing: efetivoSpacing,
+      marginTop: efetivoMTop,
+      marginBottom: efetivoMBot,
+      marginLeft: efetivoMLeft,
+      marginRight: efetivoMRight,
+      marginHeaderBottom: tierBase === 'normal' ? '6px' : '4px',
+      paddingHeaderBottom: tierBase === 'normal' ? '6px' : '4px',
+      marginTitleBox: tierBase === 'normal' ? '6px 0 8px 0' : '4px 0 5px 0',
+      marginSignatureTop: tierBase === 'normal' ? '6px' : '4px',
+      signatureMaxHeight: tierBase === 'normal' ? '44px' : '38px',
+      logoMaxHeight: tierBase === 'normal' ? '52px' : '46px'
     };
   }
 
-  const tier = (qtdOrgaos <= 7 && score <= 2400)
-    ? 'normal'
-    : (qtdOrgaos <= 11 && score <= 4300 ? 'compact' : 'ultra_compact');
+  // Paginação gulosa ("preencher"): preenche ao máximo cada folha respeitando rodapé e assinatura
+  const paginarPreencher = () => {
+    const paginas = [];
+    let atual = [];
+    let alturaAtual = 0;
+    let limiteAtual = alturaUtilPag1Mm;
+
+    for (let i = 0; i < qtdOrgaos; i++) {
+      const h = alturasItensMm[i];
+      if (atual.length > 0 && (alturaAtual + h) > limiteAtual) {
+        paginas.push(atual);
+        atual = [i];
+        alturaAtual = h;
+        limiteAtual = alturaUtilContMm;
+      } else {
+        atual.push(i);
+        alturaAtual += h;
+      }
+    }
+    if (atual.length > 0) paginas.push(atual);
+
+    // Verifica se a assinatura cabe na última página; se não couber, move o último órgão junto para a próxima página
+    const ultIdx = paginas.length - 1;
+    const limiteUlt = ultIdx === 0 ? alturaUtilPag1Mm : alturaUtilContMm;
+    const alturaUlt = paginas[ultIdx].reduce((acc, idx) => acc + alturasItensMm[idx], 0);
+    if ((alturaUlt + assinaturaMm) > limiteUlt) {
+      if (paginas[ultIdx].length > 1) {
+        const movido = paginas[ultIdx].pop();
+        paginas.push([movido]);
+      } else {
+        paginas.push([]);
+      }
+    }
+    return paginas;
+  };
+
+  let paginasIndices = paginarPreencher();
+
+  // Modo "equilibrar": distribui o conteúdo proporcionalmente entre o número mínimo de páginas necessárias
+  if (paginacaoPref === 'equilibrar' && paginasIndices.length >= 2) {
+    const numPags = paginasIndices.length;
+    const pesoTotalComAssinatura = somaTotalAlturasMm + assinaturaMm;
+    const alvoPorPagina = pesoTotalComAssinatura / numPags;
+    const balanceadas = [];
+    let atual = [];
+    let accAtual = 0;
+
+    for (let i = 0; i < qtdOrgaos; i++) {
+      const h = alturasItensMm[i];
+      const pagIdx = balanceadas.length;
+      const limiteFisico = pagIdx === 0 ? alturaUtilPag1Mm : alturaUtilContMm;
+      const pagsRestantes = numPags - pagIdx - 1;
+      const itensRestantes = qtdOrgaos - i;
+
+      const excedeFisico = atual.length > 0 && (accAtual + h) > limiteFisico;
+      const atingiuAlvo = pagsRestantes > 0 && atual.length > 0 && itensRestantes >= pagsRestantes && (accAtual + h * 0.5) >= alvoPorPagina;
+
+      if (excedeFisico || atingiuAlvo) {
+        balanceadas.push(atual);
+        atual = [i];
+        accAtual = h;
+      } else {
+        atual.push(i);
+        accAtual += h;
+      }
+    }
+    if (atual.length > 0) balanceadas.push(atual);
+
+    // Garante que nenhuma página balanceada estoure fisicamente com assinatura/rodapé
+    const ultB = balanceadas.length - 1;
+    const limiteUltB = ultB === 0 ? alturaUtilPag1Mm : alturaUtilContMm;
+    const alturaUltB = balanceadas[ultB].reduce((acc, idx) => acc + alturasItensMm[idx], 0);
+    if ((alturaUltB + assinaturaMm) <= limiteUltB && balanceadas.every((p, idx) => {
+      const lim = idx === 0 ? alturaUtilPag1Mm : alturaUtilContMm;
+      return p.reduce((acc, itemIdx) => acc + alturasItensMm[itemIdx], 0) <= lim;
+    })) {
+      paginasIndices = balanceadas;
+    }
+  }
+
+  const cortePagina1 = paginasIndices[0]?.length || Math.ceil(qtdOrgaos / 2);
 
   return {
     laudoAjustado: laudo,
-    modoPaginacao: 'single_page',
+    paginasIndices,
+    modoPaginacao: paginacaoPref === 'equilibrar' ? 'two_page_balanced' : 'two_page_flow',
+    paginacaoTexto: paginacaoPref,
+    cortePagina1,
     score,
-    tier,
-    fontSizeBody: userFontBody || (tier === 'normal' ? '10.5pt' : (tier === 'compact' ? '9.8pt' : '9.2pt')),
-    fontSizeTitulo: userFontTitulo || (tier === 'normal' ? '13.5pt' : '12.5pt'),
-    subtitleFontSize: tier === 'normal' ? '8pt' : '7.5pt',
-    lineHeight: userLineHeight ? String(userLineHeight) : (tier === 'normal' ? '1.36' : (tier === 'compact' ? '1.28' : '1.22')),
-    paragraphSpacing: userParagraphSpacing || (tier === 'normal' ? '8pt' : (tier === 'compact' ? '6pt' : '4pt')),
-    marginTop: userMarginTop || (tier === 'normal' ? '16mm' : '12mm'),
-    marginBottom: userMarginBottom || (tier === 'normal' ? '16mm' : '12mm'),
+    tier: paginacaoPref === 'equilibrar' ? 'two_page_balanced' : 'two_page_flow',
+    fontSizeBody: userFontBody || '10pt',
+    fontSizeTitulo: userFontTitulo || '13pt',
+    subtitleFontSize: '7.8pt',
+    lineHeight: userLineHeight ? String(userLineHeight) : '1.32',
+    paragraphSpacing: userParagraphSpacing || '3.0mm',
+    marginTop: userMarginTop || '15mm',
+    marginBottom: userMarginBottom || '15mm',
     marginLeft: userMarginLeft || '15mm',
     marginRight: userMarginRight || '15mm',
-    marginHeaderBottom: tier === 'normal' ? '6px' : '4px',
-    paddingHeaderBottom: tier === 'normal' ? '6px' : '4px',
-    marginTitleBox: tier === 'normal' ? '6px 0 8px 0' : '4px 0 5px 0',
-    marginSignatureTop: tier === 'normal' ? '6px' : '4px',
-    signatureMaxHeight: tier === 'normal' ? '44px' : '38px',
-    logoMaxHeight: tier === 'normal' ? '52px' : '46px'
+    marginHeaderBottom: '5px',
+    paddingHeaderBottom: '5px',
+    marginTitleBox: '6px 0 6px 0',
+    marginSignatureTop: '8px',
+    signatureMaxHeight: '44px',
+    logoMaxHeight: '48px'
   };
 }
 

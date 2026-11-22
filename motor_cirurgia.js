@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, ImageRun, BorderStyle, PageBreak } = require('docx');
-const { obterLayout, converterParaDocx, LAYOUT_PADRAO } = require('./gerenciador_layout');
+const { obterLayout, converterParaDocx, ptParaHalfPoints, LAYOUT_PADRAO } = require('./gerenciador_layout');
 
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const ASSINATURA_PATH = fs.existsSync(path.join(ASSETS_DIR, 'assinatura_camila.jpg'))
@@ -155,6 +155,24 @@ function lerImagemDataUri(caminho) {
   }
 }
 
+const ORDEM_SECOES_CIRURGIA_PADRAO = ['diagnostico', 'descricao', 'evolucao'];
+
+function resolverOrdemSecoesCirurgia(ordemInformada) {
+  const validas = [];
+  if (Array.isArray(ordemInformada)) {
+    for (const item of ordemInformada) {
+      const key = String(item || '').trim().toLowerCase();
+      if (ORDEM_SECOES_CIRURGIA_PADRAO.includes(key) && !validas.includes(key)) {
+        validas.push(key);
+      }
+    }
+  }
+  for (const padrao of ORDEM_SECOES_CIRURGIA_PADRAO) {
+    if (!validas.includes(padrao)) validas.push(padrao);
+  }
+  return validas;
+}
+
 function resolverLegendaFoto(idx, legendasFotos, legendaPadraoTemplate) {
   if (Array.isArray(legendasFotos)) {
     const item = legendasFotos[idx];
@@ -178,21 +196,39 @@ function resolverContextoCirurgico(opcoes = {}) {
   const tvCir = perfilCirurgico?.templateVisual || {};
   const layoutCir = perfilCirurgico?.layoutDetectado || {};
 
-  // Mescla tipografia/cores/margens priorizando o perfil cirúrgico personalizado quando ativo
+  const normalizarPt = (val) => {
+    if (val === undefined || val === null) return undefined;
+    const s = String(val).trim();
+    if (!s) return undefined;
+    return /^[0-9]+(\.[0-9]+)?$/.test(s) ? `${s}pt` : s;
+  };
+
+  // Mescla tipografia/cores/margens/espaçamento priorizando o perfil cirúrgico personalizado quando ativo
+  const temFonteCorpoCustom = Boolean(tvCir.fontSizeBody || layoutCir.fontSizeBody);
+  const temFonteCabecalhoCustom = Boolean(tvCir.fontSizeCabecalho || layoutCir.fontSizeCabecalho);
+  const temEspacamentoCustom = Boolean(tvCir.paragraphSpacing || layoutCir.paragraphSpacing);
+  const fontSizeBodyResolvido = normalizarPt(tvCir.fontSizeBody || layoutCir.fontSizeBody || layout.font_size_body) || LAYOUT_PADRAO.font_size_body;
+  const fontSizeCabecalhoResolvido = normalizarPt(tvCir.fontSizeCabecalho || layoutCir.fontSizeCabecalho || layout.font_size_cabecalho) || fontSizeBodyResolvido;
   const layoutEfetivo = {
     ...layout,
     font_family: tvCir.fontFamily || layoutCir.fontFamily || layout.font_family || LAYOUT_PADRAO.font_family,
-    font_size_body: tvCir.fontSizeBody || layoutCir.fontSizeBody || layout.font_size_body || LAYOUT_PADRAO.font_size_body,
-    font_size_titulo: tvCir.fontSizeTitulo || layoutCir.fontSizeTitulo || layout.font_size_titulo || LAYOUT_PADRAO.font_size_titulo,
+    font_size_body: fontSizeBodyResolvido,
+    font_size_cabecalho: fontSizeCabecalhoResolvido,
+    font_size_titulo: normalizarPt(tvCir.fontSizeTitulo || layoutCir.fontSizeTitulo || layout.font_size_titulo) || LAYOUT_PADRAO.font_size_titulo,
     margin_top: tvCir.marginTop || layoutCir.marginTop || layout.margin_top || LAYOUT_PADRAO.margin_top,
     margin_bottom: tvCir.marginBottom || layoutCir.marginBottom || layout.margin_bottom || LAYOUT_PADRAO.margin_bottom,
     margin_left: tvCir.marginLeft || layoutCir.marginLeft || layout.margin_left || LAYOUT_PADRAO.margin_left,
     margin_right: tvCir.marginRight || layoutCir.marginRight || layout.margin_right || LAYOUT_PADRAO.margin_right,
     line_height: tvCir.lineHeight || layoutCir.lineHeight || layout.line_height || LAYOUT_PADRAO.line_height,
+    paragraph_spacing: normalizarPt(tvCir.paragraphSpacing || layoutCir.paragraphSpacing || layout.paragraph_spacing) || LAYOUT_PADRAO.paragraph_spacing,
     cor_primaria: tvCir.corPrimaria || layoutCir.corPrimaria || layout.cor_primaria || LAYOUT_PADRAO.cor_primaria,
     cor_secundaria: tvCir.corSecundaria || layoutCir.corSecundaria || layout.cor_secundaria || LAYOUT_PADRAO.cor_secundaria
   };
-  const cfgDocx = opcoes.cfgDocx || converterParaDocx(layoutEfetivo);
+  // Recalcula cfgDocx sempre a partir de layoutEfetivo para garantir que o perfil cirúrgico e overrides reflitam no Word (.docx)
+  const cfgDocx = {
+    ...converterParaDocx(layoutEfetivo),
+    szCabecalho: ptParaHalfPoints(fontSizeCabecalhoResolvido, 22)
+  };
 
   const nomeMedico = opcoes.nomeMedico || perfilCirurgico?.nomeDetectado || usuario.nome || 'Camila Bastos';
   const crmvMedico = opcoes.crmvMedico || perfilCirurgico?.crmvDetectado || usuario.crmv || 'CRMV/MG: 22904';
@@ -343,6 +379,8 @@ function resolverContextoCirurgico(opcoes = {}) {
     legendaPadraoFoto: tvCir.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica',
     posicaoAssinatura: tvCir.posicaoAssinatura || 'centro',
     linhaAssinatura: tvCir.linhaAssinatura !== undefined ? Boolean(tvCir.linhaAssinatura) : false,
+    mostrarAssinaturaImagem: tvCir.mostrarAssinaturaImagem !== undefined ? Boolean(tvCir.mostrarAssinaturaImagem) : true,
+    mostrarAssinaturaTexto: tvCir.mostrarAssinaturaTexto !== undefined ? Boolean(tvCir.mostrarAssinaturaTexto) : true,
     textoAvisoLegal: tvCir.textoAvisoLegal || '',
     rodapeContato: tvCir.rodapeContato || '',
     corPrimaria: layoutEfetivo.cor_primaria || '#1B365D',
@@ -361,6 +399,9 @@ function resolverContextoCirurgico(opcoes = {}) {
     assinaturaPath,
     layout: layoutEfetivo,
     cfgDocx,
+    temFonteCorpoCustom,
+    temFonteCabecalhoCustom,
+    temEspacamentoCustom,
     perfilCirurgico,
     estiloVisualCirurgico
   };
@@ -380,10 +421,17 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
   const ehTextoLongo = textoTotal.length > 1750;
   const ehTextoMuitoLongo = textoTotal.length > 2300;
 
-  const szCorpo = ehTextoMuitoLongo ? 19 : (ehTextoLongo ? 20 : (ctx.cfgDocx.szCorpo || 22));
+  const szCorpo = ctx.temFonteCorpoCustom
+    ? (ctx.cfgDocx.szCorpo || 22)
+    : (ehTextoMuitoLongo ? 19 : (ehTextoLongo ? 20 : (ctx.cfgDocx.szCorpo || 22)));
+  const szCabecalho = ctx.temFonteCabecalhoCustom
+    ? (ctx.cfgDocx.szCabecalho || szCorpo)
+    : szCorpo;
   const szTitulo = ctx.cfgDocx.szTitulo || 28;
   const lineSpacingDocx = ehTextoMuitoLongo ? 220 : (ehTextoLongo ? 240 : (ctx.cfgDocx.lineSpacing || 260));
-  const spacingAfterDocx = ehTextoMuitoLongo ? 80 : (ehTextoLongo ? 100 : 140);
+  const spacingAfterDocx = ctx.temEspacamentoCustom
+    ? (ctx.cfgDocx.spacingAfter ?? 160)
+    : (ehTextoMuitoLongo ? 80 : (ehTextoLongo ? 100 : (ctx.cfgDocx.spacingAfter ?? 140)));
 
   const bordaTransparente = {
     top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
@@ -441,20 +489,20 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Nome: ', bold: true, font: fonte, size: szCorpo }),
-                  new TextRun({ text: dadosPaciente.nome || 'Não informado', font: fonte, size: szCorpo })
+                  new TextRun({ text: 'Nome: ', bold: true, font: fonte, size: szCabecalho }),
+                  new TextRun({ text: dadosPaciente.nome || 'Não informado', font: fonte, size: szCabecalho })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Sexo: ', bold: true, font: fonte, size: szCorpo }),
-                  new TextRun({ text: dadosPaciente.sexo || 'Não informado', font: fonte, size: szCorpo })
+                  new TextRun({ text: 'Sexo: ', bold: true, font: fonte, size: szCabecalho }),
+                  new TextRun({ text: dadosPaciente.sexo || 'Não informado', font: fonte, size: szCabecalho })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Idade: ', bold: true, font: fonte, size: szCorpo }),
-                  new TextRun({ text: dadosPaciente.idade || 'Não informado', font: fonte, size: szCorpo })
+                  new TextRun({ text: 'Idade: ', bold: true, font: fonte, size: szCabecalho }),
+                  new TextRun({ text: dadosPaciente.idade || 'Não informado', font: fonte, size: szCabecalho })
                 ]
               })
             ]
@@ -465,20 +513,20 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: `${ev.rotuloResponsavel}: `, bold: true, font: fonte, size: szCorpo }),
-                  new TextRun({ text: dadosPaciente.tutor || 'Não informado', font: fonte, size: szCorpo })
+                  new TextRun({ text: `${ev.rotuloResponsavel}: `, bold: true, font: fonte, size: szCabecalho }),
+                  new TextRun({ text: dadosPaciente.tutor || 'Não informado', font: fonte, size: szCabecalho })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Espécie: ', bold: true, font: fonte, size: szCorpo }),
-                  new TextRun({ text: dadosPaciente.especie || 'Não informada', font: fonte, size: szCorpo })
+                  new TextRun({ text: 'Espécie: ', bold: true, font: fonte, size: szCabecalho }),
+                  new TextRun({ text: dadosPaciente.especie || 'Não informada', font: fonte, size: szCabecalho })
                 ]
               }),
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Peso: ', bold: true, font: fonte, size: szCorpo }),
-                  new TextRun({ text: dadosPaciente.peso || 'Não informado', font: fonte, size: szCorpo })
+                  new TextRun({ text: 'Peso: ', bold: true, font: fonte, size: szCabecalho }),
+                  new TextRun({ text: dadosPaciente.peso || 'Não informado', font: fonte, size: szCabecalho })
                 ]
               })
             ]
@@ -545,69 +593,73 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
         new TextRun({ text: `${ev.rotulosSecoes.procedimento}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
         new TextRun({ text: dadosCirurgia.procedimento || 'Não informado', font: fonte, size: szCorpo })
       ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.BOTH,
-      spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
-      children: [
-        new TextRun({ text: `${ev.rotulosSecoes.diagnostico}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
-        new TextRun({ text: dadosCirurgia.diagnosticoPreCirurgico || 'Não informado', font: fonte, size: szCorpo })
-      ]
     })
   );
 
   const descParagrafos = (dadosCirurgia.descricaoProcedimento || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-  if (descParagrafos.length === 0) {
-    paragrafos.push(
-      new Paragraph({
-        alignment: AlignmentType.BOTH,
-        spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
-        children: [
-          new TextRun({ text: `${ev.rotulosSecoes.descricao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
-          new TextRun({ text: 'Não informada.', font: fonte, size: szCorpo })
-        ]
-      })
-    );
-  } else {
-    descParagrafos.forEach((par, idx) => {
-      if (idx === 0) {
+  const ordemSecoesDocx = resolverOrdemSecoesCirurgia(dadosCirurgia.ordemSecoes);
+  ordemSecoesDocx.forEach((secaoKey, secaoIdx) => {
+    const ehUltimaSecao = secaoIdx === ordemSecoesDocx.length - 1;
+    const espacoFinal = ehUltimaSecao ? Math.max(spacingAfterDocx, ehTextoLongo ? 120 : 180) : spacingAfterDocx;
+
+    if (secaoKey === 'diagnostico') {
+      paragrafos.push(
+        new Paragraph({
+          alignment: AlignmentType.BOTH,
+          spacing: { after: espacoFinal, line: lineSpacingDocx },
+          children: [
+            new TextRun({ text: `${ev.rotulosSecoes.diagnostico}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
+            new TextRun({ text: dadosCirurgia.diagnosticoPreCirurgico || 'Não informado', font: fonte, size: szCorpo })
+          ]
+        })
+      );
+    } else if (secaoKey === 'descricao') {
+      if (descParagrafos.length === 0) {
         paragrafos.push(
           new Paragraph({
             alignment: AlignmentType.BOTH,
-            spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
+            spacing: { after: espacoFinal, line: lineSpacingDocx },
             children: [
               new TextRun({ text: `${ev.rotulosSecoes.descricao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
-              new TextRun({ text: par, font: fonte, size: szCorpo })
+              new TextRun({ text: 'Não informada.', font: fonte, size: szCorpo })
             ]
           })
         );
       } else {
-        paragrafos.push(
-          new Paragraph({
-            alignment: AlignmentType.BOTH,
-            spacing: { after: spacingAfterDocx, line: lineSpacingDocx },
-            children: [
-              new TextRun({ text: par, font: fonte, size: szCorpo })
-            ]
-          })
-        );
+        descParagrafos.forEach((par, idx) => {
+          const isLastDescPar = idx === descParagrafos.length - 1;
+          paragrafos.push(
+            new Paragraph({
+              alignment: AlignmentType.BOTH,
+              spacing: { after: isLastDescPar ? espacoFinal : spacingAfterDocx, line: lineSpacingDocx },
+              children: idx === 0
+                ? [
+                    new TextRun({ text: `${ev.rotulosSecoes.descricao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
+                    new TextRun({ text: par, font: fonte, size: szCorpo })
+                  ]
+                : [
+                    new TextRun({ text: par, font: fonte, size: szCorpo })
+                  ]
+            })
+          );
+        });
       }
-    });
-  }
-
-  paragrafos.push(
-    new Paragraph({
-      alignment: AlignmentType.BOTH,
-      spacing: { after: ehTextoLongo ? 120 : 180, line: lineSpacingDocx },
-      children: [
-        new TextRun({ text: `${ev.rotulosSecoes.evolucao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
-        new TextRun({ text: dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.', font: fonte, size: szCorpo })
-      ]
-    })
-  );
+    } else if (secaoKey === 'evolucao') {
+      paragrafos.push(
+        new Paragraph({
+          alignment: AlignmentType.BOTH,
+          spacing: { after: espacoFinal, line: lineSpacingDocx },
+          children: [
+            new TextRun({ text: `${ev.rotulosSecoes.evolucao}: `, bold: true, font: fonte, size: szCorpo, color: corPrimariaHex }),
+            new TextRun({ text: dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.', font: fonte, size: szCorpo })
+          ]
+        })
+      );
+    }
+  });
 
   const blocoAssinatura = [];
-  if (assinaturaBytes) {
+  if (ev.mostrarAssinaturaImagem && assinaturaBytes) {
     blocoAssinatura.push(
       new Paragraph({
         alignment: alinhamentoAssinaturaDocx,
@@ -621,32 +673,34 @@ async function gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaDocx
       })
     );
   }
-  if (ev.linhaAssinatura) {
+  if (ev.linhaAssinatura && (ev.mostrarAssinaturaImagem || ev.mostrarAssinaturaTexto)) {
     blocoAssinatura.push(
       new Paragraph({
         alignment: alinhamentoAssinaturaDocx,
-        spacing: { before: assinaturaBytes ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
+        spacing: { before: (ev.mostrarAssinaturaImagem && assinaturaBytes) ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
         children: [
           new TextRun({ text: '________________________________________', font: fonte, size: Math.max(16, szCorpo - 4), color: '888888' })
         ]
       })
     );
   }
-  blocoAssinatura.push(
-    new Paragraph({
-      alignment: alinhamentoAssinaturaDocx,
-      spacing: { before: (assinaturaBytes || ev.linhaAssinatura) ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
-      children: [
-        new TextRun({ text: ctx.nomeMedico, bold: true, font: fonte, size: szCorpo })
-      ]
-    }),
-    new Paragraph({
-      alignment: alinhamentoAssinaturaDocx,
-      children: [
-        new TextRun({ text: ctx.crmvMedico, font: fonte, size: szCorpo })
-      ]
-    })
-  );
+  if (ev.mostrarAssinaturaTexto) {
+    blocoAssinatura.push(
+      new Paragraph({
+        alignment: alinhamentoAssinaturaDocx,
+        spacing: { before: ((ev.mostrarAssinaturaImagem && assinaturaBytes) || ev.linhaAssinatura) ? 0 : (ehTextoLongo ? 100 : 160), after: 20 },
+        children: [
+          new TextRun({ text: ctx.nomeMedico, bold: true, font: fonte, size: szCorpo })
+        ]
+      }),
+      new Paragraph({
+        alignment: alinhamentoAssinaturaDocx,
+        children: [
+          new TextRun({ text: ctx.crmvMedico, font: fonte, size: szCorpo })
+        ]
+      })
+    );
+  }
 
   if (ev.textoAvisoLegal) {
     blocoAssinatura.push(
@@ -772,6 +826,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   const ehTextoMuitoLongo = textoTotal.length > 2300;
 
   const fontSizePt = ctx.layout.font_size_body || (ehTextoMuitoLongo ? '9.3pt' : (ehTextoLongo ? '10.2pt' : '11pt'));
+  const fontSizeCabecalhoPt = ctx.layout.font_size_cabecalho || fontSizePt;
   const lineHeight = ctx.layout.line_height || (ehTextoMuitoLongo ? '1.24' : (ehTextoLongo ? '1.28' : '1.35'));
   const marginBottomP = ctx.layout.paragraph_spacing || (ehTextoMuitoLongo ? '6px' : (ehTextoLongo ? '8px' : '11px'));
   const margemTop = ctx.layout.margin_top || (ehTextoMuitoLongo ? '1.2cm' : (ehTextoLongo ? '1.5cm' : '1.8cm'));
@@ -784,7 +839,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   const marginAssinatura = ehTextoMuitoLongo ? '14px' : '22px';
   const assinaturaMaxHeight = ehTextoMuitoLongo ? '50px' : '65px';
 
-  const assinaturaSrc = lerImagemDataUri(ctx.assinaturaPath);
+  const assinaturaSrc = ev.mostrarAssinaturaImagem ? lerImagemDataUri(ctx.assinaturaPath) : '';
   const assinaturaHtml = assinaturaSrc
     ? `<img src="${assinaturaSrc}" class="assinatura-img" alt="Assinatura" />`
     : '';
@@ -980,7 +1035,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     .header-table td {
       vertical-align: middle;
       padding: 4px 6px;
-      font-size: ${fontSizePt};
+      font-size: ${fontSizeCabecalhoPt};
       border: none;
     }
     .header-table.tabela-zebrada td.col-info,
@@ -995,7 +1050,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     }
     .paciente-table td {
       padding: 6px 10px;
-      font-size: ${fontSizePt};
+      font-size: ${fontSizeCabecalhoPt};
       vertical-align: top;
       border: 1px solid ${ev.corBordaTabelas};
       background: ${ev.tipoDadosPaciente === 'tabela-zebrada' ? ev.corFundoBlocos : '#fff'};
@@ -1097,36 +1152,36 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     .secao-barra {
       border-left: 3px solid ${ev.corPrimaria};
       padding-left: 10px;
-      margin-bottom: 10px;
+      margin-bottom: ${marginBottomP};
     }
     .secao-titulo-barra {
       font-weight: bold;
       color: ${ev.corPrimaria};
       text-transform: uppercase;
-      font-size: 10pt;
+      font-size: ${fontSizePt};
       margin-bottom: 3px;
     }
     .secao-tarja {
-      margin-bottom: 10px;
+      margin-bottom: ${marginBottomP};
     }
     .secao-titulo-tarja {
       background: ${ev.corPrimaria};
       color: #fff;
       font-weight: bold;
       text-transform: uppercase;
-      font-size: 9.5pt;
+      font-size: ${fontSizePt};
       padding: 3px 8px;
       border-radius: 3px;
       margin-bottom: 5px;
     }
     .secao-sublinhada {
-      margin-bottom: 10px;
+      margin-bottom: ${marginBottomP};
     }
     .secao-titulo-sublinhado {
       font-weight: bold;
       color: ${ev.corPrimaria};
       text-transform: uppercase;
-      font-size: 10pt;
+      font-size: ${fontSizePt};
       border-bottom: 1px solid ${ev.corBordaTabelas};
       padding-bottom: 2px;
       margin-bottom: 4px;
@@ -1246,17 +1301,27 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   <div class="conteudo-cirurgico">
     ${renderSecao(ev.rotulosSecoes.data, escaparHtml(dadosCirurgia.data || dadosPaciente.data || 'Não informada'))}
     ${renderSecao(ev.rotulosSecoes.procedimento, escaparHtml(dadosCirurgia.procedimento || 'Não informado'))}
-    ${renderSecao(ev.rotulosSecoes.diagnostico, escaparHtml(dadosCirurgia.diagnosticoPreCirurgico || 'Não informado'))}
-    ${descHtml}
-    ${renderSecao(ev.rotulosSecoes.evolucao, escaparHtml(dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.'))}
+    ${resolverOrdemSecoesCirurgia(dadosCirurgia.ordemSecoes).map((secaoKey) => {
+      if (secaoKey === 'diagnostico') {
+        return renderSecao(ev.rotulosSecoes.diagnostico, escaparHtml(dadosCirurgia.diagnosticoPreCirurgico || 'Não informado'));
+      }
+      if (secaoKey === 'descricao') {
+        return descHtml;
+      }
+      if (secaoKey === 'evolucao') {
+        return renderSecao(ev.rotulosSecoes.evolucao, escaparHtml(dadosCirurgia.evolucaoConsideracoes || 'Procedimento transcorrido sem intercorrências.'));
+      }
+      return '';
+    }).join('\n    ')}
   </div>
 
+  ${(assinaturaHtml || ev.mostrarAssinaturaTexto) ? `
   <div class="assinatura-bloco">
     ${assinaturaHtml}
     ${ev.linhaAssinatura ? '<div class="assinatura-linha"></div>' : ''}
-    <div class="assinatura-nome">${escaparHtml(ctx.nomeMedico)}</div>
-    <div class="assinatura-crmv">${escaparHtml(ctx.crmvMedico)}</div>
-  </div>
+    ${ev.mostrarAssinaturaTexto ? `<div class="assinatura-nome">${escaparHtml(ctx.nomeMedico)}</div>` : ''}
+    ${ev.mostrarAssinaturaTexto ? `<div class="assinatura-crmv">${escaparHtml(ctx.crmvMedico)}</div>` : ''}
+  </div>` : ''}
 
   ${(ev.textoAvisoLegal || ev.rodapeContato) ? `
     <div class="rodape-bloco">
@@ -1286,7 +1351,6 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
 async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDestino, imagens = [], opcoes = {}) {
   const usuario = opcoes.usuario || {};
   const layout = opcoes.layout || await obterLayout(usuario.id || null);
-  const cfgDocx = opcoes.cfgDocx || converterParaDocx(layout);
   let perfilLaudo = opcoes.perfilLaudo;
   if (!perfilLaudo && usuario.id) {
     try {
@@ -1301,7 +1365,7 @@ async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDest
       perfilCirurgico = await obterPerfilCirurgico(usuario.id);
     } catch (_) {}
   }
-  const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, cfgDocx, perfilLaudo, perfilCirurgico });
+  const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, perfilLaudo, perfilCirurgico });
 
   const nomeLimpo = (dadosPaciente.nome || 'PACIENTE')
     .toUpperCase()
@@ -1320,6 +1384,7 @@ async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDest
 module.exports = {
   resolverCaminhoArquivo,
   resolverContextoCirurgico,
+  resolverOrdemSecoesCirurgia,
   resolverLegendaFoto,
   gerarDocxCirurgico,
   gerarPdfCirurgico,

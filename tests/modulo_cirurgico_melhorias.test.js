@@ -5,6 +5,7 @@ const path = require('path');
 const {
   resolverCaminhoArquivo,
   resolverContextoCirurgico,
+  resolverOrdemSecoesCirurgia,
   resolverLegendaFoto
 } = require('../motor_cirurgia');
 const { normalizarUrlUploadPublica } = require('../gerenciador_usuarios');
@@ -96,5 +97,121 @@ describe('Módulo Cirúrgico - Substituição de Logo, Padrão Cirúrgico e Lege
     expect(perfil.templateVisual.estiloSecoes).toBe('barra-lateral');
     expect(perfil.templateVisual.rodapeContato).not.toMatch(/CRMV/i);
     expect(perfil.templateVisual.rotulosSecoes.procedimento).toBe('PROCEDIMENTO');
+  });
+
+  test('resolverContextoCirurgico aplica fontSizeBody até 30pt, fontSizeTitulo até 30pt e paragraphSpacing', () => {
+    const ctx = resolverContextoCirurgico({
+      usuario: { id: 'user123', nome: 'Dr. Matheus', nomeClinica: 'UPA PET' },
+      perfilCirurgico: {
+        ativo: true,
+        templateVisual: {
+          fontSizeBody: '20pt',
+          fontSizeTitulo: '30pt',
+          paragraphSpacing: '16pt'
+        }
+      }
+    });
+    expect(ctx.layout.font_size_body).toBe('20pt');
+    expect(ctx.layout.font_size_titulo).toBe('30pt');
+    expect(ctx.layout.paragraph_spacing).toBe('16pt');
+    expect(ctx.cfgDocx.szCorpo).toBe(40);
+    expect(ctx.cfgDocx.szTitulo).toBe(60);
+    expect(ctx.cfgDocx.spacingAfter).toBe(320);
+    expect(ctx.temFonteCorpoCustom).toBe(true);
+    expect(ctx.temEspacamentoCustom).toBe(true);
+  });
+
+  test('override visual por relatório altera apenas o relatório atual sem mutar o perfil padrão', () => {
+    const perfilPadrao = {
+      ativo: true,
+      templateVisual: {
+        corPrimaria: '#1B365D',
+        fontSizeBody: '11pt',
+        fontSizeTitulo: '14pt',
+        paragraphSpacing: '8pt'
+      }
+    };
+    const estiloOverride = {
+      corPrimaria: '#0D5C56',
+      fontSizeBody: '14pt',
+      fontSizeTitulo: '22pt',
+      paragraphSpacing: '14pt'
+    };
+    const perfilEfetivo = {
+      ...perfilPadrao,
+      ativo: true,
+      templateVisual: { ...perfilPadrao.templateVisual, ...estiloOverride }
+    };
+    const ctx = resolverContextoCirurgico({
+      usuario: { id: 'user123', nome: 'Dr. Matheus' },
+      perfilCirurgico: perfilEfetivo
+    });
+    expect(ctx.estiloVisualCirurgico.corPrimaria).toBe('#0D5C56');
+    expect(ctx.layout.font_size_body).toBe('14pt');
+    expect(ctx.layout.font_size_titulo).toBe('22pt');
+    expect(ctx.layout.paragraph_spacing).toBe('14pt');
+    expect(perfilPadrao.templateVisual.corPrimaria).toBe('#1B365D');
+    expect(perfilPadrao.templateVisual.fontSizeBody).toBe('11pt');
+  });
+
+  test('resolverContextoCirurgico ignora cfgDocx antigo de layout e recalcula fontes/espaçamento do perfilCirurgico', () => {
+    const ctx = resolverContextoCirurgico({
+      usuario: { id: 'user123', nome: 'Dr. Matheus' },
+      layout: { font_size_body: '11pt', font_size_titulo: '13.5pt', paragraph_spacing: '8pt' },
+      cfgDocx: { szCorpo: 22, szTitulo: 27, spacingAfter: 160, fontFamily: 'Calibri' },
+      perfilCirurgico: {
+        ativo: true,
+        templateVisual: {
+          fontFamily: 'Roboto, sans-serif',
+          fontSizeBody: '30pt',
+          fontSizeTitulo: '18pt',
+          paragraphSpacing: '4pt'
+        }
+      }
+    });
+    expect(ctx.layout.font_size_body).toBe('30pt');
+    expect(ctx.layout.font_size_titulo).toBe('18pt');
+    expect(ctx.layout.paragraph_spacing).toBe('4pt');
+    expect(ctx.cfgDocx.szCorpo).toBe(60);
+    expect(ctx.cfgDocx.szTitulo).toBe(36);
+    expect(ctx.cfgDocx.spacingAfter).toBe(80);
+    expect(ctx.cfgDocx.fontFamily).toBe('Roboto');
+  });
+
+  test('resolverOrdemSecoesCirurgia respeita ordem customizada e completa seções ausentes', () => {
+    expect(resolverOrdemSecoesCirurgia(['evolucao', 'diagnostico', 'descricao'])).toEqual([
+      'evolucao',
+      'diagnostico',
+      'descricao'
+    ]);
+    expect(resolverOrdemSecoesCirurgia(['descricao'])).toEqual([
+      'descricao',
+      'diagnostico',
+      'evolucao'
+    ]);
+    expect(resolverOrdemSecoesCirurgia(null)).toEqual([
+      'diagnostico',
+      'descricao',
+      'evolucao'
+    ]);
+  });
+
+  test('resolverContextoCirurgico propaga fontSizeCabecalho independente de fontSizeBody', () => {
+    const ctx = resolverContextoCirurgico({
+      usuario: { id: 'user123', nome: 'Dr. Matheus' },
+      perfilCirurgico: {
+        ativo: true,
+        templateVisual: {
+          fontSizeBody: '12pt',
+          fontSizeCabecalho: '9.5pt',
+          fontSizeTitulo: '16pt'
+        }
+      }
+    });
+    expect(ctx.layout.font_size_body).toBe('12pt');
+    expect(ctx.layout.font_size_cabecalho).toBe('9.5pt');
+    expect(ctx.cfgDocx.szCorpo).toBe(24);
+    expect(ctx.cfgDocx.szCabecalho).toBe(19);
+    expect(ctx.temFonteCabecalhoCustom).toBe(true);
   });
 });

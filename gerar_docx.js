@@ -915,7 +915,16 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
       })
     : null;
 
-  const paragrafosTextoAssinatura = [
+  const mostrarAssinaturaImagemDocx =
+    layout?.mostrar_assinatura_imagem !== false &&
+    visual?.mostrarAssinaturaImagem !== false &&
+    sCfg?.showImage !== false;
+  const mostrarAssinaturaTextoDocx =
+    layout?.mostrar_assinatura_texto !== false &&
+    visual?.mostrarAssinaturaTexto !== false &&
+    sCfg?.showText !== false;
+
+  const paragrafosTextoAssinatura = !mostrarAssinaturaTextoDocx ? [] : [
     new Paragraph({
       alignment: alinhamentoAssinatura,
       spacing: { before: 0, after: 20 },
@@ -947,7 +956,7 @@ async function gerarDocxLaudo(dados, laudo, caminhoSaida, logoPath, imagensPaths
   ];
 
   let paragrafoImgAssinatura = null;
-  if (assinaturaPath && fs.existsSync(assinaturaPath)) {
+  if (mostrarAssinaturaImagemDocx && assinaturaPath && fs.existsSync(assinaturaPath)) {
     const sigBuf = fs.readFileSync(assinaturaPath);
     const sigHeightMm = parseFloat(String(sCfg.signatureImageHeightMm || '15')) || 15;
     const transSig = calcularTransformacaoProporcional(sigBuf, {

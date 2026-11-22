@@ -697,6 +697,7 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
   const pageWidthPt = opcoes.pageWidthPt || 595.32;
   const pageHeightPt = opcoes.pageHeightPt || 841.92;
   const patientHeaderBoxPt = opcoes.patientHeaderBoxPt || null; // { xMin, xMax, yMin, yMax }
+  const footerTextYMinPt = opcoes.footerTextYMinPt || null;
   const footerTextYMaxPt = opcoes.footerTextYMaxPt || null;
   const crmvBlock = opcoes.crmvBlock || null; // { page, yMin, yMax, xMin, xMax, minYAbovePt }
 
@@ -904,15 +905,21 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
       }, { limiarBranco: 242, passo: 1 });
 
       if (!limFooter.vazio && limFooter.count >= 150) {
-        const imgFooter = recortarImagemRgba(pag1.decoded, {
-          x0: Math.max(0, limFooter.x0 - 16),
-          y0: Math.max(yStartFooter, limFooter.y0 - 8),
-          x1: Math.min(pag1.width, limFooter.x1 + 16),
-          y1: Math.min(pag1.height, limFooter.y1 + 8)
-        });
-        const caminhoFooter = path.join(pastaSaidaAtivos, 'footer_logo.png');
-        fs.writeFileSync(caminhoFooter, codificarPng(imgFooter));
-        resultado.footerLogoPath = caminhoFooter;
+        const footerCropW = limFooter.x1 - limFooter.x0 + 1;
+        const footerCropH = limFooter.y1 - limFooter.y0 + 1;
+        const footerRatio = footerCropW / Math.max(1, footerCropH);
+        // Rejeita linhas divisórias finas ou tiras de texto isoladas (evita capturar texto de rodapé como logo)
+        if (footerCropH >= 24 && footerRatio <= 9.0) {
+          const imgFooter = recortarImagemRgba(pag1.decoded, {
+            x0: Math.max(0, limFooter.x0 - 16),
+            y0: Math.max(yStartFooter, limFooter.y0 - 8),
+            x1: Math.min(pag1.width, limFooter.x1 + 16),
+            y1: Math.min(pag1.height, limFooter.y1 + 8)
+          });
+          const caminhoFooter = path.join(pastaSaidaAtivos, 'footer_logo.png');
+          fs.writeFileSync(caminhoFooter, codificarPng(imgFooter));
+          resultado.footerLogoPath = caminhoFooter;
+        }
       }
     }
   }
@@ -952,15 +959,24 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
       y0: Math.max(0, Math.floor(Math.max(crmvBlock.minYAbovePt || 0, crmvBlock.yMin - 70) * sigScaleY)),
       y1: Math.max(10, Math.floor((crmvBlock.yMin - 2) * sigScaleY))
     };
+    // Limita rigorosamente a busca abaixo do CRMV para NUNCA invadir a faixa do rodapé/disclaimer nem sua borda superior
+    const tetoRodapePt = footerTextYMinPt
+      ? Math.max(0, footerTextYMinPt - 10)
+      : (pageHeightPt * 0.915);
+    const yAbaixoFimPt = Math.min(crmvBlock.yMax + 72, tetoRodapePt);
+    const yAbaixoIniPx = Math.min(pagAssinatura.height - 1, Math.ceil((crmvBlock.yMax + 4) * sigScaleY));
+    const yAbaixoFimPx = Math.min(pagAssinatura.height, Math.floor(yAbaixoFimPt * sigScaleY));
     const boxAbaixo = {
       x0,
       x1,
-      y0: Math.min(pagAssinatura.height - 20, Math.ceil((crmvBlock.yMax + 4) * sigScaleY)),
-      y1: Math.min(pagAssinatura.height, Math.ceil((crmvBlock.yMax + 72) * sigScaleY))
+      y0: yAbaixoIniPx,
+      y1: yAbaixoFimPx
     };
 
     const limAcima = encontrarLimitesConteudo(pagAssinatura.decoded, boxAcima, { limiarBranco: 215, passo: 2 });
-    const limAbaixo = encontrarLimitesConteudo(pagAssinatura.decoded, boxAbaixo, { limiarBranco: 215, passo: 2 });
+    const limAbaixo = (yAbaixoFimPx - yAbaixoIniPx >= 24)
+      ? encontrarLimitesConteudo(pagAssinatura.decoded, boxAbaixo, { limiarBranco: 215, passo: 2 })
+      : { vazio: true, count: 0, x0: 0, y0: 0, x1: 0, y1: 0 };
 
     ordemAssinaturaDetectada = limAbaixo.count > limAcima.count ? 'text_above_image' : 'image_above_text';
     const limEscolhida = limAbaixo.count > limAcima.count ? limAbaixo : limAcima;
@@ -991,11 +1007,15 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
         removerFundoBranco: true,
         limiarBranco: 238
       });
-      const caminhoSig = path.join(pastaSaidaAtivos, 'signature.png');
-      fs.writeFileSync(caminhoSig, codificarPng(imgSig));
-      resultado.signaturePath = caminhoSig;
-      resultado.signaturePositionOrder = ordemAssinaturaDetectada;
-      resultado.signatureImageHeightMm = alturaAssinaturaMedidaMm || 15;
+      const sigRatio = imgSig.width / Math.max(1, imgSig.height);
+      // Validação geométrica agnóstica: descarta linhas horizontais finas ou tiras de texto do rodapé
+      if (imgSig.height >= 24 && sigRatio <= 8.5) {
+        const caminhoSig = path.join(pastaSaidaAtivos, 'signature.png');
+        fs.writeFileSync(caminhoSig, codificarPng(imgSig));
+        resultado.signaturePath = caminhoSig;
+        resultado.signaturePositionOrder = ordemAssinaturaDetectada;
+        resultado.signatureImageHeightMm = alturaAssinaturaMedidaMm || 15;
+      }
     }
   } else if (candidatosSigEmb.length === 1 && !temSmaskSeparada && arquivosEmb[candidatosSigEmb[0].num] && fs.existsSync(arquivosEmb[candidatosSigEmb[0].num])) {
     const rawSigBuf = fs.readFileSync(arquivosEmb[candidatosSigEmb[0].num]);

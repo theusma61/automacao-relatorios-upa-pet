@@ -13,6 +13,22 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
+async function requestBlob(url, options = {}) {
+  const res = await fetch(url, {
+    credentials: 'include',
+    ...options
+  });
+  if (!res.ok) {
+    let msg = `Erro HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      if (data?.error) msg = data.error;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return await res.blob();
+}
+
 export const api = {
   // Autenticação e Sessão
   getAuthConfig: () => requestJson('/api/auth/config'),
@@ -162,16 +178,34 @@ export const api = {
     requestJson(`/api/ultrassom/${encodeURIComponent(jobId)}/dados`),
   getCirurgiaDados: (jobId) =>
     requestJson(`/api/cirurgia/${encodeURIComponent(jobId)}/dados`),
-  recompilarUltrassom: (payload) =>
+  recompilarUltrassom: (payload, { signal } = {}) =>
     requestJson('/api/ultrassom/recompilar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal
     }),
-  recompilarCirurgia: (payload) =>
+  recompilarCirurgia: (payload, { signal } = {}) =>
     requestJson('/api/cirurgia/recompilar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal
+    }),
+
+  // Pré-visualização ao vivo em PDF real dos padrões (sem salvar no banco)
+  previewPadraoCirurgia: (payload, { signal } = {}) =>
+    requestBlob('/api/cirurgia/preview-padrao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal
+    }),
+  previewPadraoLaudo: (payload, { signal } = {}) =>
+    requestBlob('/api/laudos/preview-padrao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal
     })
 };

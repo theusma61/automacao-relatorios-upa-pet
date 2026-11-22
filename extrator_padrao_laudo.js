@@ -751,6 +751,7 @@ function analisarEstruturaGeometricaPdf(pagesBbox, pag1Renderizada = null, opcoe
     bodyFontFamily: fontes.bodyFontFamily,
     crmvBlock,
     patientHeaderBoxPt,
+    footerTextYMinPt,
     footerTextYMaxPt,
     signatureInfo: {
       alignment: sigAlignment,
@@ -814,6 +815,7 @@ async function extrairPadraoCompletoDePdfs(caminhosPdfs, apiKey, usuario = {}, p
       pageHeightPt: geo.pageHeightPt,
       patientHeaderBoxPt: geo.patientHeaderBoxPt,
       repeatPatientHeaderOnImagePages: geo.repeatPatientHeaderOnImagePages,
+      footerTextYMinPt: geo.footerTextYMinPt,
       footerTextYMaxPt: geo.footerTextYMaxPt,
       crmvBlock: geo.crmvBlock
     });

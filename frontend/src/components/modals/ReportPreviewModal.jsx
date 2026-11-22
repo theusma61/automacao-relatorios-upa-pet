@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Download,
   FileCheck,
@@ -17,10 +17,115 @@ import {
   CheckCircle2,
   X,
   Columns,
-  Camera
+  Camera,
+  GripVertical,
+  Palette,
+  RotateCcw
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
+
+const FONTES_CIRURGIA = [
+  'Calibri, sans-serif',
+  'Arial, sans-serif',
+  'Helvetica, sans-serif',
+  'Roboto, sans-serif',
+  'Times New Roman, serif',
+  'Segoe UI, sans-serif'
+];
+
+const TAMANHOS_FONTE_CORPO = [
+  '8pt', '8.5pt', '9pt', '9.5pt', '10pt', '10.5pt', '11pt', '11.5pt',
+  '12pt', '13pt', '14pt', '15pt', '16pt', '18pt', '20pt', '22pt',
+  '24pt', '26pt', '28pt', '30pt'
+];
+
+const TAMANHOS_FONTE_TITULO = [
+  '10pt', '11pt', '12pt', '13pt', '13.5pt', '14pt', '15pt', '16pt',
+  '18pt', '20pt', '22pt', '24pt', '26pt', '28pt', '30pt'
+];
+
+const ESPACAMENTOS_TOPICOS = [
+  '4pt', '6pt', '8pt', '10pt', '12pt', '14pt', '16pt', '18pt',
+  '20pt', '22pt', '24pt', '26pt', '28pt', '30pt'
+];
+
+const SECOES_CIRURGIA_META = {
+  diagnostico: {
+    campo: 'diagnosticoPreCirurgico',
+    titulo: 'Diagnóstico Pré-Cirúrgico',
+    rows: 2,
+    extraClass: ''
+  },
+  descricao: {
+    campo: 'descricaoProcedimento',
+    titulo: 'Descrição Técnica do Procedimento',
+    rows: 6,
+    extraClass: 'font-sans'
+  },
+  evolucao: {
+    campo: 'evolucaoConsideracoes',
+    titulo: 'Evolução e Considerações Finais',
+    rows: 3,
+    extraClass: ''
+  }
+};
+
+const ORDEM_SECOES_CIRURGIA_PADRAO = ['diagnostico', 'descricao', 'evolucao'];
+
+function normalizarOrdemSecoesCirurgia(ordem) {
+  const res = [];
+  if (Array.isArray(ordem)) {
+    for (const item of ordem) {
+      const k = String(item || '').trim().toLowerCase();
+      if (ORDEM_SECOES_CIRURGIA_PADRAO.includes(k) && !res.includes(k)) {
+        res.push(k);
+      }
+    }
+  }
+  for (const k of ORDEM_SECOES_CIRURGIA_PADRAO) {
+    if (!res.includes(k)) res.push(k);
+  }
+  return res;
+}
+
+const ESTILO_ULTRASSOM_BASE = {
+  fontFamily: 'Calibri, sans-serif',
+  fontSizeCabecalho: '10pt',
+  fontSizeBody: '11pt',
+  fontSizeTitulo: '14pt',
+  paragraphSpacing: '8pt',
+  lineHeight: '1.35',
+  paginacaoTexto: 'preencher',
+  mostrarAssinaturaImagem: true,
+  mostrarAssinaturaTexto: true,
+  corPrimaria: '#1B365D',
+  corSecundaria: '#4A777A',
+  marginTop: '20mm',
+  marginBottom: '20mm',
+  marginLeft: '15mm',
+  marginRight: '15mm'
+};
+
+const ESTILO_CIRURGIA_BASE = {
+  tipoCabecalho: 'logo-esquerda-dados-direita',
+  tipoDadosPaciente: 'duas-colunas-limpo',
+  estiloSecoes: 'negrito-inline',
+  decoracaoTitulo: 'nenhuma',
+  posicaoAssinatura: 'centro',
+  mostrarAssinaturaImagem: true,
+  mostrarAssinaturaTexto: true,
+  rotuloResponsavel: 'Responsável',
+  tituloDocumento: 'RELATÓRIO CIRÚRGICO',
+  subtituloDocumento: '',
+  corPrimaria: '#1B365D',
+  corSecundaria: '#4A777A',
+  fontFamily: 'Calibri, sans-serif',
+  fontSizeBody: '11pt',
+  fontSizeCabecalho: '11pt',
+  fontSizeTitulo: '13.5pt',
+  paragraphSpacing: '8pt'
+};
 
 function extrairOrgaosDeRelatorio(rep) {
   if (!rep) return [];
@@ -112,9 +217,34 @@ export default function ReportPreviewModal({
   const [isRecompiling, setIsRecompiling] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [dadosPacienteAbertos, setDadosPacienteAbertos] = useState(false);
+  const [estiloCirurgiaAberto, setEstiloCirurgiaAberto] = useState(false);
+  const [estiloUltrassomAberto, setEstiloUltrassomAberto] = useState(false);
+  const [estiloPadraoUltrassom, setEstiloPadraoUltrassom] = useState(ESTILO_ULTRASSOM_BASE);
+  const [estiloUltrassomForm, setEstiloUltrassomForm] = useState(ESTILO_ULTRASSOM_BASE);
+  const [temEstiloUltrassomCustom, setTemEstiloUltrassomCustom] = useState(false);
+  const [autoAtualizarPdf, setAutoAtualizarPdf] = useState(true);
+  const loadedJobIdRef = useRef('');
+  const recompilarControllerRef = useRef(null);
+  const [estiloPadraoCirurgia, setEstiloPadraoCirurgia] = useState(ESTILO_CIRURGIA_BASE);
+  const [estiloCirurgiaForm, setEstiloCirurgiaForm] = useState(() => ({
+    ...ESTILO_CIRURGIA_BASE,
+    ...(report.cirurgia?.estiloOverride || {})
+  }));
+  const [temEstiloCustomizado, setTemEstiloCustomizado] = useState(
+    Boolean(report.cirurgia?.estiloOverride && Object.keys(report.cirurgia.estiloOverride).length > 0)
+  );
   const [novoOrgaoNome, setNovoOrgaoNome] = useState('');
   const [adicionandoOrgao, setAdicionandoOrgao] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [draggedOrgaoIdx, setDraggedOrgaoIdx] = useState(null);
+  const [dragOverOrgaoIdx, setDragOverOrgaoIdx] = useState(null);
+  const dragOrgaoPermitidoRef = useRef(false);
+  const [ordemSecoesCirurgia, setOrdemSecoesCirurgia] = useState(() =>
+    normalizarOrdemSecoesCirurgia(report.cirurgia?.ordemSecoes)
+  );
+  const [draggedSecaoCirIdx, setDraggedSecaoCirIdx] = useState(null);
+  const [dragOverSecaoCirIdx, setDragOverSecaoCirIdx] = useState(null);
+  const dragSecaoCirPermitidoRef = useRef(false);
 
   // URLs dinâmicas dos arquivos
   const [pdfUrlLive, setPdfUrlLive] = useState(report.pdfUrl || '');
@@ -134,6 +264,7 @@ export default function ReportPreviewModal({
         raca: report.paciente.raca || 'SRD',
         idade: report.paciente.idade || '',
         sexo: report.paciente.sexo || 'Macho',
+        peso: report.paciente.peso || '',
         tutor: report.paciente.tutor || report.tutor || '',
         requisitante: report.paciente.requisitante || '',
         data: report.paciente.data || ''
@@ -145,6 +276,7 @@ export default function ReportPreviewModal({
       raca: 'SRD',
       idade: '',
       sexo: 'Macho',
+      peso: '',
       tutor: report.tutor || '',
       requisitante: '',
       data: report.date || ''
@@ -197,9 +329,14 @@ export default function ReportPreviewModal({
   // Backup para restaurar caso o usuário queira descartar
   const [backupOriginal, setBackupOriginal] = useState(null);
 
-  // Efeito para sincronizar e carregar dados estruturados completos do exame
+  // Efeito para sincronizar e carregar dados estruturados completos do exame (apenas quando muda o job/relatório aberto)
   useEffect(() => {
     if (!report) return;
+    const chaveAtual = `${initialJobId || report.id || ''}_${isSurgery ? 'cir' : 'us'}`;
+    if (loadedJobIdRef.current === chaveAtual && initialJobId) {
+      return;
+    }
+    loadedJobIdRef.current = chaveAtual;
 
     setPdfUrlLive(report.pdfUrl || '');
     setDocxUrlLive(report.docxUrl || '');
@@ -211,6 +348,7 @@ export default function ReportPreviewModal({
       raca: 'SRD',
       idade: '',
       sexo: 'Macho',
+      peso: '',
       tutor: report.tutor || '',
       requisitante: '',
       data: report.date || ''
@@ -222,6 +360,7 @@ export default function ReportPreviewModal({
         raca: report.paciente.raca || pac.raca,
         idade: report.paciente.idade || pac.idade,
         sexo: report.paciente.sexo || pac.sexo,
+        peso: report.paciente.peso || pac.peso,
         tutor: report.paciente.tutor || report.tutor || pac.tutor,
         requisitante: report.paciente.requisitante || pac.requisitante,
         data: report.paciente.data || pac.data
@@ -239,6 +378,7 @@ export default function ReportPreviewModal({
         evolucaoConsideracoes: c.evolucaoConsideracoes || ''
       };
       setCirurgiaForm(cirForm);
+      setOrdemSecoesCirurgia(normalizarOrdemSecoesCirurgia(c.ordemSecoes));
 
       if (Array.isArray(report.fotos) && report.fotos.length > 0) {
         setFotosCirurgia(
@@ -264,23 +404,44 @@ export default function ReportPreviewModal({
                 descricaoProcedimento: dados.cirurgia.descricaoProcedimento || prev.descricaoProcedimento,
                 evolucaoConsideracoes: dados.cirurgia.evolucaoConsideracoes || prev.evolucaoConsideracoes
               }));
+              if (Array.isArray(dados.cirurgia.ordemSecoes) && dados.cirurgia.ordemSecoes.length > 0) {
+                setOrdemSecoesCirurgia(normalizarOrdemSecoesCirurgia(dados.cirurgia.ordemSecoes));
+              }
             }
             if (dados && dados.paciente) {
               setPacienteForm((prev) => ({
                 ...prev,
                 nome: dados.paciente.nome || prev.nome,
                 especie: dados.paciente.especie || prev.especie,
+                raca: dados.paciente.raca || prev.raca,
                 sexo: dados.paciente.sexo || prev.sexo,
                 idade: dados.paciente.idade || prev.idade,
+                peso: dados.paciente.peso || prev.peso,
                 tutor: dados.paciente.tutor || prev.tutor,
+                requisitante: dados.paciente.requisitante || prev.requisitante,
                 data: dados.paciente.data || prev.data
               }));
             }
             if (dados && Array.isArray(dados.fotos)) {
               setFotosCirurgia(dados.fotos);
             }
-            if (dados && dados.pdfUrl) setPdfUrlLive(dados.pdfUrl);
-            if (dados && dados.docxUrl) setDocxUrlLive(dados.docxUrl);
+            if (dados && dados.estiloPadrao) {
+              const padraoMerged = { ...ESTILO_CIRURGIA_BASE, ...dados.estiloPadrao };
+              setEstiloPadraoCirurgia(padraoMerged);
+              if (dados.estiloOverride && Object.keys(dados.estiloOverride).length > 0) {
+                setEstiloCirurgiaForm({ ...padraoMerged, ...dados.estiloOverride });
+                setTemEstiloCustomizado(true);
+              } else {
+                setEstiloCirurgiaForm(padraoMerged);
+                setTemEstiloCustomizado(false);
+              }
+            }
+            if (dados && dados.pdfUrl) {
+              setPdfUrlLive((prev) => (prev && prev.includes('?v=') && !dados.pdfUrl.includes('?v=') ? prev : dados.pdfUrl));
+            }
+            if (dados && dados.docxUrl) {
+              setDocxUrlLive((prev) => (prev && prev.includes('?v=') && !dados.docxUrl.includes('?v=') ? prev : dados.docxUrl));
+            }
           })
           .catch((err) => console.warn('Aviso ao carregar dados de cirurgia:', err))
           .finally(() => setLoadingData(false));
@@ -290,8 +451,9 @@ export default function ReportPreviewModal({
       const orgaosIniciais = extrairOrgaosDeRelatorio(report);
       if (orgaosIniciais.length > 0) {
         setLaudoForm(orgaosIniciais);
-      } else if (initialJobId) {
-        setLoadingData(true);
+      }
+      if (initialJobId) {
+        if (orgaosIniciais.length === 0) setLoadingData(true);
         api.getExameDados(initialJobId)
           .then((dados) => {
             if (dados && Array.isArray(dados.laudo) && dados.laudo.length > 0) {
@@ -310,13 +472,29 @@ export default function ReportPreviewModal({
                 raca: dados.paciente.raca || prev.raca,
                 idade: dados.paciente.idade || prev.idade,
                 sexo: dados.paciente.sexo || prev.sexo,
+                peso: dados.paciente.peso || prev.peso,
                 tutor: dados.paciente.tutor || prev.tutor,
                 requisitante: dados.paciente.requisitante || prev.requisitante,
                 data: dados.paciente.data || prev.data
               }));
             }
-            if (dados && dados.pdfUrl) setPdfUrlLive(dados.pdfUrl);
-            if (dados && dados.docxUrl) setDocxUrlLive(dados.docxUrl);
+            if (dados && dados.estiloPadrao) {
+              const padraoUs = { ...ESTILO_ULTRASSOM_BASE, ...dados.estiloPadrao };
+              setEstiloPadraoUltrassom(padraoUs);
+              if (dados.estiloOverride && Object.keys(dados.estiloOverride).length > 0) {
+                setEstiloUltrassomForm({ ...padraoUs, ...dados.estiloOverride });
+                setTemEstiloUltrassomCustom(true);
+              } else {
+                setEstiloUltrassomForm(padraoUs);
+                setTemEstiloUltrassomCustom(false);
+              }
+            }
+            if (dados && dados.pdfUrl) {
+              setPdfUrlLive((prev) => (prev && prev.includes('?v=') && !dados.pdfUrl.includes('?v=') ? prev : dados.pdfUrl));
+            }
+            if (dados && dados.docxUrl) {
+              setDocxUrlLive((prev) => (prev && prev.includes('?v=') && !dados.docxUrl.includes('?v=') ? prev : dados.docxUrl));
+            }
           })
           .catch((err) => console.warn('Aviso ao carregar dados do ultrassom:', err))
           .finally(() => setLoadingData(false));
@@ -332,7 +510,10 @@ export default function ReportPreviewModal({
         paciente: JSON.parse(JSON.stringify(pacienteForm)),
         laudo: JSON.parse(JSON.stringify(laudoForm)),
         cirurgia: JSON.parse(JSON.stringify(cirurgiaForm)),
-        fotosCirurgia: JSON.parse(JSON.stringify(fotosCirurgia))
+        fotosCirurgia: JSON.parse(JSON.stringify(fotosCirurgia)),
+        ordemSecoesCirurgia: [...ordemSecoesCirurgia],
+        estiloCirurgia: JSON.parse(JSON.stringify(estiloCirurgiaForm)),
+        temEstiloCustomizado
       });
     }
   }, [hasUnsavedChanges, laudoForm.length, cirurgiaForm.descricaoProcedimento, fotosCirurgia.length]);
@@ -373,6 +554,18 @@ export default function ReportPreviewModal({
     setHasUnsavedChanges(true);
   };
 
+  const handleReordenarOrgao = (origemIdx, destinoIdx) => {
+    if (origemIdx === null || destinoIdx === null || origemIdx === destinoIdx) return;
+    setLaudoForm((prev) => {
+      if (origemIdx < 0 || origemIdx >= prev.length || destinoIdx < 0 || destinoIdx >= prev.length) return prev;
+      const clone = [...prev];
+      const [movido] = clone.splice(origemIdx, 1);
+      clone.splice(destinoIdx, 0, movido);
+      return clone;
+    });
+    setHasUnsavedChanges(true);
+  };
+
   const handleAdicionarNovoOrgao = (nome) => {
     const nomeFinal = (nome || novoOrgaoNome || '').trim().toUpperCase();
     if (!nomeFinal) return;
@@ -396,6 +589,57 @@ export default function ReportPreviewModal({
     setHasUnsavedChanges(true);
   };
 
+  const handleMoverSecaoCirurgia = (index, direcao) => {
+    setOrdemSecoesCirurgia((prev) => {
+      const novoIndex = direcao === 'cima' ? index - 1 : index + 1;
+      if (novoIndex < 0 || novoIndex >= prev.length) return prev;
+      const clone = [...prev];
+      const temp = clone[index];
+      clone[index] = clone[novoIndex];
+      clone[novoIndex] = temp;
+      return clone;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  const handleReordenarSecaoCirurgia = (origemIdx, destinoIdx) => {
+    if (origemIdx === null || destinoIdx === null || origemIdx === destinoIdx) return;
+    setOrdemSecoesCirurgia((prev) => {
+      if (origemIdx < 0 || origemIdx >= prev.length || destinoIdx < 0 || destinoIdx >= prev.length) return prev;
+      const clone = [...prev];
+      const [movido] = clone.splice(origemIdx, 1);
+      clone.splice(destinoIdx, 0, movido);
+      return clone;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  const handleEstiloCirurgiaChange = (campo, valor) => {
+    setEstiloCirurgiaForm((prev) => ({ ...prev, [campo]: valor }));
+    setTemEstiloCustomizado(true);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleResetarEstiloCirurgia = () => {
+    setEstiloCirurgiaForm({ ...estiloPadraoCirurgia });
+    setTemEstiloCustomizado(false);
+    setHasUnsavedChanges(true);
+    if (onToast) onToast('Visual redefinido para o padrão das Configurações.');
+  };
+
+  const handleEstiloUltrassomChange = (campo, valor) => {
+    setEstiloUltrassomForm((prev) => ({ ...prev, [campo]: valor }));
+    setTemEstiloUltrassomCustom(true);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleResetarEstiloUltrassom = () => {
+    setEstiloUltrassomForm({ ...estiloPadraoUltrassom });
+    setTemEstiloUltrassomCustom(false);
+    setHasUnsavedChanges(true);
+    if (onToast) onToast('Visual do laudo redefinido para o padrão das Configurações.');
+  };
+
   const handleAlterarLegendaFoto = (index, novaLegenda) => {
     setFotosCirurgia((prev) =>
       prev.map((foto, i) => (i === index ? { ...foto, legenda: novaLegenda } : foto))
@@ -409,17 +653,26 @@ export default function ReportPreviewModal({
       setLaudoForm(JSON.parse(JSON.stringify(backupOriginal.laudo)));
       setCirurgiaForm(JSON.parse(JSON.stringify(backupOriginal.cirurgia)));
       if (backupOriginal.fotosCirurgia) setFotosCirurgia(JSON.parse(JSON.stringify(backupOriginal.fotosCirurgia)));
+      if (backupOriginal.ordemSecoesCirurgia) setOrdemSecoesCirurgia([...backupOriginal.ordemSecoesCirurgia]);
+      if (backupOriginal.estiloCirurgia) setEstiloCirurgiaForm(JSON.parse(JSON.stringify(backupOriginal.estiloCirurgia)));
+      if (backupOriginal.temEstiloCustomizado !== undefined) setTemEstiloCustomizado(backupOriginal.temEstiloCustomizado);
       setHasUnsavedChanges(false);
       if (onToast) onToast('Alterações descartadas.');
     }
   };
 
-  const handleSalvarERecompilar = async () => {
+  const handleSalvarERecompilar = async (opcoesExec = {}) => {
+    const silent = Boolean(opcoesExec?.silent);
     if (!initialJobId) {
-      if (onToast) onToast('Identificador de exame ausente para recompilação direta.');
+      if (!silent && onToast) onToast('Identificador de exame ausente para recompilação direta.');
       return;
     }
 
+    if (recompilarControllerRef.current) {
+      recompilarControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    recompilarControllerRef.current = controller;
     setIsRecompiling(true);
     try {
       let res;
@@ -428,9 +681,10 @@ export default function ReportPreviewModal({
         res = await api.recompilarCirurgia({
           jobId: initialJobId,
           paciente: pacienteForm,
-          cirurgia: { ...cirurgiaForm, legendasFotos },
-          legendasFotos
-        });
+          cirurgia: { ...cirurgiaForm, legendasFotos, ordemSecoes: ordemSecoesCirurgia },
+          legendasFotos,
+          estiloOverride: temEstiloCustomizado ? estiloCirurgiaForm : null
+        }, { signal: controller.signal });
         if (Array.isArray(res.fotos)) {
           setFotosCirurgia(res.fotos);
         }
@@ -438,8 +692,9 @@ export default function ReportPreviewModal({
         res = await api.recompilarUltrassom({
           jobId: initialJobId,
           paciente: pacienteForm,
-          laudo: laudoForm
-        });
+          laudo: laudoForm,
+          estiloOverride: temEstiloUltrassomCustom ? estiloUltrassomForm : null
+        }, { signal: controller.signal });
       }
 
       setPdfUrlLive(res.pdfUrl || pdfUrlLive);
@@ -460,15 +715,50 @@ export default function ReportPreviewModal({
         });
       }
 
-      if (onToast) onToast('✅ Laudo atualizado! Novo PDF e Word gerados com sucesso.');
-      // Alterna automaticamente para o preview para visualização imediata
-      setActiveTab('preview');
+      if (!silent) {
+        if (onToast) onToast('✅ Laudo atualizado! Novo PDF e Word gerados com sucesso.');
+        setActiveTab((prev) => (prev === 'edit' ? 'preview' : prev));
+      }
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       if (onToast) onToast('Erro ao recompilar laudo: ' + err.message);
     } finally {
-      setIsRecompiling(false);
+      if (recompilarControllerRef.current === controller) {
+        setIsRecompiling(false);
+      }
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (recompilarControllerRef.current) {
+        recompilarControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Auto-atualização em tempo real com debounce inteligente (1.8s) para evitar sobrecarga no navegador e servidor
+  useEffect(() => {
+    if (!autoAtualizarPdf || !hasUnsavedChanges || isRecompiling || loadingData || !initialJobId) return;
+    const timer = setTimeout(() => {
+      handleSalvarERecompilar({ silent: true });
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, [
+    autoAtualizarPdf,
+    hasUnsavedChanges,
+    loadingData,
+    initialJobId,
+    pacienteForm,
+    cirurgiaForm,
+    ordemSecoesCirurgia,
+    estiloCirurgiaForm,
+    temEstiloCustomizado,
+    fotosCirurgia,
+    laudoForm,
+    estiloUltrassomForm,
+    temEstiloUltrassomCustom
+  ]);
 
   // URL para exibição inline do PDF dentro do iframe
   const iframePdfSrc = useMemo(() => {
@@ -528,7 +818,8 @@ export default function ReportPreviewModal({
               </div>
               <p className="text-[11px] text-slate-400 truncate">
                 {pacienteForm.especie} {pacienteForm.raca ? `• ${pacienteForm.raca}` : ''}{' '}
-                {pacienteForm.tutor ? `• Tutor: ${pacienteForm.tutor}` : ''}
+                {pacienteForm.peso ? `• Peso: ${pacienteForm.peso}` : ''}{' '}
+                {pacienteForm.tutor ? `• Responsável: ${pacienteForm.tutor}` : ''}
               </p>
             </div>
           </div>
@@ -637,7 +928,8 @@ export default function ReportPreviewModal({
                         Identificação do Paciente & Tutor
                       </h4>
                       <p className="text-[11px] text-slate-400">
-                        {pacienteForm.nome || 'Não identificado'} • {pacienteForm.especie} • Tutor:{' '}
+                        {pacienteForm.nome || 'Não identificado'} • {pacienteForm.especie}
+                        {pacienteForm.peso ? ` • Peso: ${pacienteForm.peso}` : ''} • Responsável:{' '}
                         {pacienteForm.tutor || 'Não informado'}
                       </p>
                     </div>
@@ -740,7 +1032,24 @@ export default function ReportPreviewModal({
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                        Nome do Tutor / Responsável
+                        Peso
+                      </label>
+                      <input
+                        type="text"
+                        value={pacienteForm.peso}
+                        placeholder="Ex: 6 kg"
+                        onChange={(e) => handlePacienteChange('peso', e.target.value)}
+                        className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                          darkMode
+                            ? 'bg-[#0A141D] border-slate-700 text-white focus:border-[#00D296]'
+                            : 'bg-slate-50 border-slate-300 text-[#0A141D] focus:border-[#0D5C56]'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Nome do Responsável
                       </label>
                       <input
                         type="text"
@@ -754,7 +1063,7 @@ export default function ReportPreviewModal({
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className="block text-[11px] font-bold text-slate-400 mb-1">
                         Veterinário(a) Requisitante / Clínica
                       </label>
@@ -795,6 +1104,361 @@ export default function ReportPreviewModal({
               {isSurgery ? (
                 /* FORMULÁRIO DE RELATÓRIO CIRÚRGICO */
                 <div className="space-y-4">
+                  {/* Card Colapsável: Diagramação & Estilo Exclusivo deste Relatório */}
+                  <div
+                    className={`rounded-2xl border transition ${
+                      darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div
+                      onClick={() => setEstiloCirurgiaAberto(!estiloCirurgiaAberto)}
+                      className="px-4 sm:px-5 py-3.5 flex items-center justify-between cursor-pointer select-none gap-2"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-[#00D296]/15 text-[#00D296] flex items-center justify-center shrink-0">
+                          <Palette className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-xs sm:text-sm font-extrabold">
+                              Diagramação & Estilo deste Relatório
+                            </h4>
+                            {temEstiloCustomizado ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00D296]/20 text-[#00D296] border border-[#00D296]/30">
+                                Personalizado só neste relatório
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/20">
+                                Padrão das Configurações
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {estiloCirurgiaForm.fontFamily.split(',')[0]} • Corpo {estiloCirurgiaForm.fontSizeBody} • Título {estiloCirurgiaForm.fontSizeTitulo} • Espaço {estiloCirurgiaForm.paragraphSpacing}
+                          </p>
+                        </div>
+                      </div>
+                      {estiloCirurgiaAberto ? (
+                        <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                    </div>
+
+                    {estiloCirurgiaAberto && (
+                      <div className="p-4 sm:p-5 border-t border-slate-800/60 space-y-4 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                          <p className="text-[11px] text-slate-400">
+                            Ajustes feitos aqui valem <strong className="text-[#00D296]">apenas para este relatório</strong> e não alteram seu padrão salvo em Configurações.
+                          </p>
+                          {temEstiloCustomizado && (
+                            <button
+                              type="button"
+                              onClick={handleResetarEstiloCirurgia}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border transition ${
+                                darkMode
+                                  ? 'border-slate-700 bg-[#0A141D] text-slate-300 hover:border-[#00D296] hover:text-[#00D296]'
+                                  : 'border-slate-300 bg-slate-50 text-slate-700 hover:border-[#0D5C56]'
+                              }`}
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Voltar ao Padrão</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Formato do Cabeçalho
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.tipoCabecalho}
+                              onChange={(e) => handleEstiloCirurgiaChange('tipoCabecalho', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="logo-esquerda-dados-direita">Logo à esquerda com dados à direita</option>
+                              <option value="logo-centro">Logo centralizada no topo</option>
+                              <option value="banner-superior">Banner superior colorido</option>
+                              <option value="sem-logo-tipografico">Cabeçalho tipográfico (sem imagem)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Dados do Paciente
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.tipoDadosPaciente}
+                              onChange={(e) => handleEstiloCirurgiaChange('tipoDadosPaciente', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="duas-colunas-limpo">Duas colunas limpas</option>
+                              <option value="tabela-zebrada">Tabela com fundo suave</option>
+                              <option value="tabela-borda-simples">Tabela com bordas finas</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Estilo das Seções Cirúrgicas
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.estiloSecoes}
+                              onChange={(e) => handleEstiloCirurgiaChange('estiloSecoes', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="negrito-inline">Negrito inline clássico (SEÇÃO: texto)</option>
+                              <option value="barra-lateral">Barra vertical colorida à esquerda</option>
+                              <option value="tarja-colorida">Tarja sólida colorida por seção</option>
+                              <option value="sublinhado">Título em caixa alta sublinhado</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Decoração do Título Principal
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.decoracaoTitulo}
+                              onChange={(e) => handleEstiloCirurgiaChange('decoracaoTitulo', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="nenhuma">Limpo (sem borda ou faixa)</option>
+                              <option value="borda-inferior">Linha inferior colorida</option>
+                              <option value="faixa-colorida">Faixa sólida na cor primária</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Posição da Assinatura
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.posicaoAssinatura}
+                              onChange={(e) => handleEstiloCirurgiaChange('posicaoAssinatura', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="centro">Centralizada</option>
+                              <option value="direita">Alinhada à Direita</option>
+                              <option value="esquerda">Alinhada à Esquerda</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Rótulo do Responsável
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.rotuloResponsavel}
+                              onChange={(e) => handleEstiloCirurgiaChange('rotuloResponsavel', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="Responsável">Responsável</option>
+                              <option value="Tutor">Tutor</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Título Principal do Documento
+                            </label>
+                            <input
+                              type="text"
+                              value={estiloCirurgiaForm.tituloDocumento}
+                              onChange={(e) => handleEstiloCirurgiaChange('tituloDocumento', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Subtítulo (opcional)
+                            </label>
+                            <input
+                              type="text"
+                              value={estiloCirurgiaForm.subtituloDocumento}
+                              placeholder="Ex: Centro Cirúrgico Veterinário"
+                              onChange={(e) => handleEstiloCirurgiaChange('subtituloDocumento', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Cor Primária
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={estiloCirurgiaForm.corPrimaria || '#1B365D'}
+                                onChange={(e) => handleEstiloCirurgiaChange('corPrimaria', e.target.value)}
+                                className="w-9 h-9 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
+                              />
+                              <span className="text-xs font-mono text-slate-400">{estiloCirurgiaForm.corPrimaria}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Cor Secundária
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={estiloCirurgiaForm.corSecundaria || '#4A777A'}
+                                onChange={(e) => handleEstiloCirurgiaChange('corSecundaria', e.target.value)}
+                                className="w-9 h-9 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
+                              />
+                              <span className="text-xs font-mono text-slate-400">{estiloCirurgiaForm.corSecundaria}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Fonte
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.fontFamily}
+                              onChange={(e) => handleEstiloCirurgiaChange('fontFamily', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {FONTES_CIRURGIA.map((f) => (
+                                <option key={f} value={f}>{f.split(',')[0]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Fonte do Cabeçalho
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.fontSizeCabecalho || estiloCirurgiaForm.fontSizeBody || '11pt'}
+                              onChange={(e) => handleEstiloCirurgiaChange('fontSizeCabecalho', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {TAMANHOS_FONTE_CORPO.map((sz) => (
+                                <option key={sz} value={sz}>{sz}</option>
+                              ))}
+                              {estiloCirurgiaForm.fontSizeCabecalho && !TAMANHOS_FONTE_CORPO.includes(estiloCirurgiaForm.fontSizeCabecalho) && (
+                                <option value={estiloCirurgiaForm.fontSizeCabecalho}>{estiloCirurgiaForm.fontSizeCabecalho} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Tamanho do Corpo
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.fontSizeBody || '11pt'}
+                              onChange={(e) => handleEstiloCirurgiaChange('fontSizeBody', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {TAMANHOS_FONTE_CORPO.map((sz) => (
+                                <option key={sz} value={sz}>{sz}</option>
+                              ))}
+                              {estiloCirurgiaForm.fontSizeBody && !TAMANHOS_FONTE_CORPO.includes(estiloCirurgiaForm.fontSizeBody) && (
+                                <option value={estiloCirurgiaForm.fontSizeBody}>{estiloCirurgiaForm.fontSizeBody} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Tamanho do Título
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.fontSizeTitulo || '13.5pt'}
+                              onChange={(e) => handleEstiloCirurgiaChange('fontSizeTitulo', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {TAMANHOS_FONTE_TITULO.map((sz) => (
+                                <option key={sz} value={sz}>{sz}</option>
+                              ))}
+                              {estiloCirurgiaForm.fontSizeTitulo && !TAMANHOS_FONTE_TITULO.includes(estiloCirurgiaForm.fontSizeTitulo) && (
+                                <option value={estiloCirurgiaForm.fontSizeTitulo}>{estiloCirurgiaForm.fontSizeTitulo} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Espaço entre Tópicos
+                            </label>
+                            <select
+                              value={estiloCirurgiaForm.paragraphSpacing || '8pt'}
+                              onChange={(e) => handleEstiloCirurgiaChange('paragraphSpacing', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {ESPACAMENTOS_TOPICOS.map((sp) => (
+                                <option key={sp} value={sp}>
+                                  {sp}
+                                  {sp === '6pt' ? ' (Compacto)' : sp === '10pt' ? ' (Equilibrado)' : sp === '16pt' ? ' (Amplo)' : ''}
+                                </option>
+                              ))}
+                              {estiloCirurgiaForm.paragraphSpacing && !ESPACAMENTOS_TOPICOS.includes(estiloCirurgiaForm.paragraphSpacing) && (
+                                <option value={estiloCirurgiaForm.paragraphSpacing}>{estiloCirurgiaForm.paragraphSpacing} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 pt-1 border-t border-slate-800/40">
+                          <label className="inline-flex items-center gap-2 text-[11px] font-bold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={estiloCirurgiaForm.mostrarAssinaturaImagem !== false}
+                              onChange={(e) => handleEstiloCirurgiaChange('mostrarAssinaturaImagem', e.target.checked)}
+                              className="rounded border-slate-600 accent-[#00D296]"
+                            />
+                            <span className="text-slate-300">Exibir imagem da assinatura</span>
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-[11px] font-bold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={estiloCirurgiaForm.mostrarAssinaturaTexto !== false}
+                              onChange={(e) => handleEstiloCirurgiaChange('mostrarAssinaturaTexto', e.target.checked)}
+                              className="rounded border-slate-600 accent-[#00D296]"
+                            />
+                            <span className="text-slate-300">Exibir nome e CRMV</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <div
                     className={`p-4 sm:p-5 rounded-2xl border space-y-3 ${
                       darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
@@ -815,71 +1479,145 @@ export default function ReportPreviewModal({
                     />
                   </div>
 
-                  <div
-                    className={`p-4 sm:p-5 rounded-2xl border space-y-2 ${
-                      darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <label className="block text-xs font-extrabold uppercase text-[#00D296]">
-                      1. Diagnóstico Pré-Cirúrgico
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={cirurgiaForm.diagnosticoPreCirurgico}
-                      onChange={(e) =>
-                        handleCirurgiaChange('diagnosticoPreCirurgico', e.target.value)
-                      }
-                      className={`w-full p-3 rounded-xl border text-xs leading-relaxed ${
-                        darkMode
-                          ? 'bg-[#0A141D] border-slate-700 text-slate-100'
-                          : 'bg-slate-50 border-slate-300 text-[#0A141D]'
-                      }`}
-                    />
+                  <div className="flex items-center justify-between px-1 pt-1">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                      Seções do Relatório ({ordemSecoesCirurgia.length})
+                    </h4>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+                      <GripVertical className="w-3 h-3" />
+                      Arraste ou use as setas para reposicionar
+                    </span>
                   </div>
 
-                  <div
-                    className={`p-4 sm:p-5 rounded-2xl border space-y-2 ${
-                      darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <label className="block text-xs font-extrabold uppercase text-[#00D296]">
-                      2. Descrição Técnica do Procedimento
-                    </label>
-                    <textarea
-                      rows={6}
-                      value={cirurgiaForm.descricaoProcedimento}
-                      onChange={(e) =>
-                        handleCirurgiaChange('descricaoProcedimento', e.target.value)
-                      }
-                      className={`w-full p-3 rounded-xl border text-xs leading-relaxed font-sans ${
-                        darkMode
-                          ? 'bg-[#0A141D] border-slate-700 text-slate-100'
-                          : 'bg-slate-50 border-slate-300 text-[#0A141D]'
-                      }`}
-                    />
-                  </div>
+                  {ordemSecoesCirurgia.map((secaoKey, idx) => {
+                    const metaSec = SECOES_CIRURGIA_META[secaoKey];
+                    if (!metaSec) return null;
+                    const isDragging = draggedSecaoCirIdx === idx;
+                    const isDragOver = dragOverSecaoCirIdx === idx && draggedSecaoCirIdx !== null && draggedSecaoCirIdx !== idx;
+                    return (
+                      <div
+                        key={secaoKey}
+                        draggable
+                        onDragStart={(e) => {
+                          if (!dragSecaoCirPermitidoRef.current) {
+                            e.preventDefault();
+                            return;
+                          }
+                          setDraggedSecaoCirIdx(idx);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', String(idx));
+                        }}
+                        onDragOver={(e) => {
+                          if (draggedSecaoCirIdx === null) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (dragOverSecaoCirIdx !== idx) setDragOverSecaoCirIdx(idx);
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverSecaoCirIdx === idx) setDragOverSecaoCirIdx(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedSecaoCirIdx !== null && draggedSecaoCirIdx !== idx) {
+                            handleReordenarSecaoCirurgia(draggedSecaoCirIdx, idx);
+                          }
+                          setDraggedSecaoCirIdx(null);
+                          setDragOverSecaoCirIdx(null);
+                          dragSecaoCirPermitidoRef.current = false;
+                        }}
+                        onDragEnd={() => {
+                          setDraggedSecaoCirIdx(null);
+                          setDragOverSecaoCirIdx(null);
+                          dragSecaoCirPermitidoRef.current = false;
+                        }}
+                        className={`p-4 sm:p-5 rounded-2xl border space-y-2.5 transition-all duration-150 ${
+                          isDragging
+                            ? 'opacity-50 scale-[0.99] ring-1 ring-[#00D296]/40 border-[#00D296]/50'
+                            : isDragOver
+                            ? 'border-[#00D296] ring-2 ring-[#00D296]/30 shadow-lg shadow-[#00D296]/10'
+                            : darkMode
+                            ? 'bg-[#0F1C26] border-slate-800 hover:border-slate-700'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        } ${isDragging || isDragOver ? (darkMode ? 'bg-[#0F1C26]' : 'bg-white') : ''}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div
+                            onMouseDown={() => { dragSecaoCirPermitidoRef.current = true; }}
+                            onMouseUp={() => { dragSecaoCirPermitidoRef.current = false; }}
+                            title="Arraste para reposicionar esta seção"
+                            className="flex items-center gap-2 min-w-0 flex-1 cursor-grab active:cursor-grabbing select-none"
+                          >
+                            <div
+                              className={`p-1 -ml-1 rounded-lg transition shrink-0 ${
+                                darkMode
+                                  ? 'text-slate-500 hover:text-[#00D296] hover:bg-[#00D296]/10'
+                                  : 'text-slate-400 hover:text-[#0D5C56] hover:bg-slate-100'
+                              }`}
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+                            <span className="w-5 h-5 rounded-full bg-[#00D296]/15 text-[#00D296] text-[10px] font-extrabold flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <label className="text-xs font-extrabold uppercase text-[#00D296] cursor-grab active:cursor-grabbing truncate">
+                              {metaSec.titulo}
+                            </label>
+                          </div>
 
-                  <div
-                    className={`p-4 sm:p-5 rounded-2xl border space-y-2 ${
-                      darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <label className="block text-xs font-extrabold uppercase text-[#00D296]">
-                      3. Evolução e Considerações Finais
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={cirurgiaForm.evolucaoConsideracoes}
-                      onChange={(e) =>
-                        handleCirurgiaChange('evolucaoConsideracoes', e.target.value)
-                      }
-                      className={`w-full p-3 rounded-xl border text-xs leading-relaxed ${
-                        darkMode
-                          ? 'bg-[#0A141D] border-slate-700 text-slate-100'
-                          : 'bg-slate-50 border-slate-300 text-[#0A141D]'
-                      }`}
-                    />
-                  </div>
+                          <div
+                            className={`inline-flex items-center rounded-lg border overflow-hidden shrink-0 ${
+                              darkMode
+                                ? 'bg-[#0A141D] border-slate-700/80'
+                                : 'bg-slate-100 border-slate-200'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoverSecaoCirurgia(idx, 'cima')}
+                              title="Subir seção"
+                              className={`p-1.5 transition ${
+                                idx === 0
+                                  ? 'opacity-25 cursor-not-allowed text-slate-500'
+                                  : darkMode
+                                  ? 'text-slate-300 hover:bg-[#00D296]/15 hover:text-[#00D296]'
+                                  : 'text-slate-600 hover:bg-[#00D296]/15 hover:text-[#0D5C56]'
+                              }`}
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <div className={`w-px h-3.5 ${darkMode ? 'bg-slate-700/80' : 'bg-slate-200'}`} />
+                            <button
+                              type="button"
+                              disabled={idx === ordemSecoesCirurgia.length - 1}
+                              onClick={() => handleMoverSecaoCirurgia(idx, 'baixo')}
+                              title="Descer seção"
+                              className={`p-1.5 transition ${
+                                idx === ordemSecoesCirurgia.length - 1
+                                  ? 'opacity-25 cursor-not-allowed text-slate-500'
+                                  : darkMode
+                                  ? 'text-slate-300 hover:bg-[#00D296]/15 hover:text-[#00D296]'
+                                  : 'text-slate-600 hover:bg-[#00D296]/15 hover:text-[#0D5C56]'
+                              }`}
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <textarea
+                          rows={metaSec.rows}
+                          value={cirurgiaForm[metaSec.campo] || ''}
+                          onChange={(e) => handleCirurgiaChange(metaSec.campo, e.target.value)}
+                          className={`w-full p-3 rounded-xl border text-xs leading-relaxed ${metaSec.extraClass} ${
+                            darkMode
+                              ? 'bg-[#0A141D] border-slate-700 text-slate-100 focus:border-[#00D296]'
+                              : 'bg-slate-50 border-slate-300 text-[#0A141D] focus:border-[#0D5C56]'
+                          }`}
+                        />
+                      </div>
+                    );
+                  })}
 
                   {/* 4. Edição de Legendas das Imagens Intraoperatórias (Página 2) */}
                   {fotosCirurgia.length > 0 && (
@@ -944,11 +1682,322 @@ export default function ReportPreviewModal({
                 </div>
               ) : (
                 /* LISTA DE ÓRGÃOS DO LAUDO DE ULTRASSOM */
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* Card Colapsável: Diagramação & Estilo Exclusivo deste Laudo de Ultrassom */}
+                  <div
+                    className={`rounded-2xl border transition ${
+                      darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div
+                      onClick={() => setEstiloUltrassomAberto(!estiloUltrassomAberto)}
+                      className="px-4 sm:px-5 py-3.5 flex items-center justify-between cursor-pointer select-none gap-2"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-[#00D296]/15 text-[#00D296] flex items-center justify-center shrink-0">
+                          <Palette className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-xs sm:text-sm font-extrabold">
+                              Diagramação & Estilo deste Laudo
+                            </h4>
+                            {temEstiloUltrassomCustom ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00D296]/20 text-[#00D296] border border-[#00D296]/30">
+                                Personalizado só neste laudo
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/20">
+                                Padrão das Configurações
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {estiloUltrassomForm.fontFamily.split(',')[0]} • Cabeçalho {estiloUltrassomForm.fontSizeCabecalho} • Corpo {estiloUltrassomForm.fontSizeBody} • Título {estiloUltrassomForm.fontSizeTitulo}
+                          </p>
+                        </div>
+                      </div>
+                      {estiloUltrassomAberto ? (
+                        <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                    </div>
+
+                    {estiloUltrassomAberto && (
+                      <div className="p-4 sm:p-5 border-t border-slate-800/60 space-y-4 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                          <p className="text-[11px] text-slate-400">
+                            Ajustes feitos aqui valem <strong className="text-[#00D296]">apenas para este laudo</strong> e não alteram seu padrão salvo em Configurações.
+                          </p>
+                          {temEstiloUltrassomCustom && (
+                            <button
+                              type="button"
+                              onClick={handleResetarEstiloUltrassom}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border transition ${
+                                darkMode
+                                  ? 'border-slate-700 bg-[#0A141D] text-slate-300 hover:border-[#00D296] hover:text-[#00D296]'
+                                  : 'border-slate-300 bg-slate-50 text-slate-700 hover:border-[#0D5C56]'
+                              }`}
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Voltar ao Padrão</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Cor Primária
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={estiloUltrassomForm.corPrimaria || '#1B365D'}
+                                onChange={(e) => handleEstiloUltrassomChange('corPrimaria', e.target.value)}
+                                className="w-9 h-9 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
+                              />
+                              <span className="text-xs font-mono text-slate-400">{estiloUltrassomForm.corPrimaria}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Cor Secundária
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={estiloUltrassomForm.corSecundaria || '#4A777A'}
+                                onChange={(e) => handleEstiloUltrassomChange('corSecundaria', e.target.value)}
+                                className="w-9 h-9 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
+                              />
+                              <span className="text-xs font-mono text-slate-400">{estiloUltrassomForm.corSecundaria}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Fonte
+                            </label>
+                            <select
+                              value={estiloUltrassomForm.fontFamily}
+                              onChange={(e) => handleEstiloUltrassomChange('fontFamily', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {FONTES_CIRURGIA.map((f) => (
+                                <option key={f} value={f}>{f.split(',')[0]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Fonte do Cabeçalho
+                            </label>
+                            <select
+                              value={estiloUltrassomForm.fontSizeCabecalho || '10pt'}
+                              onChange={(e) => handleEstiloUltrassomChange('fontSizeCabecalho', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {TAMANHOS_FONTE_CORPO.map((sz) => (
+                                <option key={sz} value={sz}>{sz}</option>
+                              ))}
+                              {estiloUltrassomForm.fontSizeCabecalho && !TAMANHOS_FONTE_CORPO.includes(estiloUltrassomForm.fontSizeCabecalho) && (
+                                <option value={estiloUltrassomForm.fontSizeCabecalho}>{estiloUltrassomForm.fontSizeCabecalho} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Tamanho do Corpo
+                            </label>
+                            <select
+                              value={estiloUltrassomForm.fontSizeBody || '11pt'}
+                              onChange={(e) => handleEstiloUltrassomChange('fontSizeBody', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {TAMANHOS_FONTE_CORPO.map((sz) => (
+                                <option key={sz} value={sz}>{sz}</option>
+                              ))}
+                              {estiloUltrassomForm.fontSizeBody && !TAMANHOS_FONTE_CORPO.includes(estiloUltrassomForm.fontSizeBody) && (
+                                <option value={estiloUltrassomForm.fontSizeBody}>{estiloUltrassomForm.fontSizeBody} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Tamanho do Título
+                            </label>
+                            <select
+                              value={estiloUltrassomForm.fontSizeTitulo || '14pt'}
+                              onChange={(e) => handleEstiloUltrassomChange('fontSizeTitulo', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {TAMANHOS_FONTE_TITULO.map((sz) => (
+                                <option key={sz} value={sz}>{sz}</option>
+                              ))}
+                              {estiloUltrassomForm.fontSizeTitulo && !TAMANHOS_FONTE_TITULO.includes(estiloUltrassomForm.fontSizeTitulo) && (
+                                <option value={estiloUltrassomForm.fontSizeTitulo}>{estiloUltrassomForm.fontSizeTitulo} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Espaço entre Categorias (Órgãos)
+                            </label>
+                            <select
+                              value={estiloUltrassomForm.paragraphSpacing || '8pt'}
+                              onChange={(e) => handleEstiloUltrassomChange('paragraphSpacing', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {ESPACAMENTOS_TOPICOS.map((sp) => (
+                                <option key={sp} value={sp}>
+                                  {sp}
+                                  {sp === '6pt' ? ' (Compacto)' : sp === '10pt' ? ' (Equilibrado)' : sp === '16pt' ? ' (Amplo)' : ''}
+                                </option>
+                              ))}
+                              {estiloUltrassomForm.paragraphSpacing && !ESPACAMENTOS_TOPICOS.includes(estiloUltrassomForm.paragraphSpacing) && (
+                                <option value={estiloUltrassomForm.paragraphSpacing}>{estiloUltrassomForm.paragraphSpacing} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Espaçamento entre Linhas
+                            </label>
+                            <select
+                              value={String(estiloUltrassomForm.lineHeight || '1.35')}
+                              onChange={(e) => handleEstiloUltrassomChange('lineHeight', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              {['1.15', '1.2', '1.25', '1.3', '1.35', '1.4', '1.5', '1.6'].map((lh) => (
+                                <option key={lh} value={lh}>{lh}</option>
+                              ))}
+                              {estiloUltrassomForm.lineHeight && !['1.15', '1.2', '1.25', '1.3', '1.35', '1.4', '1.5', '1.6'].includes(String(estiloUltrassomForm.lineHeight)) && (
+                                <option value={estiloUltrassomForm.lineHeight}>{estiloUltrassomForm.lineHeight} (Extraído)</option>
+                              )}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                              Quebra de Página
+                            </label>
+                            <select
+                              value={estiloUltrassomForm.paginacaoTexto || 'preencher'}
+                              onChange={(e) => handleEstiloUltrassomChange('paginacaoTexto', e.target.value)}
+                              className={`w-full px-3 py-2 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            >
+                              <option value="preencher">Preencher máximo da página</option>
+                              <option value="equilibrar">Equilibrar entre páginas</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">Margem Sup.</label>
+                            <input
+                              type="text"
+                              value={estiloUltrassomForm.marginTop || '20mm'}
+                              onChange={(e) => handleEstiloUltrassomChange('marginTop', e.target.value)}
+                              className={`w-full px-2.5 py-1.5 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">Margem Inf.</label>
+                            <input
+                              type="text"
+                              value={estiloUltrassomForm.marginBottom || '20mm'}
+                              onChange={(e) => handleEstiloUltrassomChange('marginBottom', e.target.value)}
+                              className={`w-full px-2.5 py-1.5 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">Margem Esq.</label>
+                            <input
+                              type="text"
+                              value={estiloUltrassomForm.marginLeft || '15mm'}
+                              onChange={(e) => handleEstiloUltrassomChange('marginLeft', e.target.value)}
+                              className={`w-full px-2.5 py-1.5 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1">Margem Dir.</label>
+                            <input
+                              type="text"
+                              value={estiloUltrassomForm.marginRight || '15mm'}
+                              onChange={(e) => handleEstiloUltrassomChange('marginRight', e.target.value)}
+                              className={`w-full px-2.5 py-1.5 rounded-xl border font-bold text-xs ${
+                                darkMode ? 'bg-[#0A141D] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-[#0A141D]'
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 pt-1 border-t border-slate-800/40">
+                          <label className="inline-flex items-center gap-2 text-[11px] font-bold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={estiloUltrassomForm.mostrarAssinaturaImagem !== false}
+                              onChange={(e) => handleEstiloUltrassomChange('mostrarAssinaturaImagem', e.target.checked)}
+                              className="rounded border-slate-600 accent-[#00D296]"
+                            />
+                            <span className="text-slate-300">Exibir imagem da assinatura</span>
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-[11px] font-bold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={estiloUltrassomForm.mostrarAssinaturaTexto !== false}
+                              onChange={(e) => handleEstiloUltrassomChange('mostrarAssinaturaTexto', e.target.checked)}
+                              className="rounded border-slate-600 accent-[#00D296]"
+                            />
+                            <span className="text-slate-300">Exibir nome e CRMV</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between px-1">
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                      Órgãos Avaliados ({laudoForm.length})
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                        Órgãos Avaliados ({laudoForm.length})
+                      </h4>
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+                        <GripVertical className="w-3 h-3" />
+                        Arraste para reordenar
+                      </span>
+                    </div>
 
                     <button
                       type="button"
@@ -1024,56 +2073,127 @@ export default function ReportPreviewModal({
                   )}
 
                   {/* Cards de cada Órgão */}
-                  {laudoForm.map((item, idx) => (
+                  {laudoForm.map((item, idx) => {
+                    const isDragging = draggedOrgaoIdx === idx;
+                    const isDragOver = dragOverOrgaoIdx === idx && draggedOrgaoIdx !== null && draggedOrgaoIdx !== idx;
+                    return (
                     <div
                       key={idx}
-                      className={`p-4 rounded-2xl border transition group ${
-                        darkMode
+                      draggable
+                      onDragStart={(e) => {
+                        if (!dragOrgaoPermitidoRef.current) {
+                          e.preventDefault();
+                          return;
+                        }
+                        setDraggedOrgaoIdx(idx);
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', String(idx));
+                      }}
+                      onDragOver={(e) => {
+                        if (draggedOrgaoIdx === null) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverOrgaoIdx !== idx) setDragOverOrgaoIdx(idx);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverOrgaoIdx === idx) setDragOverOrgaoIdx(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedOrgaoIdx !== null && draggedOrgaoIdx !== idx) {
+                          handleReordenarOrgao(draggedOrgaoIdx, idx);
+                        }
+                        setDraggedOrgaoIdx(null);
+                        setDragOverOrgaoIdx(null);
+                        dragOrgaoPermitidoRef.current = false;
+                      }}
+                      onDragEnd={() => {
+                        setDraggedOrgaoIdx(null);
+                        setDragOverOrgaoIdx(null);
+                        dragOrgaoPermitidoRef.current = false;
+                      }}
+                      className={`p-4 rounded-2xl border transition-all duration-150 group ${
+                        isDragging
+                          ? 'opacity-50 scale-[0.99] ring-1 ring-[#00D296]/40 border-[#00D296]/50'
+                          : isDragOver
+                          ? 'border-[#00D296] ring-2 ring-[#00D296]/30 shadow-lg shadow-[#00D296]/10'
+                          : darkMode
                           ? 'bg-[#0F1C26] border-slate-800/90 hover:border-slate-700'
                           : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
+                      } ${isDragging || isDragOver ? (darkMode ? 'bg-[#0F1C26]' : 'bg-white') : ''}`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-[#00D296]/15 text-[#00D296] text-[10px] font-extrabold flex items-center justify-center">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div
+                            onMouseDown={() => { dragOrgaoPermitidoRef.current = true; }}
+                            onMouseUp={() => { dragOrgaoPermitidoRef.current = false; }}
+                            title="Arraste para reorganizar"
+                            className={`p-1.5 -ml-1 rounded-lg cursor-grab active:cursor-grabbing transition shrink-0 ${
+                              darkMode
+                                ? 'text-slate-500 hover:text-[#00D296] hover:bg-[#00D296]/10'
+                                : 'text-slate-400 hover:text-[#0D5C56] hover:bg-slate-100'
+                            }`}
+                          >
+                            <GripVertical className="w-4 h-4" />
+                          </div>
+                          <span className="w-5 h-5 rounded-full bg-[#00D296]/15 text-[#00D296] text-[10px] font-extrabold flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
                           <input
                             type="text"
                             value={item.orgao}
                             onChange={(e) => handleAlterarOrgao(idx, 'orgao', e.target.value)}
-                            className={`font-extrabold text-xs uppercase tracking-wide px-2 py-0.5 rounded-lg border border-transparent focus:border-[#00D296] bg-transparent ${
+                            className={`font-extrabold text-xs uppercase tracking-wide px-2 py-0.5 rounded-lg border border-transparent focus:border-[#00D296] bg-transparent min-w-0 flex-1 ${
                               darkMode ? 'text-white' : 'text-[#0A141D]'
                             }`}
                           />
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          {idx > 0 && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div
+                            className={`inline-flex items-center rounded-lg border overflow-hidden ${
+                              darkMode
+                                ? 'bg-[#0A141D] border-slate-700/80'
+                                : 'bg-slate-100 border-slate-200'
+                            }`}
+                          >
                             <button
                               type="button"
+                              disabled={idx === 0}
                               onClick={() => handleMoverOrgao(idx, 'cima')}
                               title="Subir posição"
-                              className="p-1 rounded-lg text-slate-400 hover:text-white"
+                              className={`p-1.5 transition ${
+                                idx === 0
+                                  ? 'opacity-25 cursor-not-allowed text-slate-500'
+                                  : darkMode
+                                  ? 'text-slate-300 hover:bg-[#00D296]/15 hover:text-[#00D296]'
+                                  : 'text-slate-600 hover:bg-[#00D296]/15 hover:text-[#0D5C56]'
+                              }`}
                             >
                               <ChevronUp className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                          {idx < laudoForm.length - 1 && (
+                            <div className={`w-px h-3.5 ${darkMode ? 'bg-slate-700/80' : 'bg-slate-200'}`} />
                             <button
                               type="button"
+                              disabled={idx === laudoForm.length - 1}
                               onClick={() => handleMoverOrgao(idx, 'baixo')}
                               title="Descer posição"
-                              className="p-1 rounded-lg text-slate-400 hover:text-white"
+                              className={`p-1.5 transition ${
+                                idx === laudoForm.length - 1
+                                  ? 'opacity-25 cursor-not-allowed text-slate-500'
+                                  : darkMode
+                                  ? 'text-slate-300 hover:bg-[#00D296]/15 hover:text-[#00D296]'
+                                  : 'text-slate-600 hover:bg-[#00D296]/15 hover:text-[#0D5C56]'
+                              }`}
                             >
                               <ChevronDown className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => handleRemoverOrgao(idx)}
                             title="Remover este órgão do laudo"
-                            className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 transition"
+                            className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/15 transition"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1111,7 +2231,8 @@ export default function ReportPreviewModal({
                         />
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1132,13 +2253,31 @@ export default function ReportPreviewModal({
                       darkMode ? 'bg-[#0E1A24] border-slate-800' : 'bg-slate-100 border-slate-200'
                     }`}
                   >
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                      <FileText className="w-3.5 h-3.5 text-[#00D296]" />
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-300 min-w-0">
+                      <FileText className="w-3.5 h-3.5 text-[#00D296] shrink-0" />
                       <span className="text-[11px] truncate">
                         Documento Oficial ({pacienteForm.nome || 'Paciente'})
                       </span>
+                      {isRecompiling && (
+                        <span className="text-[10px] font-bold text-[#00D296] animate-pulse shrink-0">
+                          Atualizando PDF...
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAutoAtualizarPdf((prev) => !prev)}
+                        title="Atualizar o PDF automaticamente ao alterar campos ou estilos"
+                        className={`px-2 py-1 rounded-lg text-[10px] font-extrabold border transition inline-flex items-center gap-1 ${
+                          autoAtualizarPdf
+                            ? 'border-[#00D296]/40 bg-[#00D296]/15 text-[#00D296]'
+                            : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRecompiling ? 'animate-spin' : ''}`} />
+                        <span>Auto PDF: {autoAtualizarPdf ? 'ON' : 'OFF'}</span>
+                      </button>
                       <a
                         href={pdfUrlLive}
                         target="_blank"

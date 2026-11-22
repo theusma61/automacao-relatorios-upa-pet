@@ -232,7 +232,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   };
 
   // Compatível tanto com patientHeader (novo formato agnóstico) quanto com patientGrid (legado)
-  const pHeader = visual.patientHeader || visual.patientGrid || {
+  const pHeaderBase = visual.patientHeader || visual.patientGrid || {
     layoutType: 'boxed_table',
     valueCase: 'TITLE_CASE',
     sexoAbreviado: false,
@@ -251,6 +251,10 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       [{ key: 'tutor', label: 'Responsável:', widthPct: 100 }],
       [{ key: 'requisitante', label: 'Médico(a) Veterinário(a) Requisitante:', widthPct: 100 }]
     ]
+  };
+  const pHeader = {
+    ...pHeaderBase,
+    ...(layout.font_size_cabecalho ? { fontSize: layout.font_size_cabecalho } : {})
   };
 
   const tCfg = {
@@ -451,8 +455,40 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     return true;
   });
 
+  // Estima geometria real de topo/rodapé/assinatura para o Auto-Fit agnóstico nunca cortar rodapé ou assinatura
+  const temRodapeModelo = Boolean(
+    !ehStationeryFullPage && fCfg.showOnTextPages !== 'baked_in_stationery' &&
+    (fCfg.disclaimerText || (Array.isArray(fCfg.contactLines) && fCfg.contactLines.length > 0) || (fCfg.showFooterLogo && footerLogoUri))
+  );
+  const alturaTopoPag1EstimadaMm = ehStationeryFullPage
+    ? (parseMmNumber(margins.topFirstPage, 50) + (tCfg.showTextTitle !== false ? 18 : 6))
+    : (ehInlineLogoHeader
+        ? (inlineHeaderHeightMm + Math.max(2, parseMmNumber(margins.topFirstPage, 16) - 10) + (tCfg.showTextTitle !== false ? 22 : 6))
+        : (parseMmNumber(margins.topFirstPage, 20) + (headerBannerUri ? 30 : 24) + (tCfg.showTextTitle !== false ? 20 : 6)));
+  const repetirCabCont = ehInlineLogoHeader && Boolean(visual.repeatPatientHeaderOnTextPages || visual.repeatHeaderOnTextPage2);
+  const alturaTopoContEstimadaMm = repetirCabCont
+    ? (inlineHeaderHeightMm + 8)
+    : parseMmNumber(margins.topContinuationPages, 22);
+
+  const mostrarAssinaturaImagem =
+    layout.mostrar_assinatura_imagem !== false &&
+    visual.mostrarAssinaturaImagem !== false &&
+    sCfg.showImage !== false;
+  const mostrarAssinaturaTexto =
+    layout.mostrar_assinatura_texto !== false &&
+    visual.mostrarAssinaturaTexto !== false &&
+    sCfg.showText !== false;
+
   // Aplica Auto-Fit dinâmico e agnóstico na clonagem visual
-  const autoFit = calcularAutoFitLaudoTextual(laudoFiltrado, layout, opcoes);
+  const autoFit = calcularAutoFitLaudoTextual(laudoFiltrado, layout, {
+    ...opcoes,
+    temRodape: temRodapeModelo,
+    temAssinaturaImg: Boolean(mostrarAssinaturaImagem && sigUri),
+    temAssinaturaTexto: Boolean(mostrarAssinaturaTexto),
+    alturaTopoPag1Mm: alturaTopoPag1EstimadaMm,
+    alturaTopoContMm: alturaTopoContEstimadaMm,
+    paginacaoTexto: layout.paginacao_texto || visual.paginacaoTexto || opcoes.paginacaoTexto
+  });
   const laudoNormalizado = autoFit.laudoAjustado;
   const paragrafosOrgaos = laudoNormalizado.map((item) =>
     sanitizarParagrafoOrgao(item, {
@@ -463,13 +499,10 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
     })
   );
 
-  // Paginação inteligente: Se o exame couber em 1 página (modo single_page),
-  // NUNCA quebra em 2 páginas artificiais que deixam folhas com 80% em branco!
-  const usarDuasPaginasTexto = autoFit.modoPaginacao === 'two_page_balanced' || autoFit.modoPaginacao === 'two_page_flow';
-  const cortePag1 = autoFit.cortePagina1 || Math.ceil(paragrafosOrgaos.length / 2);
-
-  const orgaosPag1 = usarDuasPaginasTexto ? paragrafosOrgaos.slice(0, cortePag1).join('\n') : paragrafosOrgaos.join('\n');
-  const orgaosPag2 = usarDuasPaginasTexto ? paragrafosOrgaos.slice(cortePag1).join('\n') : '';
+  // Suporte agnóstico a N páginas de texto (1, 2, 3...) respeitando sempre rodapé e assinatura
+  const paginasTextoHtmlList = (Array.isArray(autoFit.paginasIndices) && autoFit.paginasIndices.length > 0)
+    ? autoFit.paginasIndices.map((indices) => indices.map((i) => paragrafosOrgaos[i]).filter(Boolean).join('\n'))
+    : [paragrafosOrgaos.join('\n')];
 
   const nomeMedicoSanitizado = (opcoes.nomeMedico && opcoes.nomeMedico !== 'null' && opcoes.nomeMedico !== 'undefined')
     ? String(opcoes.nomeMedico).trim()
@@ -485,22 +518,24 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
         ...(crmvMedicoSanitizado ? [{ text: crmvMedicoSanitizado, bold: false, italic: false }] : [])
       ];
 
-  const linhasAssinaturaTexto = linhasAssinaturaConfig.map((l) => {
-    let conteudo = (l.text || '').trim();
-    if (!conteudo || conteudo === 'null' || conteudo === 'undefined') return '';
-    if (l.italic) conteudo = `<em>${conteudo}</em>`;
-    if (l.bold) conteudo = `<strong>${conteudo}</strong>`;
-    return `<p class="sig-line" ${l.fontSize ? `style="font-size: ${l.fontSize};"` : ''}>${conteudo}</p>`;
-  }).filter(Boolean).join('\n');
+  const linhasAssinaturaTexto = mostrarAssinaturaTexto
+    ? linhasAssinaturaConfig.map((l) => {
+        let conteudo = (l.text || '').trim();
+        if (!conteudo || conteudo === 'null' || conteudo === 'undefined') return '';
+        if (l.italic) conteudo = `<em>${conteudo}</em>`;
+        if (l.bold) conteudo = `<strong>${conteudo}</strong>`;
+        return `<p class="sig-line" ${l.fontSize ? `style="font-size: ${l.fontSize};"` : ''}>${conteudo}</p>`;
+      }).filter(Boolean).join('\n')
+    : '';
 
-  const imgAssinaturaHtml = sigUri
+  const imgAssinaturaHtml = (mostrarAssinaturaImagem && sigUri)
     ? `<div class="sig-img-wrap"><img src="${sigUri}" class="sig-img" alt="Assinatura"></div>`
     : '';
-  const linhaAssinaturaHtml = sCfg.hasTopLine
+  const linhaAssinaturaHtml = (sCfg.hasTopLine && (imgAssinaturaHtml || linhasAssinaturaTexto))
     ? `<div class="sig-top-line"></div>`
     : '';
 
-  const blocoAssinaturaHtml = `
+  const blocoAssinaturaHtml = (imgAssinaturaHtml || linhasAssinaturaTexto) ? `
     <div class="signature-block">
       <div class="signature-inner">
         ${sCfg.order === 'text_above_image'
@@ -508,7 +543,7 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
           : `${imgAssinaturaHtml}\n${linhaAssinaturaHtml}\n${linhasAssinaturaTexto}`}
       </div>
     </div>
-  `;
+  ` : '';
 
   const mostrarRodapeHtmlNasPaginasTexto = !ehStationeryFullPage && fCfg.showOnTextPages !== 'baked_in_stationery';
   const mostrarRodapeEmTodasPaginasTexto = mostrarRodapeHtmlNasPaginasTexto && fCfg.showOnTextPages === 'all_text_pages';
@@ -808,8 +843,11 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       text-align: center;
     }
     .sig-img {
-      height: ${sCfg.signatureImageHeightMm || '15mm'};
+      max-height: ${sCfg.signatureImageHeightMm || '15mm'};
+      max-width: 65mm;
       width: auto;
+      height: auto;
+      object-fit: contain;
       display: inline-block;
     }
     .final-footer-wrap {
@@ -849,8 +887,11 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       padding-bottom: 2mm;
     }
     .footer-mini-logo {
-      height: 9.5mm;
+      max-height: 9.5mm;
+      max-width: 55mm;
       width: auto;
+      height: auto;
+      object-fit: contain;
       display: inline-block;
     }
     .image-page-body {
@@ -891,7 +932,12 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   </style>
 </head>
 <body data-page-fill="natural">
-  <!-- PÁGINA 1 -->
+  <!-- PÁGINAS DE TEXTO (1 A N PÁGINAS, SEMPRE RESPEITANDO RODAPÉ E ASSINATURA) -->
+  ${paginasTextoHtmlList.map((conteudoPagHtml, pagIdx) => {
+    const ehPrimeira = pagIdx === 0;
+    const ehUltima = pagIdx === paginasTextoHtmlList.length - 1;
+    if (ehPrimeira) {
+      return `
   <div class="cloned-page">
     ${bgLayerPag1Html}
     <div class="page-foreground">
@@ -902,17 +948,16 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
           ${!ehInlineLogoHeader ? blocoPacienteHtml : ''}
           ${blocoTituloHtml}
           <div class="organs-content">
-            ${orgaosPag1}
+            ${conteudoPagHtml}
           </div>
-          ${!usarDuasPaginasTexto ? blocoAssinaturaHtml : ''}
+          ${ehUltima ? blocoAssinaturaHtml : ''}
         </div>
       </div>
-      ${usarDuasPaginasTexto ? blocoRodapePag1Html : blocoDisclaimerRodapeFinalHtml}
+      ${ehUltima ? blocoDisclaimerRodapeFinalHtml : blocoRodapePag1Html}
     </div>
-  </div>
-
-  <!-- PÁGINA 2 DE TEXTO -->
-  ${usarDuasPaginasTexto ? `
+  </div>`;
+    }
+    return `
   <div class="cloned-page">
     ${bgLayerPag2Html}
     <div class="page-foreground">
@@ -920,15 +965,15 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
         ${repetirCabecalhoInlinePag2 ? inlineHeaderHtml : ''}
         <div class="page-2-body">
           <div class="organs-content">
-            ${orgaosPag2}
+            ${conteudoPagHtml}
           </div>
-          ${blocoAssinaturaHtml}
+          ${ehUltima ? blocoAssinaturaHtml : ''}
         </div>
       </div>
-      ${blocoDisclaimerRodapeFinalHtml}
+      ${ehUltima ? blocoDisclaimerRodapeFinalHtml : blocoRodapePag1Html}
     </div>
-  </div>
-  ` : ''}
+  </div>`;
+  }).join('\n')}
 
   <!-- PÁGINAS SEGUINTES: MOSAICO DE FOTOS DE ULTRASSOM -->
   ${paginasImagens.map((fotos) => {
@@ -1128,7 +1173,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     .header { display: flex; align-items: center; margin-bottom: ${autoFit.marginHeaderBottom}; border-bottom: 1px solid #d1d5db; padding-bottom: ${autoFit.paddingHeaderBottom}; }
     .logo-box { width: 155px; max-height: 68px; display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0; }
     .logo-img { width: auto; height: auto; max-width: 100%; max-height: ${autoFit.logoMaxHeight}; object-fit: contain; object-position: left center; display: block; }
-    .patient-info { flex: 1; display: flex; justify-content: space-between; font-size: 10pt; }
+    .patient-info { flex: 1; display: flex; justify-content: space-between; font-size: ${layout.font_size_cabecalho || '10pt'}; }
     .patient-info .col { width: 48%; }
     .patient-info .col p { margin: 1.5px 0; }
     .title-box { text-align: center; margin: ${autoFit.marginTitleBox}; }
@@ -1210,17 +1255,19 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     null;
   const templateVisual = perfilLaudo?.templateVisual || layoutEfetivo?.visual_config_json || {};
 
-  await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layoutEfetivo, {
-    usuario,
-    nomeMedico,
-    crmvMedico,
-    clinicaNome,
-    perfilLaudo,
-    templateVisual,
-    assinaturaPath: layoutEfetivo?.assinatura_extraida_url || usuario.assinaturaUrl || null
-  });
+  if (!opcoes.apenasPdf) {
+    await gerarDocxLaudo(dadosPaciente, laudoArray, caminhoDocx, caminhoLogoEfetivo, imagensPaths, layoutEfetivo, {
+      usuario,
+      nomeMedico,
+      crmvMedico,
+      clinicaNome,
+      perfilLaudo,
+      templateVisual,
+      assinaturaPath: layoutEfetivo?.assinatura_extraida_url || usuario.assinaturaUrl || null
+    });
+  }
 
-  return { caminhoPdf, caminhoDocx };
+  return { caminhoPdf, caminhoDocx: opcoes.apenasPdf ? null : caminhoDocx };
 }
 
 module.exports = {

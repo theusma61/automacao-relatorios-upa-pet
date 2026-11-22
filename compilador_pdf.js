@@ -27,15 +27,51 @@ function criarFilaConcorrenciaUnica() {
 
 const filaPdf = criarFilaConcorrenciaUnica();
 
-async function compilarComPuppeteer(puppeteer, fileUrl, caminhoPdf, argsLaunch, executablePath) {
-  const browser = await puppeteer.launch({
+let browserCompartilhado = null;
+let timerFecharBrowser = null;
+const IDLE_CLOSE_MS = parseInt(process.env.PDF_BROWSER_IDLE_MS || '60000', 10) || 60000;
+
+function agendarFechamentoOcioso() {
+  if (timerFecharBrowser) clearTimeout(timerFecharBrowser);
+  timerFecharBrowser = setTimeout(async () => {
+    const b = browserCompartilhado;
+    browserCompartilhado = null;
+    timerFecharBrowser = null;
+    if (b) {
+      await b.close().catch(() => {});
+    }
+  }, IDLE_CLOSE_MS);
+  if (typeof timerFecharBrowser.unref === 'function') {
+    timerFecharBrowser.unref();
+  }
+}
+
+async function obterBrowserPuppeteer(puppeteer, argsLaunch, executablePath) {
+  if (browserCompartilhado && browserCompartilhado.isConnected()) {
+    if (timerFecharBrowser) clearTimeout(timerFecharBrowser);
+    return browserCompartilhado;
+  }
+  browserCompartilhado = await puppeteer.launch({
     headless: true,
     args: argsLaunch,
     executablePath
   });
+  browserCompartilhado.on('disconnected', () => {
+    browserCompartilhado = null;
+    if (timerFecharBrowser) {
+      clearTimeout(timerFecharBrowser);
+      timerFecharBrowser = null;
+    }
+  });
+  return browserCompartilhado;
+}
+
+async function compilarComPuppeteer(puppeteer, fileUrl, caminhoPdf, argsLaunch, executablePath) {
+  const browser = await obterBrowserPuppeteer(puppeteer, argsLaunch, executablePath);
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
-    await page.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 60000 });
+    await page.goto(fileUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve())).catch(() => {});
     await page.pdf({
       path: caminhoPdf,
       format: 'A4',
@@ -44,7 +80,8 @@ async function compilarComPuppeteer(puppeteer, fileUrl, caminhoPdf, argsLaunch, 
     });
     return caminhoPdf;
   } finally {
-    await browser.close().catch(() => {});
+    await page.close().catch(() => {});
+    agendarFechamentoOcioso();
   }
 }
 

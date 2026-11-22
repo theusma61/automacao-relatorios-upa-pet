@@ -17,7 +17,7 @@ const { prisma } = require('./db');
 const { analisarExameComIA } = require('./analisador_ia');
 const { gerarDocumentosExame } = require('./motor_laudo');
 const { analisarCirurgiaComIA } = require('./analisador_cirurgia');
-const { gerarDocumentosCirurgicos } = require('./motor_cirurgia');
+const { gerarDocumentosCirurgicos, gerarPdfCirurgico } = require('./motor_cirurgia');
 const {
   carregarModelosCirurgicos,
   obterModeloPorId,
@@ -488,6 +488,10 @@ app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
     return res.status(404).send('Arquivo não encontrado ou já expirou.');
   }
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   if (req.query.inline === '1' || req.query.preview === '1') {
     const isPdf = safeFilename.toLowerCase().endsWith('.pdf');
     res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/octet-stream');
@@ -623,6 +627,38 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
       if (docx) docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docx)}`;
     }
 
+    const layoutUsDados = await obterLayout(req.usuario?.id || null).catch(() => null);
+    const perfilUsDados = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const tvUsPadrao = perfilUsDados?.templateVisual || {};
+    const estiloPadraoUs = {
+      fontFamily: tvUsPadrao.fontFamily || layoutUsDados?.font_family || 'Calibri, sans-serif',
+      fontSizeCabecalho: tvUsPadrao.fontSizeCabecalho || layoutUsDados?.font_size_cabecalho || tvUsPadrao.visualConfigClonado?.patientHeader?.fontSize || '10pt',
+      fontSizeBody: tvUsPadrao.fontSizeBody || layoutUsDados?.font_size_body || '11pt',
+      fontSizeTitulo: tvUsPadrao.fontSizeTitulo || layoutUsDados?.font_size_titulo || '14pt',
+      paragraphSpacing: tvUsPadrao.paragraphSpacing || layoutUsDados?.paragraph_spacing || '8pt',
+      lineHeight: String(tvUsPadrao.lineHeight || layoutUsDados?.line_height || '1.35'),
+      paginacaoTexto: tvUsPadrao.paginacaoTexto || layoutUsDados?.paginacao_texto || 'preencher',
+      mostrarAssinaturaImagem: tvUsPadrao.mostrarAssinaturaImagem !== undefined ? Boolean(tvUsPadrao.mostrarAssinaturaImagem) : true,
+      mostrarAssinaturaTexto: tvUsPadrao.mostrarAssinaturaTexto !== undefined ? Boolean(tvUsPadrao.mostrarAssinaturaTexto) : true,
+      corPrimaria: tvUsPadrao.corPrimaria || layoutUsDados?.cor_primaria || '#1B365D',
+      corSecundaria: tvUsPadrao.corSecundaria || layoutUsDados?.cor_secundaria || '#4A777A',
+      marginTop: tvUsPadrao.marginTop || layoutUsDados?.margin_top || '20mm',
+      marginBottom: tvUsPadrao.marginBottom || layoutUsDados?.margin_bottom || '20mm',
+      marginLeft: tvUsPadrao.marginLeft || layoutUsDados?.margin_left || '15mm',
+      marginRight: tvUsPadrao.marginRight || layoutUsDados?.margin_right || '15mm'
+    };
+
+    let estiloOverrideUs = null;
+    const metaUsPath = path.join(jobFolder, 'meta_exame.json');
+    if (fs.existsSync(metaUsPath)) {
+      try {
+        const metaUs = JSON.parse(fs.readFileSync(metaUsPath, 'utf8'));
+        if (metaUs.estiloOverride && typeof metaUs.estiloOverride === 'object') {
+          estiloOverrideUs = metaUs.estiloOverride;
+        }
+      } catch (_) {}
+    }
+
     res.json({
       sucesso: true,
       jobId: safeJobId,
@@ -636,8 +672,10 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
         data: ''
       },
       laudo: laudo || [],
-      pdfUrl,
-      docxUrl
+      estiloPadrao: estiloPadraoUs,
+      estiloOverride: estiloOverrideUs,
+      pdfUrl: pdfUrl ? `${pdfUrl}${pdfUrl.includes('?') ? '&' : '?'}v=${Date.now()}` : '',
+      docxUrl: docxUrl ? `${docxUrl}${docxUrl.includes('?') ? '&' : '?'}v=${Date.now()}` : ''
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar dados do exame: ' + err.message });
@@ -684,6 +722,7 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
 
     let fotosCaminhos = [];
     let legendasFotos = Array.isArray(cirurgia?.legendasFotos) ? cirurgia.legendasFotos : [];
+    let estiloOverride = (cirurgia?.estiloOverride && typeof cirurgia.estiloOverride === 'object') ? cirurgia.estiloOverride : null;
     const metaPath = path.join(jobFolder, 'meta_cirurgia.json');
     if (fs.existsSync(metaPath)) {
       try {
@@ -700,6 +739,9 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
         if (Array.isArray(meta.legendasFotos) && meta.legendasFotos.length > 0) {
           legendasFotos = meta.legendasFotos;
         }
+        if (meta.estiloOverride && typeof meta.estiloOverride === 'object') {
+          estiloOverride = meta.estiloOverride;
+        }
       } catch (_) {}
     }
 
@@ -714,7 +756,28 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
     }
 
     const perfilCir = req.usuario?.id ? await obterPerfilCirurgico(req.usuario.id).catch(() => null) : null;
-    const legendaPadrao = perfilCir?.templateVisual?.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica';
+    const layoutUsuarioDados = await obterLayout(req.usuario?.id || null).catch(() => null);
+    const tvCirPadrao = perfilCir?.templateVisual || {};
+    const estiloPadrao = {
+      tipoCabecalho: tvCirPadrao.tipoCabecalho || 'logo-esquerda-dados-direita',
+      tipoDadosPaciente: tvCirPadrao.tipoDadosPaciente || 'duas-colunas-limpo',
+      estiloSecoes: tvCirPadrao.estiloSecoes || 'negrito-inline',
+      decoracaoTitulo: tvCirPadrao.decoracaoTitulo || 'nenhuma',
+      posicaoAssinatura: tvCirPadrao.posicaoAssinatura || 'centro',
+      mostrarAssinaturaImagem: tvCirPadrao.mostrarAssinaturaImagem !== undefined ? Boolean(tvCirPadrao.mostrarAssinaturaImagem) : true,
+      mostrarAssinaturaTexto: tvCirPadrao.mostrarAssinaturaTexto !== undefined ? Boolean(tvCirPadrao.mostrarAssinaturaTexto) : true,
+      rotuloResponsavel: tvCirPadrao.rotuloResponsavel || 'Responsável',
+      tituloDocumento: tvCirPadrao.tituloDocumento || 'RELATÓRIO CIRÚRGICO',
+      subtituloDocumento: tvCirPadrao.subtituloDocumento || '',
+      corPrimaria: tvCirPadrao.corPrimaria || layoutUsuarioDados?.cor_primaria || '#1B365D',
+      corSecundaria: tvCirPadrao.corSecundaria || layoutUsuarioDados?.cor_secundaria || '#4A777A',
+      fontFamily: tvCirPadrao.fontFamily || layoutUsuarioDados?.font_family || 'Calibri, sans-serif',
+      fontSizeBody: tvCirPadrao.fontSizeBody || layoutUsuarioDados?.font_size_body || '11pt',
+      fontSizeCabecalho: tvCirPadrao.fontSizeCabecalho || layoutUsuarioDados?.font_size_cabecalho || tvCirPadrao.fontSizeBody || layoutUsuarioDados?.font_size_body || '11pt',
+      fontSizeTitulo: tvCirPadrao.fontSizeTitulo || layoutUsuarioDados?.font_size_titulo || '13.5pt',
+      paragraphSpacing: tvCirPadrao.paragraphSpacing || layoutUsuarioDados?.paragraph_spacing || '8pt'
+    };
+    const legendaPadrao = tvCirPadrao.legendaPadraoFoto || 'Registro fotográfico intraoperatório / peça cirúrgica';
 
     const fotos = fotosCaminhos
       .filter(p => fs.existsSync(p))
@@ -744,10 +807,12 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
       jobId: safeJobId,
       paciente: paciente || { nome: 'Paciente', especie: 'Canina' },
       cirurgia: cirurgia || {},
+      estiloPadrao,
+      estiloOverride,
       fotos,
       legendasFotos: fotos.map(f => f.legenda),
-      pdfUrl,
-      docxUrl
+      pdfUrl: pdfUrl ? `${pdfUrl}${pdfUrl.includes('?') ? '&' : '?'}v=${Date.now()}` : '',
+      docxUrl: docxUrl ? `${docxUrl}${docxUrl.includes('?') ? '&' : '?'}v=${Date.now()}` : ''
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar dados da cirurgia: ' + err.message });
@@ -1259,6 +1324,209 @@ app.put('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
   }
 });
 
+// Pré-visualização ao vivo em PDF real do Padrão Cirúrgico (sem salvar no banco)
+app.post('/api/cirurgia/preview-padrao', exigirAutenticacao, async (req, res) => {
+  const osMod = require('os');
+  const tmpPdf = path.join(osMod.tmpdir(), `preview_padrao_cir_${req.usuario.id}_${Date.now()}.pdf`);
+  try {
+    const body = req.body || {};
+    const layoutUsuario = await obterLayout(req.usuario?.id || null).catch(() => null);
+    const perfilLaudoUsuario = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const perfilCirDb = req.usuario?.id ? await obterPerfilCirurgico(req.usuario.id).catch(() => null) : null;
+
+    const templateVisualPreview = {
+      ...(perfilCirDb?.templateVisual || {}),
+      ...(body.templateVisual || {})
+    };
+    const perfilCirPreview = {
+      ...(perfilCirDb || {}),
+      ativo: true,
+      nomeDetectado: body.nomeDetectado || perfilCirDb?.nomeDetectado || req.usuario?.nome,
+      crmvDetectado: body.crmvDetectado || perfilCirDb?.crmvDetectado || req.usuario?.crmv,
+      clinicaDetectada: body.clinicaDetectada || perfilCirDb?.clinicaDetectada || req.usuario?.nomeClinica,
+      templateVisual: templateVisualPreview,
+      layoutDetectado: templateVisualPreview,
+      estiloRedacao: body.estiloRedacao || perfilCirDb?.estiloRedacao || {}
+    };
+
+    const usuarioEfetivo = {
+      ...(req.usuario || {}),
+      nome: perfilCirPreview.nomeDetectado || req.usuario?.nome,
+      crmv: perfilCirPreview.crmvDetectado || req.usuario?.crmv,
+      nomeClinica: perfilCirPreview.clinicaDetectada || req.usuario?.nomeClinica
+    };
+
+    const dadosPacienteExemplo = {
+      nome: 'Thor',
+      sexo: 'Macho',
+      idade: '5 anos',
+      tutor: 'Carlos Silva',
+      especie: 'Canina',
+      peso: '14 kg',
+      data: new Date().toLocaleDateString('pt-BR')
+    };
+
+    const fraseAntissepsia = perfilCirPreview.estiloRedacao?.frasePadraoAntissepsia ||
+      'A paciente foi submetida à anestesia geral inalatória com monitoração multiparamétrica transoperatória, posicionada em decúbito dorsal horizontal. Realizou-se tricotomia ampla e antissepsia rigorosa com clorexidina degermante e alcoólica.';
+    const fraseEvolucao = perfilCirPreview.estiloRedacao?.frasePadraoEvolucao ||
+      'O procedimento transcorreu sem intercorrências transoperatórias, mantendo-se estabilidade hemodinâmica durante todo o ato cirúrgico. Recuperação pós-anestésica satisfatória.';
+
+    const dadosCirurgiaExemplo = {
+      data: new Date().toLocaleDateString('pt-BR'),
+      procedimento: 'Ovariossalpingohisterectomia eletiva',
+      diagnosticoPreCirurgico: 'Indicação eletiva para controle populacional e prevenção de afecções reprodutivas.',
+      descricaoProcedimento: `${fraseAntissepsia}\n\nRealizou-se acesso mediano ventral, ligadura dupla dos pedículos vasculares com fio absorvível e síntese da parede abdominal por planos anatômicos com aposição cutânea adequada.`,
+      evolucaoConsideracoes: fraseEvolucao
+    };
+
+    await gerarPdfCirurgico(dadosPacienteExemplo, dadosCirurgiaExemplo, tmpPdf, [], {
+      usuario: usuarioEfetivo,
+      layout: layoutUsuario,
+      perfilLaudo: perfilLaudoUsuario,
+      perfilCirurgico: perfilCirPreview
+    });
+
+    const pdfBuffer = fs.readFileSync(tmpPdf);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="preview_padrao_cirurgico.pdf"');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.send(pdfBuffer);
+  } catch (err) {
+    logger.error('Erro ao gerar preview PDF do padrão cirúrgico', { error: err.message });
+    return res.status(500).json({ error: 'Erro ao gerar pré-visualização PDF: ' + err.message });
+  } finally {
+    if (fs.existsSync(tmpPdf)) {
+      try { fs.unlinkSync(tmpPdf); } catch (_) {}
+    }
+  }
+});
+
+// Pré-visualização ao vivo em PDF real do Padrão de Laudo de Ultrassom (sem salvar no banco)
+app.post('/api/laudos/preview-padrao', exigirAutenticacao, async (req, res) => {
+  const osMod = require('os');
+  const tmpDir = fs.mkdtempSync(path.join(osMod.tmpdir(), `preview_padrao_us_${req.usuario.id}_`));
+  try {
+    const body = req.body || {};
+    const layoutBase = await obterLayout(req.usuario?.id || null).catch(() => ({}));
+    const perfilDb = req.usuario?.id ? await obterPerfilLaudo(req.usuario.id).catch(() => null) : null;
+    const tv = {
+      ...(perfilDb?.templateVisual || {}),
+      ...(body.templateVisual || {})
+    };
+
+    const visualBase = tv.visualConfigClonado || layoutBase?.visual_config_json || null;
+    let visualClonadoPreview = visualBase ? JSON.parse(JSON.stringify(visualBase)) : null;
+    if (visualClonadoPreview) {
+      visualClonadoPreview.bodyTypography = {
+        ...(visualClonadoPreview.bodyTypography || {}),
+        ...(tv.fontFamily ? { fontFamily: tv.fontFamily } : {}),
+        ...(tv.fontSizeBody ? { fontSize: tv.fontSizeBody } : {}),
+        ...(tv.lineHeight ? { lineHeight: String(tv.lineHeight) } : {}),
+        ...(tv.paragraphSpacing ? { paragraphSpacing: tv.paragraphSpacing } : {})
+      };
+      visualClonadoPreview.titleConfig = {
+        ...(visualClonadoPreview.titleConfig || {}),
+        ...(tv.fontSizeTitulo ? { fontSize: tv.fontSizeTitulo } : {}),
+        ...(tv.corPrimaria ? { color: tv.corPrimaria } : {})
+      };
+      if (tv.fontSizeCabecalho) {
+        visualClonadoPreview.patientHeader = {
+          ...(visualClonadoPreview.patientHeader || {}),
+          fontSize: tv.fontSizeCabecalho
+        };
+      }
+      visualClonadoPreview.margins = {
+        ...(visualClonadoPreview.margins || {}),
+        ...(tv.marginTop ? { topFirstPage: tv.marginTop, topContinuationPages: tv.marginTop } : {}),
+        ...(tv.marginBottom ? { bottom: tv.marginBottom } : {}),
+        ...(tv.marginLeft ? { left: tv.marginLeft } : {}),
+        ...(tv.marginRight ? { right: tv.marginRight } : {})
+      };
+    }
+
+    const layoutPreview = {
+      ...layoutBase,
+      font_family: tv.fontFamily || layoutBase?.font_family || 'Calibri, sans-serif',
+      font_size_body: tv.fontSizeBody || layoutBase?.font_size_body || '11pt',
+      font_size_cabecalho: tv.fontSizeCabecalho || layoutBase?.font_size_cabecalho || tv.fontSizeBody || '10pt',
+      font_size_titulo: tv.fontSizeTitulo || layoutBase?.font_size_titulo || '14pt',
+      margin_top: tv.marginTop || layoutBase?.margin_top || '20mm',
+      margin_bottom: tv.marginBottom || layoutBase?.margin_bottom || '20mm',
+      margin_left: tv.marginLeft || layoutBase?.margin_left || '15mm',
+      margin_right: tv.marginRight || layoutBase?.margin_right || '15mm',
+      line_height: tv.lineHeight || layoutBase?.line_height || '1.35',
+      paginacao_texto: tv.paginacaoTexto || layoutBase?.paginacao_texto || 'preencher',
+      mostrar_assinatura_imagem: tv.mostrarAssinaturaImagem !== undefined ? Boolean(tv.mostrarAssinaturaImagem) : true,
+      mostrar_assinatura_texto: tv.mostrarAssinaturaTexto !== undefined ? Boolean(tv.mostrarAssinaturaTexto) : true,
+      paragraph_spacing: tv.paragraphSpacing || layoutBase?.paragraph_spacing || '8pt',
+      cor_primaria: tv.corPrimaria || layoutBase?.cor_primaria || '#1B365D',
+      cor_secundaria: tv.corSecundaria || layoutBase?.cor_secundaria || '#4A777A',
+      ...(visualClonadoPreview ? { modo_template: 'clonado_pdf', visual_config_json: visualClonadoPreview } : {})
+    };
+
+    const perfilPreview = {
+      ...(perfilDb || {}),
+      ativo: true,
+      nomeDetectado: body.nomeDetectado || perfilDb?.nomeDetectado || req.usuario?.nome,
+      crmvDetectado: body.crmvDetectado || perfilDb?.crmvDetectado || req.usuario?.crmv,
+      clinicaDetectada: body.clinicaDetectada || perfilDb?.clinicaDetectada || req.usuario?.nomeClinica,
+      templateVisual: {
+        ...tv,
+        ...(visualClonadoPreview ? { visualConfigClonado: visualClonadoPreview } : {})
+      },
+      ordemOrgaos: Array.isArray(body.ordemOrgaos) && body.ordemOrgaos.length > 0 ? body.ordemOrgaos : (perfilDb?.ordemOrgaos || []),
+      frasesNormalidade: body.frasesNormalidade || perfilDb?.frasesNormalidade || {}
+    };
+
+    const orgaosExemplo = (perfilPreview.ordemOrgaos.length > 0
+      ? perfilPreview.ordemOrgaos
+      : ['BEXIGA', 'RIM ESQUERDO', 'RIM DIREITO', 'BAÇO', 'FÍGADO', 'ESTÔMAGO', 'ALÇAS INTESTINAIS']
+    ).map((orgao) => ({
+      orgao: String(orgao).toUpperCase(),
+      texto: perfilPreview.frasesNormalidade?.[orgao] ||
+        perfilPreview.frasesNormalidade?.[String(orgao).toUpperCase()] ||
+        'Dimensões normais, contornos regulares, parênquima homogêneo e ecogenicidade preservada sem alterações ultrassonográficas evidentes.',
+      diagDif: ''
+    }));
+
+    const pacienteExemplo = {
+      nome: 'Thor',
+      especie: 'Canina',
+      raca: 'SRD',
+      sexo: 'Macho',
+      idade: '5 anos',
+      peso: '14 kg',
+      tutor: 'Carlos Silva',
+      requisitante: 'Dra. Ana Paula',
+      data: new Date().toLocaleDateString('pt-BR')
+    };
+
+    const usuarioEfetivo = {
+      ...(req.usuario || {}),
+      nome: perfilPreview.nomeDetectado || req.usuario?.nome,
+      crmv: perfilPreview.crmvDetectado || req.usuario?.crmv,
+      nomeClinica: perfilPreview.clinicaDetectada || req.usuario?.nomeClinica
+    };
+
+    const docs = await gerarDocumentosExame(pacienteExemplo, orgaosExemplo, [], tmpDir, layoutPreview, {
+      usuario: usuarioEfetivo,
+      perfilLaudo: perfilPreview,
+      apenasPdf: true
+    });
+
+    const pdfBuffer = fs.readFileSync(docs.caminhoPdf);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="preview_padrao_ultrassom.pdf"');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.send(pdfBuffer);
+  } catch (err) {
+    logger.error('Erro ao gerar preview PDF do padrão de ultrassom', { error: err.message });
+    return res.status(500).json({ error: 'Erro ao gerar pré-visualização PDF: ' + err.message });
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
 app.delete('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
   try {
     await desativarPerfilCirurgico(req.usuario.id);
@@ -1686,7 +1954,7 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 // =========================================================================
 
 app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar_ultrassom'), async (req, res) => {
-  const { jobId, paciente, laudo } = req.body;
+  const { jobId, paciente, laudo, estiloOverride: estiloOverrideReq } = req.body;
   if (!jobId || !laudo || !Array.isArray(laudo)) {
     return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId, paciente e a lista de órgãos (laudo).' });
   }
@@ -1731,15 +1999,86 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
       assinaturaUrl: req.usuario?.assinaturaUrl || perfilDoUsuario?.templateVisual?.assinaturaUrl || layoutUsuario?.assinatura_extraida_url || layoutUsuario?.visual_config_json?.assinaturaUrl || null
     };
 
+    const estiloOverrideLimpo = (estiloOverrideReq && typeof estiloOverrideReq === 'object' && Object.keys(estiloOverrideReq).length > 0)
+      ? estiloOverrideReq
+      : null;
+
+    let layoutEfetivoUs = layoutUsuario;
+    let perfilEfetivoUs = perfilDoUsuario;
+
+    if (estiloOverrideLimpo) {
+      const ov = estiloOverrideLimpo;
+      const visualBase = perfilDoUsuario?.templateVisual?.visualConfigClonado || layoutUsuario?.visual_config_json || null;
+      let visualClonadoOv = visualBase ? JSON.parse(JSON.stringify(visualBase)) : null;
+      if (visualClonadoOv) {
+        visualClonadoOv.bodyTypography = {
+          ...(visualClonadoOv.bodyTypography || {}),
+          ...(ov.fontFamily ? { fontFamily: ov.fontFamily } : {}),
+          ...(ov.fontSizeBody ? { fontSize: ov.fontSizeBody } : {}),
+          ...(ov.lineHeight ? { lineHeight: String(ov.lineHeight) } : {}),
+          ...(ov.paragraphSpacing ? { paragraphSpacing: ov.paragraphSpacing } : {})
+        };
+        visualClonadoOv.titleConfig = {
+          ...(visualClonadoOv.titleConfig || {}),
+          ...(ov.fontSizeTitulo ? { fontSize: ov.fontSizeTitulo } : {}),
+          ...(ov.corPrimaria ? { color: ov.corPrimaria } : {})
+        };
+        if (ov.fontSizeCabecalho) {
+          visualClonadoOv.patientHeader = {
+            ...(visualClonadoOv.patientHeader || {}),
+            fontSize: ov.fontSizeCabecalho
+          };
+        }
+        visualClonadoOv.margins = {
+          ...(visualClonadoOv.margins || {}),
+          ...(ov.marginTop ? { topFirstPage: ov.marginTop, topContinuationPages: ov.marginTop } : {}),
+          ...(ov.marginBottom ? { bottom: ov.marginBottom } : {}),
+          ...(ov.marginLeft ? { left: ov.marginLeft } : {}),
+          ...(ov.marginRight ? { right: ov.marginRight } : {})
+        };
+      }
+
+      layoutEfetivoUs = {
+        ...layoutUsuario,
+        ...(ov.fontFamily ? { font_family: ov.fontFamily } : {}),
+        ...(ov.fontSizeBody ? { font_size_body: ov.fontSizeBody } : {}),
+        ...(ov.fontSizeCabecalho ? { font_size_cabecalho: ov.fontSizeCabecalho } : {}),
+        ...(ov.fontSizeTitulo ? { font_size_titulo: ov.fontSizeTitulo } : {}),
+        ...(ov.paragraphSpacing ? { paragraph_spacing: ov.paragraphSpacing } : {}),
+        ...(ov.lineHeight ? { line_height: String(ov.lineHeight) } : {}),
+        ...(ov.paginacaoTexto ? { paginacao_texto: ov.paginacaoTexto } : {}),
+        ...(ov.mostrarAssinaturaImagem !== undefined ? { mostrar_assinatura_imagem: Boolean(ov.mostrarAssinaturaImagem) } : {}),
+        ...(ov.mostrarAssinaturaTexto !== undefined ? { mostrar_assinatura_texto: Boolean(ov.mostrarAssinaturaTexto) } : {}),
+        ...(ov.corPrimaria ? { cor_primaria: ov.corPrimaria } : {}),
+        ...(ov.corSecundaria ? { cor_secundaria: ov.corSecundaria } : {}),
+        ...(ov.marginTop ? { margin_top: ov.marginTop } : {}),
+        ...(ov.marginBottom ? { margin_bottom: ov.marginBottom } : {}),
+        ...(ov.marginLeft ? { margin_left: ov.marginLeft } : {}),
+        ...(ov.marginRight ? { margin_right: ov.marginRight } : {}),
+        ...(visualClonadoOv ? { visual_config_json: visualClonadoOv } : {})
+      };
+
+      if (perfilDoUsuario) {
+        perfilEfetivoUs = {
+          ...perfilDoUsuario,
+          templateVisual: {
+            ...(perfilDoUsuario.templateVisual || {}),
+            ...ov,
+            ...(visualClonadoOv ? { visualConfigClonado: visualClonadoOv } : {})
+          }
+        };
+      }
+    }
+
     const docs = await gerarDocumentosExame(
       paciente || {},
       laudo,
       imagensOrdenadas,
       jobFolder,
-      layoutUsuario,
+      layoutEfetivoUs,
       {
         usuario: usuarioEfetivo,
-        perfilLaudo: perfilDoUsuario
+        perfilLaudo: perfilEfetivoUs
       }
     );
 
@@ -1754,6 +2093,7 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
       jobId: safeJobId,
       paciente,
       laudo,
+      estiloOverride: estiloOverrideLimpo,
       imagensPaths: imagensOrdenadas,
       usuarioId: req.usuario?.id,
       atualizadoEm: new Date().toISOString()
@@ -1784,6 +2124,7 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
       mensagem: 'Laudo recompilado com sucesso com suas modificações!',
       paciente,
       laudo,
+      estiloOverride: estiloOverrideLimpo,
       pdfUrl,
       docxUrl,
       pdfNome,
@@ -1796,7 +2137,7 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
 });
 
 app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_cirurgia'), async (req, res) => {
-  const { jobId, paciente, cirurgia, legendasFotos: legendasReq } = req.body;
+  const { jobId, paciente, cirurgia, legendasFotos: legendasReq, estiloOverride: estiloOverrideReq } = req.body;
   if (!jobId || !cirurgia) {
     return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId e os dados da cirurgia.' });
   }
@@ -1841,7 +2182,20 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
       const l = legendasBrutas[idx];
       return (typeof l === 'string' && l.trim()) ? l.trim() : `Figura ${idx + 1} - ${legendaPadraoCir}`;
     });
-    const cirurgiaComLegendas = { ...cirurgia, legendasFotos };
+    const estiloOverrideLimpo = (estiloOverrideReq && typeof estiloOverrideReq === 'object' && Object.keys(estiloOverrideReq).length > 0)
+      ? estiloOverrideReq
+      : null;
+    const perfilCirurgicoEfetivo = estiloOverrideLimpo
+      ? {
+          ...(perfilCirurgicoUsuario || {}),
+          ativo: true,
+          templateVisual: {
+            ...(perfilCirurgicoUsuario?.templateVisual || {}),
+            ...estiloOverrideLimpo
+          }
+        }
+      : perfilCirurgicoUsuario;
+    const cirurgiaComLegendas = { ...cirurgia, legendasFotos, estiloOverride: estiloOverrideLimpo };
 
     const usuarioEfetivo = {
       ...(req.usuario || {}),
@@ -1875,7 +2229,7 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
         usuario: usuarioEfetivo,
         layout: layoutUsuario,
         perfilLaudo: perfilDoUsuario,
-        perfilCirurgico: perfilCirurgicoUsuario,
+        perfilCirurgico: perfilCirurgicoEfetivo,
         legendasFotos
       }
     );
@@ -1899,6 +2253,7 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
       jobId: safeJobId,
       paciente,
       cirurgia: cirurgiaComLegendas,
+      estiloOverride: estiloOverrideLimpo,
       fotosCaminhos,
       legendasFotos,
       usuarioId: req.usuario?.id,
@@ -1928,6 +2283,7 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
       mensagem: 'Relatório cirúrgico recompilado com sucesso com suas modificações!',
       paciente,
       cirurgia: cirurgiaComLegendas,
+      estiloOverride: estiloOverrideLimpo,
       fotos: fotosResposta,
       legendasFotos,
       pdfUrl,
