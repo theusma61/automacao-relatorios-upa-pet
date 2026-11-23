@@ -111,6 +111,26 @@ export default function SettingsPage({
     });
   };
 
+  const revogarBlobUrl = (url) => {
+    if (typeof url === 'string' && url.startsWith('blob:')) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }
+  };
+
+  const blobUrlsRef = useRef({ logoEditorSrc: null, logoPreview: null, assinaturaPreview: null });
+  useEffect(() => {
+    blobUrlsRef.current = { logoEditorSrc, logoPreview, assinaturaPreview };
+  }, [logoEditorSrc, logoPreview, assinaturaPreview]);
+
+  useEffect(() => {
+    return () => {
+      const { logoEditorSrc: s1, logoPreview: s2, assinaturaPreview: s3 } = blobUrlsRef.current;
+      revogarBlobUrl(s1);
+      revogarBlobUrl(s2);
+      revogarBlobUrl(s3);
+    };
+  }, []);
+
   const handleLogoSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -119,11 +139,17 @@ export default function SettingsPage({
     try {
       const compressed = await compressImageFile(file, 1600, 0.95);
       setLogoEditorFileName(file.name || 'logo_clinica.png');
-      setLogoEditorSrc(URL.createObjectURL(compressed));
+      setLogoEditorSrc((prev) => {
+        if (prev !== logoPreview) revogarBlobUrl(prev);
+        return URL.createObjectURL(compressed);
+      });
       setLogoEditorOpen(true);
     } catch (_) {
       setLogoEditorFileName(file.name || 'logo_clinica.png');
-      setLogoEditorSrc(URL.createObjectURL(file));
+      setLogoEditorSrc((prev) => {
+        if (prev !== logoPreview) revogarBlobUrl(prev);
+        return URL.createObjectURL(file);
+      });
       setLogoEditorOpen(true);
     }
   };
@@ -138,7 +164,14 @@ export default function SettingsPage({
 
   const handleConfirmLogoEdit = (editedFile, editedPreviewUrl) => {
     setLogoFile(editedFile);
-    setLogoPreview(editedPreviewUrl);
+    setLogoPreview((prev) => {
+      if (prev && prev !== editedPreviewUrl) revogarBlobUrl(prev);
+      return editedPreviewUrl;
+    });
+    setLogoEditorSrc((prev) => {
+      if (prev && prev !== editedPreviewUrl) revogarBlobUrl(prev);
+      return null;
+    });
     setLogoEditorOpen(false);
     if (onToast) {
       onToast('Logo enquadrada! Clique em "Salvar Dados do Perfil" para aplicar nos relatórios.');
@@ -151,10 +184,16 @@ export default function SettingsPage({
     try {
       const compressed = await compressImageFile(file, 1200, 0.92);
       setAssinaturaFile(compressed);
-      setAssinaturaPreview(URL.createObjectURL(compressed));
+      setAssinaturaPreview((prev) => {
+        revogarBlobUrl(prev);
+        return URL.createObjectURL(compressed);
+      });
     } catch (_) {
       setAssinaturaFile(file);
-      setAssinaturaPreview(URL.createObjectURL(file));
+      setAssinaturaPreview((prev) => {
+        revogarBlobUrl(prev);
+        return URL.createObjectURL(file);
+      });
     }
   };
 

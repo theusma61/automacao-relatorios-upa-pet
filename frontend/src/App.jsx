@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Bell, ShieldAlert } from 'lucide-react';
 import { VetaroLogo } from './components/icons/VetaroIcons';
 import { useTheme } from './context/ThemeContext';
@@ -9,15 +9,28 @@ import MobileTabBar from './components/layout/MobileTabBar';
 import TopHeader from './components/layout/TopHeader';
 import ProfileDropdown from './components/layout/ProfileDropdown';
 import Toast from './components/layout/Toast';
-import ReportPreviewModal from './components/modals/ReportPreviewModal';
-import AdminUsersModal from './components/modals/AdminUsersModal';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
 import DashboardHome from './pages/DashboardHome';
-import UltrasoundGenerator from './pages/UltrasoundGenerator';
-import SurgeryGenerator from './pages/SurgeryGenerator';
-import SettingsPage from './pages/SettingsPage';
-import MeusPadroesPage from './pages/MeusPadroesPage';
+
+const ReportPreviewModal = lazy(() => import('./components/modals/ReportPreviewModal'));
+const AdminUsersModal = lazy(() => import('./components/modals/AdminUsersModal'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const UltrasoundGenerator = lazy(() => import('./pages/UltrasoundGenerator'));
+const SurgeryGenerator = lazy(() => import('./pages/SurgeryGenerator'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const MeusPadroesPage = lazy(() => import('./pages/MeusPadroesPage'));
+
+function LazyFallback({ darkMode }) {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div
+        className={`w-7 h-7 rounded-full border-2 border-t-transparent animate-spin ${
+          darkMode ? 'border-[#00D296]' : 'border-[#0D5C56]'
+        }`}
+      />
+    </div>
+  );
+}
 
 function formatDatePtBr(dateInput) {
   if (!dateInput) return '';
@@ -286,15 +299,17 @@ export default function App() {
     if (showLanding) {
       return (
         <>
-          <LandingPage
-            darkMode={darkMode}
-            setDarkMode={setDarkMode}
-            onStartFree={() => setShowLanding(false)}
-            onLogin={() => setShowLanding(false)}
-            onOpenSupport={() =>
-              showToast('Suporte Vetaro: contato@vetaro.com.br ou WhatsApp Oficial')
-            }
-          />
+          <Suspense fallback={<LazyFallback darkMode={darkMode} />}>
+            <LandingPage
+              darkMode={darkMode}
+              setDarkMode={setDarkMode}
+              onStartFree={() => setShowLanding(false)}
+              onLogin={() => setShowLanding(false)}
+              onOpenSupport={() =>
+                showToast('Suporte Vetaro: contato@vetaro.com.br ou WhatsApp Oficial')
+              }
+            />
+          </Suspense>
           <Toast message={toastMessage} />
         </>
       );
@@ -302,14 +317,16 @@ export default function App() {
 
     return (
       <>
-        <LoginPage
-          darkMode={darkMode}
-          setDarkMode={setDarkMode}
-          ssoConfig={ssoConfig}
-          onGoogleCredential={loginComGoogleCredential}
-          onBackToLanding={() => setShowLanding(true)}
-          onToast={showToast}
-        />
+        <Suspense fallback={<LazyFallback darkMode={darkMode} />}>
+          <LoginPage
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            ssoConfig={ssoConfig}
+            onGoogleCredential={loginComGoogleCredential}
+            onBackToLanding={() => setShowLanding(true)}
+            onToast={showToast}
+          />
+        </Suspense>
         <Toast message={toastMessage} />
       </>
     );
@@ -575,7 +592,9 @@ export default function App() {
             </div>
           )}
 
-          {renderMainScreenContent()}
+          <Suspense fallback={<LazyFallback darkMode={darkMode} />}>
+            {renderMainScreenContent()}
+          </Suspense>
         </div>
       </main>
 
@@ -591,28 +610,36 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal de Detalhes de Relatório / Laudo */}
-      <ReportPreviewModal
-        report={selectedReport}
-        darkMode={darkMode}
-        newUiEnabled={newUiEnabled}
-        onClose={() => setSelectedReport(null)}
-        onToast={showToast}
-        onUpdateReport={(updated) => {
-          setSelectedReport(updated);
-          setActivities((prev) =>
-            prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-          );
-        }}
-      />
+      {/* Modal de Detalhes de Relatório / Laudo (carregado sob demanda) */}
+      {selectedReport && (
+        <Suspense fallback={null}>
+          <ReportPreviewModal
+            report={selectedReport}
+            darkMode={darkMode}
+            newUiEnabled={newUiEnabled}
+            onClose={() => setSelectedReport(null)}
+            onToast={showToast}
+            onUpdateReport={(updated) => {
+              setSelectedReport(updated);
+              setActivities((prev) =>
+                prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+              );
+            }}
+          />
+        </Suspense>
+      )}
 
-      {/* Modal Administrativo RBAC */}
-      <AdminUsersModal
-        darkMode={darkMode}
-        isOpen={adminModalOpen}
-        onClose={() => setAdminModalOpen(false)}
-        onToast={showToast}
-      />
+      {/* Modal Administrativo RBAC (carregado sob demanda) */}
+      {adminModalOpen && (
+        <Suspense fallback={null}>
+          <AdminUsersModal
+            darkMode={darkMode}
+            isOpen={adminModalOpen}
+            onClose={() => setAdminModalOpen(false)}
+            onToast={showToast}
+          />
+        </Suspense>
+      )}
 
       {/* Toast Flutuante */}
       <Toast message={toastMessage} />

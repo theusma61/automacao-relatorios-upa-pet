@@ -65,6 +65,48 @@ function getTabLabel(tab) {
   return `Exame #${tab.seq}`;
 }
 
+async function comprimirImagemUltrassom(file, maxDim = 1600, quality = 0.88) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  if (file.size <= 650 * 1024) return file;
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url);
+            if (!blob || blob.size >= file.size) return resolve(file);
+            const safeName = (file.name || 'captura').replace(/\.[^.]+$/, '') + '.jpg';
+            resolve(new File([blob], safeName, { type: 'image/jpeg', lastModified: Date.now() }));
+          },
+          'image/jpeg',
+          quality
+        );
+      } catch (_) {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 function revokeTabFiles(tab) {
   if (!tab || !Array.isArray(tab.mindrayFiles)) return;
   tab.mindrayFiles.forEach((f) => {
@@ -320,7 +362,10 @@ export default function UltrasoundGenerator({
 
     try {
       const fd = new FormData();
-      currentTab.rawFiles.forEach((f) => fd.append('imagens', f));
+      const arquivosOtimizados = await Promise.all(
+        currentTab.rawFiles.map((f) => comprimirImagemUltrassom(f))
+      );
+      arquivosOtimizados.forEach((f) => fd.append('imagens', f));
       const res = await api.gerarUltrassom(fd);
       const pac = res.paciente || {};
       const resumoReal =

@@ -1381,6 +1381,12 @@ app.post('/api/laudos/aprender-padrao', limiterGeracaoPesada, exigirAutenticacao
   } catch (err) {
     logger.error('Erro ao aprender padrão de laudos', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Erro ao analisar PDFs de laudos: ' + err.message });
+  } finally {
+    if (Array.isArray(req.files)) {
+      req.files.forEach((f) => {
+        fs.promises.unlink(f.path).catch(() => {});
+      });
+    }
   }
 });
 
@@ -1556,6 +1562,12 @@ app.post('/api/cirurgia/aprender-padrao', limiterGeracaoPesada, exigirAutenticac
   } catch (err) {
     logger.error('Erro ao aprender padrão de relatórios cirúrgicos', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Erro ao analisar PDFs cirúrgicos: ' + err.message });
+  } finally {
+    if (Array.isArray(req.files)) {
+      req.files.forEach((f) => {
+        fs.promises.unlink(f.path).catch(() => {});
+      });
+    }
   }
 });
 
@@ -1664,7 +1676,7 @@ app.post('/api/cirurgia/preview-padrao', limiterGeracaoPesada, exigirAutenticaca
       perfilCirurgico: perfilCirPreview
     });
 
-    const pdfBuffer = fs.readFileSync(tmpPdf);
+    const pdfBuffer = await fs.promises.readFile(tmpPdf);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="preview_padrao_cirurgico.pdf"');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -1792,7 +1804,7 @@ app.post('/api/laudos/preview-padrao', limiterGeracaoPesada, exigirAutenticacao,
       apenasPdf: true
     });
 
-    const pdfBuffer = fs.readFileSync(docs.caminhoPdf);
+    const pdfBuffer = await fs.promises.readFile(docs.caminhoPdf);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="preview_padrao_ultrassom.pdf"');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -2772,7 +2784,17 @@ app.get('/favicon.svg', (req, res) => {
 // =========================================================================
 const frontendDistPath = path.join(__dirname, 'frontend', 'dist');
 if (fs.existsSync(frontendDistPath)) {
-  app.use(express.static(frontendDistPath));
+  app.use('/assets', express.static(path.join(frontendDistPath, 'assets'), {
+    maxAge: '1y',
+    immutable: true
+  }));
+  app.use(express.static(frontendDistPath, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    }
+  }));
 }
 
 app.use((req, res, next) => {
@@ -2815,6 +2837,46 @@ if (require.main === module) {
         }
       } catch (err) {
         console.error('[sync] falha ao sincronizar modelos:', err.message);
+      }
+
+      // Rotina periódica de limpeza de disco para evitar lotação da VPS
+      async function limparArquivosExpirados() {
+        const agora = Date.now();
+        const ttlTempMs = 24 * 60 * 60 * 1000;
+        const outputTtlDias = parseInt(process.env.OUTPUT_TTL_DAYS || '90', 10);
+
+        const limparDiretorio = async (dirAlvo, ttlMs, recursivo = false) => {
+          try {
+            const itens = await fs.promises.readdir(dirAlvo);
+            for (const item of itens) {
+              const full = path.join(dirAlvo, item);
+              try {
+                const st = await fs.promises.stat(full);
+                if (agora - st.mtimeMs > ttlMs) {
+                  if (st.isDirectory() && recursivo) {
+                    await fs.promises.rm(full, { recursive: true, force: true });
+                  } else if (st.isFile()) {
+                    await fs.promises.unlink(full);
+                  }
+                }
+              } catch (_) {}
+            }
+          } catch (_) {}
+        };
+
+        await limparDiretorio(uploadDir, ttlTempMs, true);
+        await limparDiretorio(amostrasPadraoDir, ttlTempMs, true);
+        if (outputTtlDias > 0) {
+          await limparDiretorio(outputDir, outputTtlDias * 24 * 60 * 60 * 1000, true);
+        }
+      }
+
+      if (process.env.NODE_ENV !== 'test') {
+        limparArquivosExpirados().catch(() => {});
+        const timerLimpeza = setInterval(() => {
+          limparArquivosExpirados().catch(() => {});
+        }, 6 * 60 * 60 * 1000);
+        if (typeof timerLimpeza.unref === 'function') timerLimpeza.unref();
       }
 
       app.listen(PORT, () => {
