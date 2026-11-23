@@ -10,6 +10,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
@@ -104,15 +106,78 @@ if (fs.existsSync(configPath)) {
 }
 
 const apiKey = process.env.GEMINI_API_KEY || config.geminiApiKey;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || config.googleClientId || '';
-const JWT_SECRET = process.env.JWT_SECRET || 'upa_pet_jwt_secret_camila_bastos_2026';
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || config.googleClientId || '').trim();
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && !process.env.JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET não definido em ambiente de produção. Abortando inicialização.');
+  process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_only_jwt_secret_change_in_production';
 const PORT = process.env.PORT || 3000;
 
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
+const ALLOWED_ORIGINS = new Set(
+  [
+    'https://vetaro.com.br',
+    'https://www.vetaro.com.br',
+    (process.env.APP_BASE_URL || '').trim().replace(/\/+$/, ''),
+    ...((process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim().replace(/\/+$/, ''))),
+    ...(!isProduction ? ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'] : [])
+  ].filter(Boolean)
+);
+
+function resolverOriginSeguro(req) {
+  const envBase = (process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (envBase) return envBase;
+  const reqOrigin = (req.headers.origin || '').trim().replace(/\/+$/, '');
+  if (reqOrigin && ALLOWED_ORIGINS.has(reqOrigin)) return reqOrigin;
+  return 'https://vetaro.com.br';
+}
+
 const app = express();
-app.use(cors());
+app.set('trust proxy', 1);
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }
+}));
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || ALLOWED_ORIGINS.has(origin.replace(/\/+$/, ''))) {
+      return cb(null, true);
+    }
+    return cb(new Error('Origem não permitida pela política CORS.'));
+  },
+  credentials: true
+}));
 app.use(cookieParser());
+
+const skipRateLimit = () => process.env.NODE_ENV === 'test';
+const limiterApiGeral = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 250,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => skipRateLimit() || req.path === '/stripe/webhook',
+  message: { error: 'Muitas requisições em curto período. Aguarde alguns instantes e tente novamente.' }
+});
+const limiterAuth = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipRateLimit,
+  message: { error: 'Muitas tentativas de autenticação. Aguarde alguns minutos.' }
+});
+const limiterGeracaoPesada = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 35,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: skipRateLimit,
+  message: { error: 'Limite de gerações/compilações temporário atingido. Aguarde alguns minutos.' }
+});
 
 // Webhook Stripe MUST be registered BEFORE express.json() so raw payload signature verification works
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -151,8 +216,7 @@ const outputDir = process.env.OUTPUT_PERSISTENT_DIR
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-app.use('/uploads', express.static(persistentUploadDir));
-app.use('/app/uploads', express.static(persistentUploadDir));
+// Arquivos em /uploads são servidos via rotas autenticadas abaixo (nunca expor amostras_padrao/ publicamente).
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -161,7 +225,32 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`);
   }
 });
-const upload = multer({ storage });
+const ALLOWED_UPLOAD_EXT = /\.(png|jpe?g|webp|pdf|docx?|pages|txt|mp3|wav|m4a|ogg|webm|aac)$/i;
+const ALLOWED_UPLOAD_MIME_PREFIXES = ['image/', 'audio/', 'text/plain'];
+const ALLOWED_UPLOAD_MIMES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.apple.pages',
+  'application/octet-stream'
+]);
+const upload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024, files: 25 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const mime = (file.mimetype || '').toLowerCase();
+    if (ext === '.svg' || mime === 'image/svg+xml') {
+      return cb(new Error('Arquivos SVG não são permitidos por segurança.'));
+    }
+    const extOk = ALLOWED_UPLOAD_EXT.test(ext);
+    const mimeOk = ALLOWED_UPLOAD_MIMES.has(mime) || ALLOWED_UPLOAD_MIME_PREFIXES.some((p) => mime.startsWith(p));
+    if (extOk && mimeOk) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Formato de arquivo não suportado (${ext || mime || 'desconhecido'}).`));
+  }
+});
 
 const storagePerfil = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -176,10 +265,14 @@ const storagePerfil = multer.diskStorage({
 });
 const uploadPerfil = multer({
   storage: storagePerfil,
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  limits: { fileSize: 10 * 1024 * 1024, files: 2 }, // 10MB por imagem
   fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (/\.(png|jpe?g|webp|svg)$/i.test(ext) || (file.mimetype && file.mimetype.startsWith('image/'))) {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const mime = (file.mimetype || '').toLowerCase();
+    if (ext === '.svg' || mime === 'image/svg+xml') {
+      return cb(new Error('Arquivos SVG não são permitidos. Envie PNG, JPG, JPEG ou WEBP.'));
+    }
+    if (/\.(png|jpe?g|webp)$/i.test(ext) && ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(mime)) {
       cb(null, true);
     } else {
       cb(new Error('Formato de imagem inválido. Formatos suportados: PNG, JPG, JPEG ou WEBP.'));
@@ -253,6 +346,99 @@ function exigirPermissao(permissao) {
 }
 
 app.use(obterUsuarioSessao);
+app.use('/api', limiterApiGeral);
+
+function usuarioPodeAcessarSubdirUpload(req, userIdParam) {
+  if (!req.usuario) return false;
+  if (req.usuario.role === 'admin') return true;
+  const userIdSafe = String(req.usuario.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  return Boolean(userIdSafe && userIdParam === userIdSafe);
+}
+
+function enviarArquivoUploadSeguro(res, baseDir, filename) {
+  const safeName = path.basename(filename || '');
+  const fullPath = path.resolve(baseDir, safeName);
+  const resolvedBase = path.resolve(baseDir) + path.sep;
+  if (!fullPath.startsWith(resolvedBase) || !fs.existsSync(fullPath)) {
+    return res.status(404).end();
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  return res.sendFile(fullPath);
+}
+
+// Rotas protegidas de uploads (substituem o antigo express.static aberto que expunha amostras_padrao e assinaturas)
+['/uploads', '/app/uploads'].forEach((prefix) => {
+  app.get(`${prefix}/logos/:filename`, exigirAutenticacao, (req, res) => {
+    return enviarArquivoUploadSeguro(res, logosDir, req.params.filename);
+  });
+
+  app.get(`${prefix}/assinaturas/:filename`, exigirAutenticacao, (req, res) => {
+    const safeName = path.basename(req.params.filename || '');
+    const userIdSafe = String(req.usuario.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const pertenceAoUsuario =
+      req.usuario.role === 'admin' ||
+      (userIdSafe && safeName.includes(`_${userIdSafe}_`)) ||
+      (typeof req.usuario.assinaturaUrl === 'string' && path.basename(req.usuario.assinaturaUrl) === safeName);
+    if (!pertenceAoUsuario) {
+      return res.status(403).end();
+    }
+    return enviarArquivoUploadSeguro(res, assinaturasDir, safeName);
+  });
+
+  app.get(`${prefix}/templates/:userId/:filename`, exigirAutenticacao, (req, res) => {
+    const safeUser = path.basename(req.params.userId || '');
+    if (!usuarioPodeAcessarSubdirUpload(req, safeUser)) {
+      return res.status(403).end();
+    }
+    return enviarArquivoUploadSeguro(res, path.join(templatesDir, safeUser), req.params.filename);
+  });
+
+  app.get(`${prefix}/templates_cirurgia/:userId/:filename`, exigirAutenticacao, (req, res) => {
+    const safeUser = path.basename(req.params.userId || '');
+    if (!usuarioPodeAcessarSubdirUpload(req, safeUser)) {
+      return res.status(403).end();
+    }
+    return enviarArquivoUploadSeguro(res, path.join(templatesCirurgiaDir, safeUser), req.params.filename);
+  });
+});
+
+async function verificarDonoDoJob(safeJobId, usuario) {
+  if (!usuario) return false;
+  if (usuario.role === 'admin') return true;
+  const jobFolder = path.join(outputDir, safeJobId);
+
+  for (const metaNome of ['meta_exame.json', 'meta_cirurgia.json']) {
+    const metaPath = path.join(jobFolder, metaNome);
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (meta && meta.usuarioId) {
+          return String(meta.usuarioId) === String(usuario.id);
+        }
+      } catch (_) {}
+    }
+  }
+
+  try {
+    const [exame, cirurgia] = await Promise.all([
+      prisma.exameLaudo.findFirst({
+        where: { pdfArquivo: { contains: safeJobId } },
+        select: { usuarioId: true }
+      }),
+      prisma.relatorioCirurgico.findFirst({
+        where: { pdfArquivo: { contains: safeJobId } },
+        select: { usuarioId: true }
+      })
+    ]);
+    const donoId = exame?.usuarioId || cirurgia?.usuarioId || null;
+    if (donoId) {
+      return String(donoId) === String(usuario.id);
+    }
+  } catch (_) {}
+
+  return false;
+}
 
 app.get('/api/auth/config', (req, res) => {
   res.json({
@@ -280,33 +466,27 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
-app.post('/api/auth/google', validate(authSchemas.googleLogin, 'body'), async (req, res) => {
+app.post('/api/auth/google', limiterAuth, validate(authSchemas.googleLogin, 'body'), async (req, res) => {
   const { credential } = req.body;
   if (!credential) {
     return res.status(400).json({ error: 'Token de credencial do Google não fornecido.' });
   }
+  if (!googleClient) {
+    return res.status(503).json({ error: 'Autenticação Google SSO não configurada no servidor (GOOGLE_CLIENT_ID ausente).' });
+  }
 
   try {
-    let email, nome, foto;
-
-    if (googleClient) {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: GOOGLE_CLIENT_ID
-      });
-      const payload = ticket.getPayload();
-      email = payload.email;
-      nome = payload.name;
-      foto = payload.picture;
-    } else {
-      const decoded = jwt.decode(credential);
-      if (!decoded || !decoded.email) {
-        throw new Error('Não foi possível decodificar o token do Google.');
-      }
-      email = decoded.email;
-      nome = decoded.name;
-      foto = decoded.picture;
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email || payload.email_verified === false) {
+      return res.status(401).json({ error: 'Conta Google sem e-mail verificado.' });
     }
+    const email = payload.email;
+    const nome = payload.name;
+    const foto = payload.picture;
 
     const perfil = await obterPerfilUsuario(email, nome, foto);
 
@@ -500,27 +680,37 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/downloads/:jobId/fotos/:filename', exigirAutenticacao, (req, res) => {
+app.get('/downloads/:jobId/fotos/:filename', exigirAutenticacao, async (req, res) => {
   const safeJobId = path.basename(req.params.jobId);
   const safeFilename = path.basename(req.params.filename);
+  const autorizado = await verificarDonoDoJob(safeJobId, req.usuario);
+  if (!autorizado) {
+    return res.status(403).json({ error: 'Você não tem permissão para acessar esta foto.' });
+  }
   const filePath = path.join(outputDir, safeJobId, 'fotos', safeFilename);
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Foto não encontrada.' });
   }
-  return res.sendFile(filePath);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.sendFile(path.resolve(filePath));
 });
 
-app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
+app.get('/downloads/:jobId/:filename', exigirAutenticacao, async (req, res) => {
   const { jobId, filename } = req.params;
   const safeJobId = path.basename(jobId);
   const safeFilename = path.basename(filename);
+  const autorizado = await verificarDonoDoJob(safeJobId, req.usuario);
+  if (!autorizado) {
+    return res.status(403).send('Você não tem permissão para acessar este arquivo.');
+  }
   const filePath = path.join(outputDir, safeJobId, safeFilename);
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).send('Arquivo não encontrado ou já expirou.');
   }
 
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
 
@@ -531,7 +721,7 @@ app.get('/downloads/:jobId/:filename', exigirAutenticacao, (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'private, no-store');
     return res.sendFile(path.resolve(filePath));
   }
 
@@ -555,6 +745,13 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
         pdfArquivo: { contains: safeJobId }
       }
     });
+
+    if (!exame) {
+      const autorizadoDisco = await verificarDonoDoJob(safeJobId, req.usuario);
+      if (!autorizadoDisco) {
+        return res.status(403).json({ error: 'Você não tem permissão para acessar este exame.' });
+      }
+    }
 
     if (exame) {
       if (req.usuario.role !== 'admin' && exame.usuarioId && exame.usuarioId !== req.usuario.id) {
@@ -771,6 +968,13 @@ app.get('/api/cirurgia/:jobId/dados', exigirAutenticacao, async (req, res) => {
       }
     });
 
+    if (!relatorio) {
+      const autorizadoDisco = await verificarDonoDoJob(safeJobId, req.usuario);
+      if (!autorizadoDisco) {
+        return res.status(403).json({ error: 'Você não tem permissão para acessar este relatório.' });
+      }
+    }
+
     if (relatorio) {
       if (req.usuario.role !== 'admin' && relatorio.usuarioId && relatorio.usuarioId !== req.usuario.id) {
         return res.status(403).json({ error: 'Você não tem permissão para acessar este relatório.' });
@@ -981,7 +1185,7 @@ app.put('/api/layout-config', exigirAutenticacao, validate(layoutSchemas.updateL
 // =========================================================================
 // CLONAGEM DE PADRÃO VISUAL E TEXTUAL A PARTIR DE 1 A 10 PDFs DO MÉDICO
 // =========================================================================
-app.post('/api/layout-config/importar-pdfs', exigirAutenticacao, upload.array('pdfs', 10), async (req, res) => {
+app.post('/api/layout-config/importar-pdfs', limiterGeracaoPesada, exigirAutenticacao, upload.array('pdfs', 10), async (req, res) => {
   if (req.usuario.role !== 'admin' && req.usuario.role !== 'veterinario') {
     return res.status(403).json({ error: 'Acesso restrito a administradores e veterinários.' });
   }
@@ -1056,7 +1260,7 @@ app.post('/api/layout-config/reset', exigirAutenticacao, async (req, res) => {
 });
 
 // ==================== APRENDIZADO DE PADRÃO DE LAUDO (IA MULTIMODAL) ====================
-app.post('/api/laudos/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.array('pdfs', 10), async (req, res) => {
+app.post('/api/laudos/aprender-padrao', limiterGeracaoPesada, exigirAutenticacao, uploadPdfsPadrao.array('pdfs', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'Nenhum arquivo PDF foi enviado. Envie de 1 a 10 laudos em PDF.' });
@@ -1240,7 +1444,7 @@ app.delete('/api/laudos/meu-perfil', exigirAutenticacao, async (req, res) => {
 });
 
 // ==================== APRENDIZADO DE PADRÃO DE RELATÓRIO CIRÚRGICO (IA MULTIMODAL) ====================
-app.post('/api/cirurgia/aprender-padrao', exigirAutenticacao, uploadPdfsPadrao.array('pdfs', 10), async (req, res) => {
+app.post('/api/cirurgia/aprender-padrao', limiterGeracaoPesada, exigirAutenticacao, uploadPdfsPadrao.array('pdfs', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'Nenhum arquivo PDF foi enviado. Envie de 1 a 10 relatórios cirúrgicos em PDF.' });
@@ -1397,7 +1601,7 @@ app.put('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
 });
 
 // Pré-visualização ao vivo em PDF real do Padrão Cirúrgico (sem salvar no banco)
-app.post('/api/cirurgia/preview-padrao', exigirAutenticacao, async (req, res) => {
+app.post('/api/cirurgia/preview-padrao', limiterGeracaoPesada, exigirAutenticacao, async (req, res) => {
   const osMod = require('os');
   const tmpPdf = path.join(osMod.tmpdir(), `preview_padrao_cir_${req.usuario.id}_${Date.now()}.pdf`);
   try {
@@ -1474,7 +1678,7 @@ app.post('/api/cirurgia/preview-padrao', exigirAutenticacao, async (req, res) =>
 });
 
 // Pré-visualização ao vivo em PDF real do Padrão de Laudo de Ultrassom (sem salvar no banco)
-app.post('/api/laudos/preview-padrao', exigirAutenticacao, async (req, res) => {
+app.post('/api/laudos/preview-padrao', limiterGeracaoPesada, exigirAutenticacao, async (req, res) => {
   const osMod = require('os');
   const tmpDir = fs.mkdtempSync(path.join(osMod.tmpdir(), `preview_padrao_us_${req.usuario.id}_`));
   try {
@@ -1706,7 +1910,7 @@ app.post('/api/stripe/checkout-session', exigirAutenticacao, async (req, res) =>
     if (!['SOLO', 'PRO', 'CLINICA'].includes(planoKey)) {
       return res.status(400).json({ error: 'Plano inválido para checkout Stripe. Escolha SOLO, PRO ou CLINICA.' });
     }
-    const originUrl = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const originUrl = resolverOriginSeguro(req);
     const sessao = await criarSessaoCheckout({
       usuario: req.usuario,
       plano: planoKey,
@@ -1722,7 +1926,7 @@ app.post('/api/stripe/checkout-session', exigirAutenticacao, async (req, res) =>
 
 app.post('/api/stripe/portal-session', exigirAutenticacao, async (req, res) => {
   try {
-    const originUrl = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const originUrl = resolverOriginSeguro(req);
     const sessao = await criarSessaoPortal({
       usuario: req.usuario,
       originUrl
@@ -1764,7 +1968,7 @@ app.get('/api/assinatura/status-cota', exigirAutenticacao, async (req, res) => {
   }
 });
 
-app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('imagens', 25), async (req, res) => {
+app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrassom'), upload.array('imagens', 25), async (req, res) => {
   // TRAVA DE LIMITES DA COTA MENSAL DE ULTRASSOM (ADMINS E PLANOS ILIMITADOS NUNCA SÃO BLOQUEADOS)
   const isAdmin = req.usuario && (req.usuario.role === 'admin' || req.usuario.plano === 'ILIMITADO' || req.usuario.plano === 'ADMIN');
   if (!isAdmin) {
@@ -1910,7 +2114,7 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
   }
 });
 
-app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
+app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'), upload.fields([
   { name: 'documento', maxCount: 1 },
   { name: 'fotos', maxCount: 5 }
 ]), async (req, res) => {
@@ -2119,7 +2323,7 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 // RECOMPILAÇÃO E EDIÇÃO EM TEMPO REAL DE LAUDOS E CIRURGIAS
 // =========================================================================
 
-app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar_ultrassom'), async (req, res) => {
+app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, exigirPermissao('gerar_ultrassom'), async (req, res) => {
   const { jobId, paciente, laudo, estiloOverride: estiloOverrideReq, ordemImagens } = req.body;
   if (!jobId || !laudo || !Array.isArray(laudo)) {
     return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId, paciente e a lista de órgãos (laudo).' });
@@ -2129,6 +2333,10 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
   const jobFolder = path.join(outputDir, safeJobId);
   if (!fs.existsSync(jobFolder)) {
     return res.status(404).json({ error: 'Exame não encontrado ou sessão expirada no servidor.' });
+  }
+  const autorizadoJob = await verificarDonoDoJob(safeJobId, req.usuario);
+  if (!autorizadoJob) {
+    return res.status(403).json({ error: 'Você não tem permissão para editar este exame.' });
   }
 
   try {
@@ -2338,7 +2546,7 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
   }
 });
 
-app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_cirurgia'), async (req, res) => {
+app.post('/api/cirurgia/recompilar', limiterGeracaoPesada, exigirAutenticacao, exigirPermissao('gerar_cirurgia'), async (req, res) => {
   const { jobId, paciente, cirurgia, legendasFotos: legendasReq, estiloOverride: estiloOverrideReq } = req.body;
   if (!jobId || !cirurgia) {
     return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId e os dados da cirurgia.' });
@@ -2348,6 +2556,10 @@ app.post('/api/cirurgia/recompilar', exigirAutenticacao, exigirPermissao('gerar_
   const jobFolder = path.join(outputDir, safeJobId);
   if (!fs.existsSync(jobFolder)) {
     return res.status(404).json({ error: 'Relatório não encontrado ou sessão expirada no servidor.' });
+  }
+  const autorizadoJob = await verificarDonoDoJob(safeJobId, req.usuario);
+  if (!autorizadoJob) {
+    return res.status(403).json({ error: 'Você não tem permissão para editar este relatório.' });
   }
 
   try {

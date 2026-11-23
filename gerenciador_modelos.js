@@ -146,6 +146,10 @@ async function clonarModeloParaUsuario(modeloId, usuario) {
   if (!original) {
     throw new Error('Modelo original não encontrado.');
   }
+  const isAdmin = usuario.role === 'admin';
+  if (!original.isGlobal && original.usuarioId !== String(usuario.id) && !isAdmin) {
+    throw new Error('Você não tem permissão para clonar um modelo privado de outro profissional.');
+  }
 
   const slugBase = sanitizarId(original.nome);
   const novoId = `${usuario.id}__${slugBase}_${Date.now().toString(36)}`;
