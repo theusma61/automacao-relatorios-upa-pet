@@ -1,12 +1,12 @@
 /**
  * Compilador Universal de PDF com Fila de Concorrência para VPS (2 vCPUs / 4 GB RAM)
- * Mantém concorrência = 1 por padrão no Chromium headless para evitar picos de RAM/OOM
- * e garante fechamento obrigatório do processo browser em bloco finally.
+ * Mantém concorrência = 1 por padrão no Chromium headless para evitar picos de RAM/OOM,
+ * bloqueia requisições de rede externas no Puppeteer (anti-SSRF) e evita processos órfãos.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 function criarFilaConcorrenciaUnica() {
   const concurrency = Math.max(1, parseInt(process.env.PDF_CONCURRENCY || '1', 10) || 1);
@@ -28,6 +28,7 @@ function criarFilaConcorrenciaUnica() {
 const filaPdf = criarFilaConcorrenciaUnica();
 
 let browserCompartilhado = null;
+let browserLaunchPromise = null;
 let timerFecharBrowser = null;
 const IDLE_CLOSE_MS = parseInt(process.env.PDF_BROWSER_IDLE_MS || '60000', 10) || 60000;
 
@@ -51,25 +52,47 @@ async function obterBrowserPuppeteer(puppeteer, argsLaunch, executablePath) {
     if (timerFecharBrowser) clearTimeout(timerFecharBrowser);
     return browserCompartilhado;
   }
-  browserCompartilhado = await puppeteer.launch({
+  if (browserLaunchPromise) {
+    return await browserLaunchPromise;
+  }
+  browserLaunchPromise = puppeteer.launch({
     headless: true,
     args: argsLaunch,
     executablePath
+  }).then((browser) => {
+    browserCompartilhado = browser;
+    browser.on('disconnected', () => {
+      if (browserCompartilhado === browser) {
+        browserCompartilhado = null;
+      }
+      if (timerFecharBrowser) {
+        clearTimeout(timerFecharBrowser);
+        timerFecharBrowser = null;
+      }
+    });
+    return browser;
+  }).finally(() => {
+    browserLaunchPromise = null;
   });
-  browserCompartilhado.on('disconnected', () => {
-    browserCompartilhado = null;
-    if (timerFecharBrowser) {
-      clearTimeout(timerFecharBrowser);
-      timerFecharBrowser = null;
-    }
-  });
-  return browserCompartilhado;
+
+  return await browserLaunchPromise;
 }
 
 async function compilarComPuppeteer(puppeteer, fileUrl, caminhoPdf, argsLaunch, executablePath) {
   const browser = await obterBrowserPuppeteer(puppeteer, argsLaunch, executablePath);
   const page = await browser.newPage();
   try {
+    // Bloqueia qualquer requisição externa/rede (anti-SSRF e anti-travamento por CDN/fontes externas)
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const url = req.url() || '';
+      if (url.startsWith('file://') || url.startsWith('data:')) {
+        req.continue().catch(() => {});
+      } else {
+        req.abort('blockedbyclient').catch(() => {});
+      }
+    });
+
     await page.goto(fileUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve())).catch(() => {});
     await page.pdf({
@@ -94,8 +117,14 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
   const msedge = edgePaths.find(p => p && fs.existsSync(p));
   if (msedge) {
     const fileUrl = 'file:///' + path.resolve(caminhoHtml).replace(/\\/g, '/');
-    const cmd = `"${msedge}" --headless --disable-gpu --run-all-compositor-stages-before-draw --no-pdf-header-footer --print-to-pdf="${caminhoPdf}" "${fileUrl}"`;
-    execSync(cmd, { stdio: 'pipe' });
+    execFileSync(msedge, [
+      '--headless',
+      '--disable-gpu',
+      '--run-all-compositor-stages-before-draw',
+      '--no-pdf-header-footer',
+      `--print-to-pdf=${caminhoPdf}`,
+      fileUrl
+    ], { stdio: 'pipe', timeout: 60000 });
     return caminhoPdf;
   }
 
@@ -122,15 +151,6 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
       return await compilarComPuppeteer(puppeteer, fileUrl, caminhoPdf, argsLaunch, executablePath);
     } catch (errPup) {
       console.warn('Aviso Puppeteer:', errPup.message);
-      if (errPup.message.includes('Could not find Chrome') || errPup.message.includes('not find Chrome')) {
-        console.log('⚡ Auto-recuperação: Instalando Chrome headless no servidor...');
-        try {
-          execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
-          return await compilarComPuppeteer(puppeteer, fileUrl, caminhoPdf, argsLaunch, executablePath);
-        } catch (errRetry) {
-          console.error('Erro na auto-instalação do Chrome:', errRetry.message);
-        }
-      }
     }
   }
 
@@ -138,8 +158,15 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
   const linuxBin = linuxBinaries.find(b => b && fs.existsSync(b));
   if (linuxBin) {
     const fileUrl = 'file:///' + path.resolve(caminhoHtml).replace(/\\/g, '/');
-    const cmd = `"${linuxBin}" --headless --no-sandbox --disable-gpu --run-all-compositor-stages-before-draw --no-pdf-header-footer --print-to-pdf="${caminhoPdf}" "${fileUrl}"`;
-    execSync(cmd, { stdio: 'pipe' });
+    execFileSync(linuxBin, [
+      '--headless',
+      '--no-sandbox',
+      '--disable-gpu',
+      '--run-all-compositor-stages-before-draw',
+      '--no-pdf-header-footer',
+      `--print-to-pdf=${caminhoPdf}`,
+      fileUrl
+    ], { stdio: 'pipe', timeout: 60000 });
     return caminhoPdf;
   }
 
