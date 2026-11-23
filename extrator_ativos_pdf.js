@@ -15,7 +15,9 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -570,11 +572,12 @@ function detectarGradeImagensMosaico(imgMosaico, opcoes = {}) {
 /**
  * Lista todos os objetos de imagem embutidos no PDF via `pdfimages -list`.
  */
-function listarMetadadosImagensPdf(caminhoPdf) {
+async function listarMetadadosImagensPdf(caminhoPdf) {
   try {
-    const out = execFileSync('pdfimages', ['-list', caminhoPdf], {
+    const { stdout: out } = await execFileAsync('pdfimages', ['-list', caminhoPdf], {
       encoding: 'utf8',
-      timeout: 15000
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024
     });
     const linhas = out.split(/\r?\n/).slice(2);
     const itens = [];
@@ -601,14 +604,15 @@ function listarMetadadosImagensPdf(caminhoPdf) {
 /**
  * Extrai objetos de imagem embutidos no PDF via `pdfimages -png`.
  */
-function extrairObjetosImagemPdf(caminhoPdf, pastaTemp) {
+async function extrairObjetosImagemPdf(caminhoPdf, pastaTemp) {
   const prefixo = path.join(pastaTemp, 'emb');
   try {
-    execFileSync('pdfimages', ['-png', caminhoPdf, prefixo], {
-      stdio: 'pipe',
-      timeout: 25000
+    await execFileAsync('pdfimages', ['-png', caminhoPdf, prefixo], {
+      timeout: 25000,
+      maxBuffer: 10 * 1024 * 1024
     });
-    return fs.readdirSync(pastaTemp)
+    const lista = await fs.promises.readdir(pastaTemp);
+    return lista
       .filter(f => f.startsWith('emb-') && f.endsWith('.png'))
       .sort()
       .map(f => path.join(pastaTemp, f));
@@ -617,12 +621,12 @@ function extrairObjetosImagemPdf(caminhoPdf, pastaTemp) {
   }
 }
 
-function rasterizarPdfEmPngs(caminhoPdf, pastaTemp, maxPaginas = 7) {
+async function rasterizarPdfEmPngs(caminhoPdf, pastaTemp, maxPaginas = 7) {
   const prefixo = path.join(pastaTemp, `page_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
   try {
-    execFileSync('pdftoppm', ['-png', '-r', '300', '-f', '1', '-l', String(maxPaginas), caminhoPdf, prefixo], {
-      stdio: 'pipe',
-      timeout: 30000
+    await execFileAsync('pdftoppm', ['-png', '-r', '300', '-f', '1', '-l', String(maxPaginas), caminhoPdf, prefixo], {
+      timeout: 30000,
+      maxBuffer: 10 * 1024 * 1024
     });
   } catch (err) {
     throw new Error(`Falha ao rasterizar PDF com pdftoppm: ${err.message}`);
@@ -630,17 +634,19 @@ function rasterizarPdfEmPngs(caminhoPdf, pastaTemp, maxPaginas = 7) {
 
   const dir = path.dirname(prefixo);
   const base = path.basename(prefixo);
-  const arquivos = fs.readdirSync(dir)
+  const arquivos = (await fs.promises.readdir(dir))
     .filter(f => f.startsWith(base) && f.endsWith('.png'))
     .sort()
     .map(f => path.join(dir, f));
 
-  return arquivos.map((arq, idx) => {
-    const buf = fs.readFileSync(arq);
+  const resultados = [];
+  for (let idx = 0; idx < arquivos.length; idx++) {
+    const arq = arquivos[idx];
+    const buf = await fs.promises.readFile(arq);
     const decoded = decodificarPng(buf);
     const emBranco = paginaEstaEmBrancoNoCorpo(decoded);
     const ehMosaico = !emBranco && paginaEhMosaicoUltrassom(decoded);
-    return {
+    resultados.push({
       numeroPagina: idx + 1,
       caminhoPng: arq,
       width: decoded.width,
@@ -649,8 +655,9 @@ function rasterizarPdfEmPngs(caminhoPdf, pastaTemp, maxPaginas = 7) {
       ehMosaico,
       ehPaginaTexto: !emBranco && !ehMosaico,
       decoded
-    };
-  });
+    });
+  }
+  return resultados;
 }
 
 function bannerEhFullBleed(imgBanner) {
@@ -680,7 +687,7 @@ function bannerEhFullBleed(imgBanner) {
  * 5. Extrai a assinatura manuscrita isolada (`signature.png`) com fundo transparente (qualquer proporção) e mede sua altura real.
  * 6. Mede geometricamente a grade real das fotos de ultrassom nas páginas de mosaico.
  */
-function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, opcoes = {}) {
+async function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, opcoes = {}) {
   if (!fs.existsSync(pastaSaidaAtivos)) {
     fs.mkdirSync(pastaSaidaAtivos, { recursive: true });
   }
@@ -726,8 +733,10 @@ function extrairAtivosVisuaisDasPaginas(paginasRenderizadas, pastaSaidaAtivos, o
   let listaMetaImgs = [];
   let arquivosEmb = [];
   if (caminhoPdf && fs.existsSync(caminhoPdf)) {
-    listaMetaImgs = listarMetadadosImagensPdf(caminhoPdf);
-    arquivosEmb = extrairObjetosImagemPdf(caminhoPdf, pastaTemp);
+    [listaMetaImgs, arquivosEmb] = await Promise.all([
+      listarMetadadosImagensPdf(caminhoPdf),
+      extrairObjetosImagemPdf(caminhoPdf, pastaTemp)
+    ]);
   }
 
   // Identifica objectIds que se repetem em >= 2 páginas (logos/timbrados recorrentes)
