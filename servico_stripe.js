@@ -3,7 +3,7 @@
  * Vetaro SaaS — vetaro.com.br
  *
  * Regras de negócio:
- * - Planos: SOLO (40 laudos/mês), PRO (150 laudos/mês), CLINICA (500 laudos/mês) — mensal ou anual
+ * - Planos: SOLO (40 laudos/mês), PRO (150 laudos/mês), CLINICA (350 laudos/mês) — mensal ou anual
  * - Meio de pagamento: apenas cartão de crédito (recorrência automática)
  * - Excedente: bloqueio ao atingir 100% da cota (upgrade via Checkout / Customer Portal)
  */

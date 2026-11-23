@@ -783,7 +783,7 @@ export default function SettingsPage({
           cicloFim: new Date(Date.now() + 30 * 86400000).toISOString(),
           cartaoBandeira: null,
           cartaoFinal: null,
-          descricao: '10 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas'
+          descricao: '5 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas'
         };
         const c = usageData?.cota || {
           limite: 10,
@@ -827,7 +827,7 @@ export default function SettingsPage({
                       PLANO ATIVO: {p.nome.toUpperCase()}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold">
-                      • {isGratuito ? 'Degustação (10 laudos cortesia)' : 'Renovação automática'}
+                      • {isGratuito ? 'Degustação (5 laudos cortesia)' : 'Renovação automática'}
                     </span>
                   </div>
                   <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
@@ -836,7 +836,7 @@ export default function SettingsPage({
                         R$ 0,00
                         <span className="text-xs sm:text-sm font-semibold opacity-80">
                           {' '}
-                          / 10 laudos gratuitos
+                          / 5 laudos gratuitos
                         </span>
                       </>
                     ) : (
@@ -1176,7 +1176,7 @@ export default function SettingsPage({
                 {faturas.length === 0 ? (
                   <div className="py-4 text-center text-xs text-slate-400">
                     {isGratuito
-                      ? 'Nenhuma fatura a pagar. Você está no plano Degustação Gratuita (10 laudos de cortesia).'
+                      ? 'Nenhuma fatura a pagar. Você está no plano Degustação Gratuita (5 laudos de cortesia).'
                       : 'Nenhuma fatura registrada no período.'}
                   </div>
                 ) : (
@@ -1344,11 +1344,11 @@ export default function SettingsPage({
                         <h4 className="text-sm font-extrabold">Solo / Volante</h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">Até 40 laudos/mês • Cirurgias ilimitadas</p>
                         <p className="text-xl font-extrabold mt-3">
-                          R$ {cicloModal === 'anual' ? '63' : '79'}
+                          R$ {cicloModal === 'anual' ? '99' : '119'}
                           <span className="text-xs font-normal">/mês</span>
                         </p>
                         {cicloModal === 'anual' && (
-                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 756/ano no cartão</p>
+                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 1.188/ano no cartão</p>
                         )}
                       </div>
                       <button
@@ -1380,11 +1380,11 @@ export default function SettingsPage({
                         <h4 className="text-sm font-extrabold">Especialista Pro</h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">Até 150 laudos/mês • Cirurgias ilimitadas</p>
                         <p className="text-xl font-extrabold mt-3">
-                          R$ {cicloModal === 'anual' ? '119' : '149'}
+                          R$ {cicloModal === 'anual' ? '209' : '249'}
                           <span className="text-xs font-normal">/mês</span>
                         </p>
                         {cicloModal === 'anual' && (
-                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 1.428/ano no cartão</p>
+                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 2.508/ano no cartão</p>
                         )}
                       </div>
                       <button
@@ -1411,13 +1411,13 @@ export default function SettingsPage({
                     >
                       <div>
                         <h4 className="text-sm font-extrabold">Clínica & Hospital</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Até 500 laudos/mês • Cirurgias ilimitadas</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Até 350 laudos/mês • Cirurgias ilimitadas</p>
                         <p className="text-xl font-extrabold mt-3">
-                          R$ {cicloModal === 'anual' ? '237' : '297'}
+                          R$ {cicloModal === 'anual' ? '419' : '497'}
                           <span className="text-xs font-normal">/mês</span>
                         </p>
                         {cicloModal === 'anual' && (
-                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 2.844/ano no cartão</p>
+                          <p className="text-[10px] text-[#00D296] font-bold mt-0.5">R$ 5.028/ano no cartão</p>
                         )}
                       </div>
                       <button
@@ -1444,8 +1444,8 @@ export default function SettingsPage({
                           className="text-xs text-slate-400 hover:text-slate-200 underline font-medium transition"
                         >
                           {p.chave === 'GRATUITO'
-                            ? 'Atualmente na Degustação Gratuita (10 laudos)'
-                            : 'Simular Modo Degustação Gratuita (10 laudos / Teste de Cota)'}
+                            ? 'Atualmente na Degustação Gratuita (5 laudos)'
+                            : 'Simular Modo Degustação Gratuita (5 laudos / Teste de Cota)'}
                         </button>
                       </div>
                     )}

@@ -24,22 +24,22 @@ const PLANOS_CATALOGO = [
     chave: 'SOLO',
     nome: 'Vetaro Solo / Volante',
     descricao: 'Até 40 laudos de ultrassonografia por mês + relatórios cirúrgicos ilimitados.',
-    mensalCentavos: 7900,      // R$ 79,00 / mês
-    anualCentavos: 75600       // R$ 756,00 / ano (R$ 63,00/mês)
+    mensalCentavos: 11900,     // R$ 119,00 / mês
+    anualCentavos: 118800      // R$ 1.188,00 / ano (R$ 99,00/mês)
   },
   {
     chave: 'PRO',
     nome: 'Vetaro Especialista Pro',
     descricao: 'Até 150 laudos de ultrassonografia por mês + relatórios cirúrgicos ilimitados.',
-    mensalCentavos: 14900,     // R$ 149,00 / mês
-    anualCentavos: 142800      // R$ 1.428,00 / ano (R$ 119,00/mês)
+    mensalCentavos: 24900,     // R$ 249,00 / mês
+    anualCentavos: 250800      // R$ 2.508,00 / ano (R$ 209,00/mês)
   },
   {
     chave: 'CLINICA',
     nome: 'Vetaro Clínica & Hospital 24h',
-    descricao: 'Até 500 laudos de ultrassonografia por mês + relatórios cirúrgicos ilimitados.',
-    mensalCentavos: 29700,     // R$ 297,00 / mês
-    anualCentavos: 284400      // R$ 2.844,00 / ano (R$ 237,00/mês)
+    descricao: 'Até 350 laudos de ultrassonografia por mês + relatórios cirúrgicos ilimitados.',
+    mensalCentavos: 49700,     // R$ 497,00 / mês
+    anualCentavos: 502800      // R$ 5.028,00 / ano (R$ 419,00/mês)
   }
 ];
 
@@ -49,20 +49,25 @@ async function obterOuCriarPreco({ productId, lookupKey, unitAmount, interval, p
     active: true,
     limit: 1
   });
-  if (existentes.data.length > 0) {
+  if (existentes.data.length > 0 && existentes.data[0].unit_amount === unitAmount) {
     return existentes.data[0];
   }
-  return stripe.prices.create({
+  const novoPreco = await stripe.prices.create({
     product: productId,
     currency: 'brl',
     unit_amount: unitAmount,
     recurring: { interval },
     lookup_key: lookupKey,
+    transfer_lookup_key: true,
     metadata: {
       plano: planoChave,
       ciclo: interval === 'year' ? 'anual' : 'mensal'
     }
   });
+  if (existentes.data.length > 0) {
+    await stripe.prices.update(existentes.data[0].id, { active: false }).catch(() => {});
+  }
+  return novoPreco;
 }
 
 async function main() {
@@ -83,7 +88,10 @@ async function main() {
       });
       console.log(`✅ Produto criado: ${produto.name} (${produto.id})`);
     } else {
-      console.log(`♻️  Produto existente reaproveitado: ${produto.name} (${produto.id})`);
+      if (produto.description !== item.descricao) {
+        await stripe.products.update(produto.id, { description: item.descricao }).catch(() => {});
+      }
+      console.log(`♻️  Produto existente atualizado: ${produto.name} (${produto.id})`);
     }
 
     const precoMensal = await obterOuCriarPreco({

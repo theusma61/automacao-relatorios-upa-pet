@@ -204,10 +204,10 @@ export default function AdminUsersModal({ darkMode, isOpen, onClose, onToast }) 
                           }`}
                         >
                           <option value="ILIMITADO">💎 Ilimitado (Licença Admin)</option>
-                          <option value="CLINICA">Clínica & Hosp (500 laudos)</option>
+                          <option value="CLINICA">Clínica & Hosp (350 laudos)</option>
                           <option value="PRO">Especialista Pro (150 laudos)</option>
                           <option value="SOLO">Solo / Volante (40 laudos)</option>
-                          <option value="GRATUITO">Degustação (10 laudos)</option>
+                          <option value="GRATUITO">Degustação (5 laudos)</option>
                         </select>
                       </td>
                     </tr>

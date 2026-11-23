@@ -34,7 +34,7 @@ describe('Gerenciador de Assinaturas e Cotas (PostgreSQL Multi-Tenant)', () => {
     expect(sub).toBeDefined();
     expect(sub.usuarioId).toBe(usuarioTesteId);
     expect(sub.status).toBe('ACTIVE');
-    expect(sub.cotaLimite).toBeGreaterThanOrEqual(10);
+    expect(sub.cotaLimite).toBeGreaterThanOrEqual(5);
     expect(sub.cicloInicio).toBeDefined();
     expect(sub.cicloFim).toBeDefined();
   });
@@ -78,7 +78,7 @@ describe('Gerenciador de Assinaturas e Cotas (PostgreSQL Multi-Tenant)', () => {
     expect(resPro.cota.limite).toBe(TABELA_PLANOS.PRO.cotaLimite);
   });
 
-  test('novo usuário registrado recebe plano GRATUITO com cota de 10 laudos por padrão', async () => {
+  test('novo usuário registrado recebe plano GRATUITO com cota de 5 laudos por padrão', async () => {
     const novoUsuario = await prisma.usuario.create({
       data: {
         email: `novo_${Date.now()}@vetaro.com`,
@@ -88,7 +88,7 @@ describe('Gerenciador de Assinaturas e Cotas (PostgreSQL Multi-Tenant)', () => {
     });
     const sub = await obterOuCriarAssinatura(novoUsuario.id);
     expect(sub.plano).toBe('GRATUITO');
-    expect(sub.cotaLimite).toBe(10);
+    expect(sub.cotaLimite).toBe(5);
     expect(Number(sub.precoMensal)).toBe(0);
     expect(sub.cartaoFinal).toBeNull();
   });

@@ -8,27 +8,27 @@ const TABELA_PLANOS = {
   GRATUITO: {
     chave: 'GRATUITO',
     nome: 'Degustação Gratuita',
-    cotaLimite: 10,
+    cotaLimite: 5,
     precoMensal: 0.0,
     precoAnualMensalizado: 0.0,
-    descricao: '10 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas',
+    descricao: '5 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas',
     excedentePermitido: false
   },
   TRIAL: {
     chave: 'GRATUITO',
     nome: 'Degustação Gratuita',
-    cotaLimite: 10,
+    cotaLimite: 5,
     precoMensal: 0.0,
     precoAnualMensalizado: 0.0,
-    descricao: '10 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas',
+    descricao: '5 laudos gratuitos para testar a ferramenta com IA + Cirurgias ilimitadas',
     excedentePermitido: false
   },
   SOLO: {
     chave: 'SOLO',
     nome: 'Solo / Volante',
     cotaLimite: 40,
-    precoMensal: 79.0,
-    precoAnualMensalizado: 63.0,
+    precoMensal: 119.0,
+    precoAnualMensalizado: 99.0,
     descricao: 'Ideal para médicos veterinários autônomos e volantes (Até 40 laudos/mês)',
     excedentePermitido: false,
     custoExcedente: 0.0
@@ -37,8 +37,8 @@ const TABELA_PLANOS = {
     chave: 'PRO',
     nome: 'Especialista Pro',
     cotaLimite: 150,
-    precoMensal: 149.0,
-    precoAnualMensalizado: 119.0,
+    precoMensal: 249.0,
+    precoAnualMensalizado: 209.0,
     descricao: 'Ideal para ultrassonografistas e especialistas em imagem (Até 150 laudos/mês)',
     excedentePermitido: false,
     custoExcedente: 0.0
@@ -46,10 +46,10 @@ const TABELA_PLANOS = {
   CLINICA: {
     chave: 'CLINICA',
     nome: 'Clínica & Hospital 24h',
-    cotaLimite: 500,
-    precoMensal: 297.0,
-    precoAnualMensalizado: 237.0,
-    descricao: 'Ideal para clínicas com setor de imagem e hospitais 24h (Até 500 laudos/mês)',
+    cotaLimite: 350,
+    precoMensal: 497.0,
+    precoAnualMensalizado: 419.0,
+    descricao: 'Ideal para clínicas com setor de imagem e hospitais 24h (Até 350 laudos/mês)',
     excedentePermitido: false,
     custoExcedente: 0.0
   },
@@ -78,7 +78,7 @@ const TABELA_PLANOS = {
 /**
  * Obtém ou cria a assinatura do usuário no PostgreSQL.
  * Se o ciclo mensal tiver vencido, renova o ciclo automaticamente.
- * Por padrão, novos usuários recebem o plano GRATUITO com 10 laudos de cortesia.
+ * Por padrão, novos usuários recebem o plano GRATUITO com 5 laudos de cortesia.
  */
 async function obterOuCriarAssinatura(usuarioId) {
   if (!usuarioId) throw new Error('ID do usuário é obrigatório.');
@@ -108,7 +108,7 @@ async function obterOuCriarAssinatura(usuarioId) {
         status: 'ACTIVE',
         precoMensal: 0.0,
         ciclo: 'mensal',
-        cotaLimite: planoDef.cotaLimite, // 10
+        cotaLimite: planoDef.cotaLimite, // 5
         cicloInicio: agora,
         cicloFim: umMesDepois,
         cartaoFinal: null,

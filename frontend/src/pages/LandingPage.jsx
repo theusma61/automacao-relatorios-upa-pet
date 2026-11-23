@@ -53,7 +53,7 @@ export default function LandingPage({
   const faqItems = [
     {
       q: 'Preciso cadastrar o cartão de crédito para testar?',
-      a: 'Não! Você ganha 10 laudos gratuitos imediatamente após o cadastro, sem precisar informar cartão de crédito ou ter qualquer compromisso financeiro. Você só assina um plano se o sistema realmente economizar seu tempo.'
+      a: 'Não! Você ganha 5 laudos gratuitos imediatamente após o cadastro, sem precisar informar cartão de crédito ou ter qualquer compromisso financeiro. Você só assina um plano se o sistema realmente economizar seu tempo.'
     },
     {
       q: 'Como a Vetaro garante que o laudo sai no meu padrão?',
@@ -210,7 +210,7 @@ export default function LandingPage({
               {/* Micro-copy de Confiança */}
               <div className="pt-1 flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 <span className="text-[#00D296] text-sm">✦</span>
-                <span>10 laudos gratuitos para testar · Não precisa de cartão de crédito</span>
+                <span>5 laudos gratuitos para testar · Não precisa de cartão de crédito</span>
               </div>
             </div>
 
@@ -490,12 +490,12 @@ export default function LandingPage({
 
                   <div className="mb-6">
                     <span className="text-3xl font-extrabold">
-                      R$ {isAnnual ? '63' : '79'}
+                      R$ {isAnnual ? '99' : '119'}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold"> /mês</span>
                     {isAnnual && (
                       <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold mt-1">
-                        Faturado anualmente (R$ 756/ano)
+                        Faturado anualmente (R$ 1.188/ano)
                       </p>
                     )}
                   </div>
@@ -549,12 +549,12 @@ export default function LandingPage({
 
                   <div className="mb-6">
                     <span className="text-3xl font-extrabold">
-                      R$ {isAnnual ? '119' : '149'}
+                      R$ {isAnnual ? '209' : '249'}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold"> /mês</span>
                     {isAnnual && (
                       <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold mt-1">
-                        Faturado anualmente (R$ 1.428/ano)
+                        Faturado anualmente (R$ 2.508/ano)
                       </p>
                     )}
                   </div>
@@ -603,12 +603,12 @@ export default function LandingPage({
 
                   <div className="mb-6">
                     <span className="text-3xl font-extrabold">
-                      R$ {isAnnual ? '237' : '297'}
+                      R$ {isAnnual ? '419' : '497'}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold"> /mês</span>
                     {isAnnual && (
                       <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold mt-1">
-                        Faturado anualmente (R$ 2.844/ano)
+                        Faturado anualmente (R$ 5.028/ano)
                       </p>
                     )}
                   </div>
@@ -616,7 +616,7 @@ export default function LandingPage({
                   <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-300 font-medium">
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Até 500 laudos de ultrassom/mês</span>
+                      <span>Até 350 laudos de ultrassom/mês</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
@@ -925,7 +925,7 @@ export default function LandingPage({
                 }}
                 className="px-6 py-3 rounded-full text-xs font-extrabold bg-[#00D296] text-[#062E2B] hover:bg-[#00e6a4] transition flex items-center gap-2 shadow-md"
               >
-                Testar 10 laudos grátis agora <ArrowRight className="w-4 h-4" />
+                Testar 5 laudos grátis agora <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
