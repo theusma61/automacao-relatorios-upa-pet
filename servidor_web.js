@@ -84,6 +84,15 @@ const {
   registrarTelemetriaEdicao,
   obterRankingTelemetriaEdicoes
 } = require('./telemetria_edicoes');
+const {
+  gerarPublicToken,
+  montarUrlPublica,
+  prepararDadosQrCodeCompartilhamento,
+  isBotPreviewWhatsApp,
+  gerarResumoTutorIA,
+  renderizarPaginaPublicaLaudo,
+  renderizarPaginaIndisponivel
+} = require('./servico_compartilhamento');
 
 const { logger, requestLogger } = require('./logger');
 const {
@@ -163,6 +172,14 @@ const limiterApiGeral = rateLimit({
   legacyHeaders: false,
   skip: (req) => skipRateLimit() || req.path === '/stripe/webhook',
   message: { error: 'Muitas requisições em curto período. Aguarde alguns instantes e tente novamente.' }
+});
+const limiterLinkPublico = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => skipRateLimit(),
+  message: 'Muitas solicitações para este link. Aguarde um instante e tente novamente.'
 });
 const limiterAuth = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -2065,6 +2082,10 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     });
 
     const imagensOrdenadas = resultadoIA.caminhosOrdenados || caminhosArquivos;
+    const publicToken = gerarPublicToken();
+    const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicToken, {
+      baseUrl: resolverOriginSeguro(req)
+    });
     const docs = await gerarDocumentosExame(
       resultadoIA.paciente,
       resultadoIA.laudo,
@@ -2073,7 +2094,8 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
       layoutUsuario,
       {
         usuario: usuarioEfetivo,
-        perfilLaudo: perfilDoUsuario
+        perfilLaudo: perfilDoUsuario,
+        compartilhamento: compartilhamentoPdf
       }
     );
 
@@ -2101,8 +2123,9 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
       logger.warn('Aviso ao salvar meta_exame.json', { error: metaErr.message });
     }
 
+    let exameCriadoId = null;
     if (req.usuario && req.usuario.id) {
-      await prisma.exameLaudo.create({
+      const criado = await prisma.exameLaudo.create({
         data: {
           usuarioId: req.usuario.id,
           pacienteNome: resultadoIA.paciente?.nome || 'Não identificado',
@@ -2114,14 +2137,22 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
           laudoEstruturado: resultadoIA.laudo || [],
           imagensQtd: caminhosArquivos.length,
           pdfArquivo: pdfUrl,
-          docxArquivo: docxUrl
+          docxArquivo: docxUrl,
+          publicToken
         }
-      }).catch(e => logger.warn('Aviso ao salvar histórico de ultrassom', { error: e.message }));
+      }).catch(e => {
+        logger.warn('Aviso ao salvar histórico de ultrassom', { error: e.message });
+        return null;
+      });
+      exameCriadoId = criado?.id || null;
     }
 
     res.json({
       sucesso: true,
       jobId,
+      exameId: exameCriadoId,
+      publicToken,
+      urlPublica: compartilhamentoPdf.urlPublica,
       paciente: resultadoIA.paciente,
       laudo: resultadoIA.laudo,
       pdfUrl,
@@ -2259,6 +2290,10 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
         null
     };
 
+    const publicToken = gerarPublicToken();
+    const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicToken, {
+      baseUrl: resolverOriginSeguro(req)
+    });
     const docs = await gerarDocumentosCirurgicos(
       resultadoIA.paciente,
       resultadoIA.cirurgia,
@@ -2269,7 +2304,8 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
         layout: layoutUsuario,
         perfilLaudo: perfilDoUsuario,
         perfilCirurgico: perfilCirurgicoUsuario,
-        legendasFotos
+        legendasFotos,
+        compartilhamento: compartilhamentoPdf
       }
     );
 
@@ -2306,8 +2342,9 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
       logger.warn('Aviso ao salvar meta_cirurgia.json', { error: metaErr.message });
     }
 
+    let relatorioCriadoId = null;
     if (req.usuario && req.usuario.id) {
-      await prisma.relatorioCirurgico.create({
+      const criado = await prisma.relatorioCirurgico.create({
         data: {
           usuarioId: req.usuario.id,
           pacienteNome: resultadoIA.paciente?.nome || 'Paciente',
@@ -2318,14 +2355,22 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
           dadosCirurgia: resultadoIA.cirurgia || {},
           possuiFoto: fotosCaminhos.length > 0,
           pdfArquivo: pdfUrl,
-          docxArquivo: docxUrl
+          docxArquivo: docxUrl,
+          publicToken
         }
-      }).catch(e => logger.warn('Aviso ao salvar histórico cirúrgico', { error: e.message }));
+      }).catch(e => {
+        logger.warn('Aviso ao salvar histórico cirúrgico', { error: e.message });
+        return null;
+      });
+      relatorioCriadoId = criado?.id || null;
     }
 
     res.json({
       sucesso: true,
       jobId,
+      relatorioId: relatorioCriadoId,
+      publicToken,
+      urlPublica: compartilhamentoPdf.urlPublica,
       paciente: resultadoIA.paciente,
       cirurgia: resultadoIA.cirurgia,
       fotos: fotosResposta,
@@ -2496,6 +2541,20 @@ app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, 
       }
     }
 
+    let publicTokenExistente = null;
+    if (req.usuario && req.usuario.id) {
+      const exameExistente = await prisma.exameLaudo.findFirst({
+        where: { usuarioId: req.usuario.id, pdfArquivo: { contains: safeJobId } },
+        select: { id: true, publicToken: true }
+      }).catch(() => null);
+      publicTokenExistente = exameExistente?.publicToken || gerarPublicToken();
+    } else {
+      publicTokenExistente = gerarPublicToken();
+    }
+    const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicTokenExistente, {
+      baseUrl: resolverOriginSeguro(req)
+    });
+
     const docs = await gerarDocumentosExame(
       paciente || {},
       laudo,
@@ -2504,7 +2563,8 @@ app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, 
       layoutEfetivoUs,
       {
         usuario: usuarioEfetivo,
-        perfilLaudo: perfilEfetivoUs
+        perfilLaudo: perfilEfetivoUs,
+        compartilhamento: compartilhamentoPdf
       }
     );
 
@@ -2553,7 +2613,8 @@ app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, 
           tutorNome: paciente?.tutor || null,
           laudoEstruturado: laudo,
           pdfArquivo: `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}`,
-          docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`
+          docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`,
+          ...(publicTokenExistente ? { publicToken: publicTokenExistente } : {})
         }
       }).catch(e => logger.warn('Aviso ao sincronizar exame recompilado no banco', { error: e.message }));
     }
@@ -2561,6 +2622,8 @@ app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, 
     res.json({
       sucesso: true,
       mensagem: 'Laudo recompilado com sucesso com suas modificações!',
+      publicToken: publicTokenExistente,
+      urlPublica: compartilhamentoPdf.urlPublica,
       paciente,
       laudo,
       estiloOverride: estiloOverrideLimpo,
@@ -2663,6 +2726,20 @@ app.post('/api/cirurgia/recompilar', limiterGeracaoPesada, exigirAutenticacao, e
         null
     };
 
+    let publicTokenExistente = null;
+    if (req.usuario && req.usuario.id) {
+      const relExistente = await prisma.relatorioCirurgico.findFirst({
+        where: { usuarioId: req.usuario.id, pdfArquivo: { contains: safeJobId } },
+        select: { id: true, publicToken: true }
+      }).catch(() => null);
+      publicTokenExistente = relExistente?.publicToken || gerarPublicToken();
+    } else {
+      publicTokenExistente = gerarPublicToken();
+    }
+    const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicTokenExistente, {
+      baseUrl: resolverOriginSeguro(req)
+    });
+
     const docs = await gerarDocumentosCirurgicos(
       paciente || {},
       cirurgiaComLegendas,
@@ -2673,7 +2750,8 @@ app.post('/api/cirurgia/recompilar', limiterGeracaoPesada, exigirAutenticacao, e
         layout: layoutUsuario,
         perfilLaudo: perfilDoUsuario,
         perfilCirurgico: perfilCirurgicoEfetivo,
-        legendasFotos
+        legendasFotos,
+        compartilhamento: compartilhamentoPdf
       }
     );
 
@@ -2716,7 +2794,8 @@ app.post('/api/cirurgia/recompilar', limiterGeracaoPesada, exigirAutenticacao, e
           diagnostico: cirurgia.diagnosticoPreCirurgico || null,
           dadosCirurgia: cirurgiaComLegendas,
           pdfArquivo: `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}`,
-          docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`
+          docxArquivo: `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}`,
+          ...(publicTokenExistente ? { publicToken: publicTokenExistente } : {})
         }
       }).catch(e => logger.warn('Aviso ao sincronizar relatório recompilado no banco', { error: e.message }));
     }
@@ -2724,6 +2803,8 @@ app.post('/api/cirurgia/recompilar', limiterGeracaoPesada, exigirAutenticacao, e
     res.json({
       sucesso: true,
       mensagem: 'Relatório cirúrgico recompilado com sucesso com suas modificações!',
+      publicToken: publicTokenExistente,
+      urlPublica: compartilhamentoPdf.urlPublica,
       paciente,
       cirurgia: cirurgiaComLegendas,
       estiloOverride: estiloOverrideLimpo,
@@ -2782,6 +2863,294 @@ app.get('/favicon.svg', (req, res) => {
 // =========================================================================
 // SERVIÇO ESTÁTICO DO FRONTEND REACT (VETARO DESIGN SYSTEM)
 // =========================================================================
+
+// ==================== FASE 1: ENTREGA INTELIGENTE (LINK PÚBLICO, QR CODE, RESUMO TUTOR) ====================
+
+function resolverCaminhoPdfDisco(pdfArquivo = '') {
+  const limpo = String(pdfArquivo || '').split('?')[0];
+  const match = limpo.match(/^\/downloads\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  const safeJobId = path.basename(decodeURIComponent(match[1]));
+  const safeFilename = path.basename(decodeURIComponent(match[2]));
+  const fullPath = path.join(outputDir, safeJobId, safeFilename);
+  return { safeJobId, safeFilename, fullPath };
+}
+
+async function localizarRegistroCompartilhamento(tipo, idOuJobId, usuario) {
+  const tipoNorm = String(tipo || '').toLowerCase();
+  if (tipoNorm !== 'ultrassom' && tipoNorm !== 'cirurgia') {
+    return { erroStatus: 400, erroMsg: 'Tipo inválido. Use "ultrassom" ou "cirurgia".' };
+  }
+  const filtroDono = usuario?.role === 'admin' ? {} : { usuarioId: usuario.id };
+  const chave = String(idOuJobId || '').trim();
+  if (!chave) {
+    return { erroStatus: 400, erroMsg: 'Identificador do documento não informado.' };
+  }
+  const model = tipoNorm === 'cirurgia' ? prisma.relatorioCirurgico : prisma.exameLaudo;
+  const registro = await model.findFirst({
+    where: {
+      ...filtroDono,
+      OR: [
+        { id: chave },
+        { pdfArquivo: { contains: chave } }
+      ]
+    }
+  });
+  if (!registro) {
+    return { erroStatus: 404, erroMsg: 'Documento não encontrado ou sem permissão de acesso.' };
+  }
+  return { tipo: tipoNorm, model, registro };
+}
+
+app.post('/api/compartilhamento/:tipo/:id/link', exigirAutenticacao, async (req, res) => {
+  try {
+    const busca = await localizarRegistroCompartilhamento(req.params.tipo, req.params.id, req.usuario);
+    if (busca.erroStatus) return res.status(busca.erroStatus).json({ error: busca.erroMsg });
+
+    let { registro, model } = busca;
+    if (!registro.publicToken) {
+      const novoToken = gerarPublicToken();
+      registro = await model.update({
+        where: { id: registro.id },
+        data: { publicToken: novoToken, linkAtivo: true }
+      });
+    }
+
+    const dadosQr = await prepararDadosQrCodeCompartilhamento(registro.publicToken, {
+      baseUrl: resolverOriginSeguro(req)
+    });
+
+    res.json({
+      sucesso: true,
+      id: registro.id,
+      tipo: busca.tipo,
+      publicToken: registro.publicToken,
+      urlPublica: dadosQr.urlPublica,
+      qrCodeDataUri: dadosQr.qrCodeDataUri,
+      linkAtivo: registro.linkAtivo,
+      resumoTutor: registro.resumoTutor || '',
+      visualizacoes: registro.visualizacoes || 0,
+      primeiraVisualizacaoEm: registro.primeiraVisualizacaoEm,
+      ultimaVisualizacaoEm: registro.ultimaVisualizacaoEm,
+      compartilhadoEm: registro.compartilhadoEm
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao obter/gerar link público de compartilhamento');
+    res.status(500).json({ error: 'Erro ao gerar link de compartilhamento.' });
+  }
+});
+
+app.patch('/api/compartilhamento/:tipo/:id/status', exigirAutenticacao, async (req, res) => {
+  try {
+    const busca = await localizarRegistroCompartilhamento(req.params.tipo, req.params.id, req.usuario);
+    if (busca.erroStatus) return res.status(busca.erroStatus).json({ error: busca.erroMsg });
+
+    const { linkAtivo } = req.body || {};
+    if (typeof linkAtivo !== 'boolean') {
+      return res.status(400).json({ error: 'Informe linkAtivo como booleano (true ou false).' });
+    }
+
+    const atualizado = await busca.model.update({
+      where: { id: busca.registro.id },
+      data: { linkAtivo }
+    });
+
+    res.json({
+      sucesso: true,
+      id: atualizado.id,
+      linkAtivo: atualizado.linkAtivo
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao alterar status do link público');
+    res.status(500).json({ error: 'Erro ao atualizar status do link.' });
+  }
+});
+
+app.post('/api/compartilhamento/:tipo/:id/resumo-tutor', limiterGeracaoPesada, exigirAutenticacao, async (req, res) => {
+  try {
+    const busca = await localizarRegistroCompartilhamento(req.params.tipo, req.params.id, req.usuario);
+    if (busca.erroStatus) return res.status(busca.erroStatus).json({ error: busca.erroMsg });
+
+    const { registro, tipo, model } = busca;
+    const forcarRegeneracao = Boolean(req.body?.forcarRegeneracao);
+
+    if (registro.resumoTutor && !forcarRegeneracao) {
+      return res.json({
+        sucesso: true,
+        resumoTutor: registro.resumoTutor,
+        origem: 'cache'
+      });
+    }
+
+    const resultado = await gerarResumoTutorIA({
+      tipo,
+      paciente: {
+        nome: registro.pacienteNome,
+        especie: registro.pacienteEspecie,
+        tutor: registro.tutorNome || ''
+      },
+      laudo: tipo === 'ultrassom' ? registro.laudoEstruturado : [],
+      cirurgia: tipo === 'cirurgia' ? registro.dadosCirurgia : null,
+      apiKey
+    });
+
+    const atualizado = await model.update({
+      where: { id: registro.id },
+      data: { resumoTutor: resultado.resumo }
+    });
+
+    res.json({
+      sucesso: true,
+      resumoTutor: atualizado.resumoTutor,
+      modelo: resultado.modelo,
+      origem: 'ia'
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao gerar resumo empático para o tutor');
+    res.status(500).json({ error: err.message || 'Não foi possível gerar o resumo para o tutor.' });
+  }
+});
+
+app.put('/api/compartilhamento/:tipo/:id/resumo-tutor', exigirAutenticacao, async (req, res) => {
+  try {
+    const busca = await localizarRegistroCompartilhamento(req.params.tipo, req.params.id, req.usuario);
+    if (busca.erroStatus) return res.status(busca.erroStatus).json({ error: busca.erroMsg });
+
+    const resumoLimpo = String(req.body?.resumoTutor ?? '').trim().slice(0, 2000);
+    const atualizado = await busca.model.update({
+      where: { id: busca.registro.id },
+      data: { resumoTutor: resumoLimpo || null }
+    });
+
+    res.json({
+      sucesso: true,
+      resumoTutor: atualizado.resumoTutor || ''
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao salvar edição do resumo para o tutor');
+    res.status(500).json({ error: 'Erro ao salvar resumo do tutor.' });
+  }
+});
+
+app.post('/api/compartilhamento/:tipo/:id/registrar-envio', exigirAutenticacao, async (req, res) => {
+  try {
+    const busca = await localizarRegistroCompartilhamento(req.params.tipo, req.params.id, req.usuario);
+    if (busca.erroStatus) return res.status(busca.erroStatus).json({ error: busca.erroMsg });
+
+    const agora = new Date();
+    await busca.model.update({
+      where: { id: busca.registro.id },
+      data: { compartilhadoEm: agora }
+    });
+
+    res.json({ sucesso: true, compartilhadoEm: agora });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao registrar envio.' });
+  }
+});
+
+async function buscarDocumentoPorTokenPublico(token) {
+  const tokenLimpo = String(token || '').trim();
+  if (!tokenLimpo || tokenLimpo.length > 64) return null;
+
+  const exame = await prisma.exameLaudo.findUnique({
+    where: { publicToken: tokenLimpo },
+    include: { usuario: { select: { nome: true, crmv: true, nomeClinica: true } } }
+  });
+  if (exame) return { tipo: 'ultrassom', model: prisma.exameLaudo, registro: exame };
+
+  const cirurgia = await prisma.relatorioCirurgico.findUnique({
+    where: { publicToken: tokenLimpo },
+    include: { usuario: { select: { nome: true, crmv: true, nomeClinica: true } } }
+  });
+  if (cirurgia) return { tipo: 'cirurgia', model: prisma.relatorioCirurgico, registro: cirurgia };
+
+  return null;
+}
+
+app.get('/l/:token', limiterLinkPublico, async (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Cache-Control', 'private, no-store');
+
+  try {
+    const encontrado = await buscarDocumentoPorTokenPublico(req.params.token);
+    if (!encontrado || !encontrado.registro.linkAtivo) {
+      return res.status(404).type('html').send(renderizarPaginaIndisponivel());
+    }
+
+    const { tipo, model, registro } = encontrado;
+    const ua = req.headers['user-agent'] || '';
+    if (!isBotPreviewWhatsApp(ua)) {
+      const agora = new Date();
+      model.update({
+        where: { id: registro.id },
+        data: {
+          visualizacoes: { increment: 1 },
+          ultimaVisualizacaoEm: agora,
+          ...(registro.primeiraVisualizacaoEm ? {} : { primeiraVisualizacaoEm: agora })
+        }
+      }).catch((e) => logger.warn({ err: e.message }, 'Aviso ao registrar visualização de link público'));
+    }
+
+    const tokenSafe = encodeURIComponent(registro.publicToken);
+    const urlPublica = montarUrlPublica(registro.publicToken, resolverOriginSeguro(req));
+    const html = renderizarPaginaPublicaLaudo({
+      tipo,
+      pacienteNome: registro.pacienteNome,
+      pacienteEspecie: registro.pacienteEspecie || '',
+      tutorNome: registro.tutorNome || '',
+      dataExame: registro.dataExame || '',
+      procedimento: tipo === 'cirurgia' ? (registro.procedimento || '') : '',
+      medicoNome: registro.usuario?.nome || '',
+      medicoCrmv: registro.usuario?.crmv || '',
+      clinicaNome: registro.usuario?.nomeClinica || '',
+      resumoTutor: registro.resumoTutor || '',
+      urlPdfInline: `/l/${tokenSafe}/pdf`,
+      urlPdfDownload: `/l/${tokenSafe}/pdf?download=1`,
+      urlPublica
+    });
+
+    return res.status(200).type('html').send(html);
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao renderizar página pública /l/:token');
+    return res.status(500).type('html').send(renderizarPaginaIndisponivel());
+  }
+});
+
+app.get('/l/:token/pdf', limiterLinkPublico, async (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  try {
+    const encontrado = await buscarDocumentoPorTokenPublico(req.params.token);
+    if (!encontrado || !encontrado.registro.linkAtivo) {
+      return res.status(404).type('html').send(renderizarPaginaIndisponivel());
+    }
+
+    const resolved = resolverCaminhoPdfDisco(encontrado.registro.pdfArquivo);
+    if (!resolved || !fs.existsSync(resolved.fullPath)) {
+      return res.status(404).type('html').send(renderizarPaginaIndisponivel());
+    }
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+
+    if (req.query.download === '1') {
+      return res.download(resolved.fullPath, resolved.safeFilename);
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(resolved.safeFilename)}"`);
+    return res.sendFile(path.resolve(resolved.fullPath));
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao servir PDF público /l/:token/pdf');
+    return res.status(500).send('Não foi possível carregar o documento PDF.');
+  }
+});
+
 const frontendDistPath = path.join(__dirname, 'frontend', 'dist');
 if (fs.existsSync(frontendDistPath)) {
   app.use('/assets', express.static(path.join(frontendDistPath, 'assets'), {
@@ -2802,6 +3171,7 @@ app.use((req, res, next) => {
     req.method !== 'GET' ||
     req.path.startsWith('/api') ||
     req.path.startsWith('/downloads') ||
+    req.path.startsWith('/l/') ||
     req.path.startsWith('/uploads') ||
     req.path.startsWith('/assets') ||
     req.path.startsWith('/health')

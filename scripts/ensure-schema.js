@@ -61,7 +61,24 @@ async function garantirSchemaSemPerdaDeDados() {
       `ALTER TABLE "configuracoes_layout" ADD COLUMN IF NOT EXISTS "pdfs_referencia_qtd" INTEGER NOT NULL DEFAULT 0;`,
       `UPDATE "configuracoes_layout" SET "nome" = 'Padrão Vetaro', "modo_template" = 'padrao_vetaro' WHERE "modo_template" = 'padrao_upa' OR "nome" ILIKE '%UPA PET%';`,
       `UPDATE "usuarios" SET "nome_clinica" = 'Vetaro' WHERE "nome_clinica" ILIKE '%UPA PET%';`,
-      `UPDATE "clinicas" SET "nome" = 'Vetaro' WHERE "nome" ILIKE '%UPA PET%';`
+      `UPDATE "clinicas" SET "nome" = 'Vetaro' WHERE "nome" ILIKE '%UPA PET%';`,
+      // Fase 1 — Entrega Inteligente (link público, QR Code, resumo ao tutor e visualizações)
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "public_token" TEXT;`,
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "link_ativo" BOOLEAN NOT NULL DEFAULT true;`,
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "resumo_tutor" TEXT;`,
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "visualizacoes" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "primeira_visualizacao_em" TIMESTAMP(3);`,
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "ultima_visualizacao_em" TIMESTAMP(3);`,
+      `ALTER TABLE "exames_laudos" ADD COLUMN IF NOT EXISTS "compartilhado_em" TIMESTAMP(3);`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "exames_laudos_public_token_key" ON "exames_laudos"("public_token");`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "public_token" TEXT;`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "link_ativo" BOOLEAN NOT NULL DEFAULT true;`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "resumo_tutor" TEXT;`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "visualizacoes" INTEGER NOT NULL DEFAULT 0;`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "primeira_visualizacao_em" TIMESTAMP(3);`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "ultima_visualizacao_em" TIMESTAMP(3);`,
+      `ALTER TABLE "relatorios_cirurgicos" ADD COLUMN IF NOT EXISTS "compartilhado_em" TIMESTAMP(3);`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "relatorios_cirurgicos_public_token_key" ON "relatorios_cirurgicos"("public_token");`
     ];
 
     for (const sql of alterStatements) {

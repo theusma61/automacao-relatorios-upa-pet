@@ -1323,10 +1323,18 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
     ${ev.mostrarAssinaturaTexto ? `<div class="assinatura-crmv">${escaparHtml(ctx.crmvMedico)}</div>` : ''}
   </div>` : ''}
 
-  ${(ev.textoAvisoLegal || ev.rodapeContato) ? `
-    <div class="rodape-bloco">
-      ${ev.textoAvisoLegal ? `<div class="rodape-aviso">${escaparHtml(ev.textoAvisoLegal)}</div>` : ''}
-      ${ev.rodapeContato ? `<div class="rodape-contato">${escaparHtml(ev.rodapeContato)}</div>` : ''}
+  ${(ev.textoAvisoLegal || ev.rodapeContato || ctx.compartilhamento?.qrCodeDataUri) ? `
+    <div class="rodape-bloco" style="${ctx.compartilhamento?.qrCodeDataUri ? 'display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left;' : ''}">
+      <div style="${ctx.compartilhamento?.qrCodeDataUri ? 'flex:1;' : ''}">
+        ${ev.textoAvisoLegal ? `<div class="rodape-aviso">${escaparHtml(ev.textoAvisoLegal)}</div>` : ''}
+        ${ev.rodapeContato ? `<div class="rodape-contato">${escaparHtml(ev.rodapeContato)}</div>` : ''}
+      </div>
+      ${ctx.compartilhamento?.qrCodeDataUri ? `
+        <div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0;">
+          <img src="${ctx.compartilhamento.qrCodeDataUri}" alt="QR Code do relatório digital" style="width:44px; height:44px; display:block; border:1px solid #cbd5e1; border-radius:3px; padding:1px; background:#fff;">
+          <span style="font-size:6pt; font-style:normal; color:#475569; margin-top:1px; white-space:nowrap;">Versão digital</span>
+        </div>
+      ` : ''}
     </div>
   ` : ''}
 
@@ -1388,7 +1396,7 @@ async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDest
   const caminhoPdf = path.join(pastaDestino, `${nomeBaseArquivo}.pdf`);
 
   await gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoDocx, imagens, contexto);
-  await gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoPdf, imagens, contexto);
+  await gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoPdf, imagens, { ...contexto, compartilhamento: opcoes.compartilhamento || null });
 
   return { caminhoDocx, caminhoPdf };
 }

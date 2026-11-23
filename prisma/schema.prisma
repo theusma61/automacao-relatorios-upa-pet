@@ -141,6 +141,15 @@ model ExameLaudo {
   pdfArquivo       String?  @map("pdf_arquivo")
   docxArquivo      String?  @map("docx_arquivo")
 
+  // Fase 1 — Entrega Inteligente (link público, QR Code, resumo ao tutor e visualizações)
+  publicToken            String?   @unique @map("public_token")
+  linkAtivo              Boolean   @default(true) @map("link_ativo")
+  resumoTutor            String?   @db.Text @map("resumo_tutor")
+  visualizacoes          Int       @default(0)
+  primeiraVisualizacaoEm DateTime? @map("primeira_visualizacao_em")
+  ultimaVisualizacaoEm   DateTime? @map("ultima_visualizacao_em")
+  compartilhadoEm        DateTime? @map("compartilhado_em")
+
   criadoEm         DateTime @default(now()) @map("criado_em")
 
   @@index([usuarioId])
@@ -166,6 +175,15 @@ model RelatorioCirurgico {
 
   pdfArquivo      String?  @map("pdf_arquivo")
   docxArquivo     String?  @map("docx_arquivo")
+
+  // Fase 1 — Entrega Inteligente (link público, QR Code, resumo ao tutor e visualizações)
+  publicToken            String?   @unique @map("public_token")
+  linkAtivo              Boolean   @default(true) @map("link_ativo")
+  resumoTutor            String?   @db.Text @map("resumo_tutor")
+  visualizacoes          Int       @default(0)
+  primeiraVisualizacaoEm DateTime? @map("primeira_visualizacao_em")
+  ultimaVisualizacaoEm   DateTime? @map("ultima_visualizacao_em")
+  compartilhadoEm        DateTime? @map("compartilhado_em")
 
   criadoEm        DateTime @default(now()) @map("criado_em")
 

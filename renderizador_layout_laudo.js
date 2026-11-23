@@ -367,7 +367,7 @@ function renderizarAchadosOrgaos(template, laudoArray, autoFit = {}) {
 /**
  * Renderiza o rodapé com assinatura e aviso legal
  */
-function renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml) {
+function renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml, compartilhamento = null) {
   const alinhamentoAssinatura = template.posicaoAssinatura === 'centro'
     ? 'center'
     : (template.posicaoAssinatura === 'esquerda' ? 'left' : 'right');
@@ -378,6 +378,14 @@ function renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml) {
 
   const nomeLimpo = (nomeMedico && nomeMedico !== 'null' && nomeMedico !== 'undefined') ? String(nomeMedico).trim() : '';
   const crmvLimpo = (crmvMedico && crmvMedico !== 'null' && crmvMedico !== 'undefined') ? String(crmvMedico).trim() : '';
+  const qrUri = compartilhamento?.qrCodeDataUri || '';
+
+  const blocoQr = qrUri
+    ? `<div class="vetaro-qr-box" style="display:flex; flex-direction:column; align-items:center; flex-shrink:0; margin-left:10px;">
+         <img src="${qrUri}" alt="QR Code do laudo digital" style="width:44px; height:44px; display:block; border:1px solid #e2e8f0; border-radius:3px; padding:1px; background:#fff;">
+         <span style="font-size:6pt; font-style:normal; color:#475569; margin-top:1px; white-space:nowrap;">Laudo digital</span>
+       </div>`
+    : '';
 
   return `
     <div class="signature-section" style="text-align: ${alinhamentoAssinatura}; margin-top: 6px; padding: 0 10px;">
@@ -386,8 +394,9 @@ function renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml) {
       ${nomeLimpo ? `<p style="margin: 0; font-weight: bold; font-size: 10pt; color: #111;">${nomeLimpo}</p>` : ''}
       ${crmvLimpo ? `<p style="margin: 1px 0 0 0; font-size: 9pt; color: ${template.corSecundaria};">${crmvLimpo}</p>` : ''}
     </div>
-    <div class="footer-legal" style="font-size: 7.2pt; font-style: italic; color: #666; text-align: center; border-top: 1px solid ${template.corBordaTabelas || '#ccc'}; padding-top: 3px; margin-top: 6px;">
-      ${template.textoAvisoLegal}
+    <div class="footer-legal" style="font-size: 7.2pt; font-style: italic; color: #666; text-align: ${qrUri ? 'left' : 'center'}; border-top: 1px solid ${template.corBordaTabelas || '#ccc'}; padding-top: 3px; margin-top: 6px; ${qrUri ? 'display:flex; align-items:center; justify-content:space-between; gap:8px;' : ''}">
+      <div style="flex:1;">${template.textoAvisoLegal}</div>
+      ${blocoQr}
     </div>
   `;
 }
@@ -788,7 +797,7 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
   const dadosPacienteHtml = renderizarDadosPaciente(template, dadosPaciente);
   const tituloHtml = renderizarTitulo(template);
   const { corpoHtml, conclusaoHtml } = renderizarAchadosOrgaos(template, laudoProcessado, autoFit);
-  const rodapeHtml = renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml);
+  const rodapeHtml = renderizarRodape(template, nomeMedico, crmvMedico, assinaturaImgHtml, opcoes.compartilhamento || null);
 
   // Paginação equilibrada de imagens (máximo 8 por folha sem páginas com 1 foto órfã)
   const paginasImagens = distribuirFotosEquilibradas(imagensPaths, 8);
@@ -946,6 +955,7 @@ function construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths = [], opcoes
 
 module.exports = {
   construirHtmlLaudo,
+  renderizarRodape,
   normalizarTemplateVisual,
   TEMPLATE_VISUAL_PADRAO,
   calcularAutoFitLaudoTextual,

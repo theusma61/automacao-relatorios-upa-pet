@@ -456,9 +456,11 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   });
 
   // Estima geometria real de topo/rodapé/assinatura para o Auto-Fit agnóstico nunca cortar rodapé ou assinatura
+  const qrCodeUri = opcoes.compartilhamento?.qrCodeDataUri || '';
   const temRodapeModelo = Boolean(
-    !ehStationeryFullPage && fCfg.showOnTextPages !== 'baked_in_stationery' &&
-    (fCfg.disclaimerText || (Array.isArray(fCfg.contactLines) && fCfg.contactLines.length > 0) || (fCfg.showFooterLogo && footerLogoUri))
+    qrCodeUri ||
+    (!ehStationeryFullPage && fCfg.showOnTextPages !== 'baked_in_stationery' &&
+    (fCfg.disclaimerText || (Array.isArray(fCfg.contactLines) && fCfg.contactLines.length > 0) || (fCfg.showFooterLogo && footerLogoUri)))
   );
   const alturaTopoPag1EstimadaMm = ehStationeryFullPage
     ? (parseMmNumber(margins.topFirstPage, 50) + (tCfg.showTextTitle !== false ? 18 : 6))
@@ -549,26 +551,39 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
   const mostrarRodapeEmTodasPaginasTexto = mostrarRodapeHtmlNasPaginasTexto && fCfg.showOnTextPages === 'all_text_pages';
   const mostrarRodapeNasPaginasImagem = !ehStationeryFullPage && Boolean(fCfg.showOnImagePages && fCfg.disclaimerText);
 
-  const blocoDisclaimerRodapeFinalHtml = mostrarRodapeHtmlNasPaginasTexto ? `
+  const blocoQrRodapeClonado = qrCodeUri ? `
+    <div class="vetaro-qr-inline">
+      <img src="${qrCodeUri}" alt="QR Code do laudo digital" class="vetaro-qr-img">
+      <span class="vetaro-qr-label">Laudo digital</span>
+    </div>
+  ` : '';
+
+  const blocoDisclaimerRodapeFinalHtml = (mostrarRodapeHtmlNasPaginasTexto || qrCodeUri) ? `
     <div class="final-footer-wrap">
-      ${fCfg.hasTopBorder ? `<div class="footer-top-border"></div>` : ''}
-      ${fCfg.disclaimerText ? `<div class="disclaimer-text">${fCfg.disclaimerText}</div>` : ''}
-      ${(() => {
-        const linhasContatoEfetivas = (fCfg.contactLines && Array.isArray(fCfg.contactLines))
-          ? fCfg.contactLines.filter(l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l))
-          : [];
-        return linhasContatoEfetivas.length > 0 ? `
-          <div class="contact-divider"></div>
-          <div class="contact-lines">
-            ${linhasContatoEfetivas.map(l => `<p>${l}</p>`).join('\n')}
-          </div>
-        ` : '';
-      })()}
-      ${(fCfg.showFooterLogo && footerLogoUri) ? `
-        <div class="footer-mini-logo-wrap">
-          <img src="${footerLogoUri}" class="footer-mini-logo" alt="Logo Rodapé">
+      ${(mostrarRodapeHtmlNasPaginasTexto && fCfg.hasTopBorder) ? `<div class="footer-top-border"></div>` : ''}
+      <div class="${qrCodeUri ? 'footer-flex-with-qr' : ''}">
+        <div class="${qrCodeUri ? 'footer-flex-main' : ''}">
+          ${(mostrarRodapeHtmlNasPaginasTexto && fCfg.disclaimerText) ? `<div class="disclaimer-text">${fCfg.disclaimerText}</div>` : ''}
+          ${(() => {
+            if (!mostrarRodapeHtmlNasPaginasTexto) return '';
+            const linhasContatoEfetivas = (fCfg.contactLines && Array.isArray(fCfg.contactLines))
+              ? fCfg.contactLines.filter(l => !/CRMV/i.test(l) && !/(m[eé]dic[oa]|veterin[aá]ri[oa]|dra?\.)/i.test(l))
+              : [];
+            return linhasContatoEfetivas.length > 0 ? `
+              <div class="contact-divider"></div>
+              <div class="contact-lines">
+                ${linhasContatoEfetivas.map(l => `<p>${l}</p>`).join('\n')}
+              </div>
+            ` : '';
+          })()}
+          ${(mostrarRodapeHtmlNasPaginasTexto && fCfg.showFooterLogo && footerLogoUri) ? `
+            <div class="footer-mini-logo-wrap">
+              <img src="${footerLogoUri}" class="footer-mini-logo" alt="Logo Rodapé">
+            </div>
+          ` : ''}
         </div>
-      ` : ''}
+        ${blocoQrRodapeClonado}
+      </div>
     </div>
   ` : '';
 
@@ -897,6 +912,36 @@ function gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layou
       object-fit: contain;
       display: inline-block;
     }
+    .footer-flex-with-qr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 3mm;
+    }
+    .footer-flex-main {
+      flex: 1;
+    }
+    .vetaro-qr-inline {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .vetaro-qr-img {
+      width: 12mm;
+      height: 12mm;
+      display: block;
+      border: 1px solid #cbd5e1;
+      border-radius: 1mm;
+      padding: 0.4mm;
+      background: #ffffff;
+    }
+    .vetaro-qr-label {
+      font-size: 6pt;
+      color: #475569;
+      margin-top: 0.5mm;
+      white-space: nowrap;
+    }
     .image-page-body {
       padding: ${paddingTopFotos} ${imgRightPad} 4mm ${imgLeftPad};
       flex: 1;
@@ -1051,12 +1096,15 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
 
   let html = '';
 
+  const compartilhamentoPdf = opcoes.compartilhamento || null;
+
   if (usarModoClonado) {
     html = gerarHtmlTemplateClonado(dadosPaciente, laudoArray, imagensPaths, layoutEfetivo, {
       usuario,
       nomeMedico,
       crmvMedico,
-      clinicaNome
+      clinicaNome,
+      compartilhamento: compartilhamentoPdf
     });
   } else if (perfilLaudo && perfilLaudo.ativo && perfilLaudo.templateVisual) {
     html = construirHtmlLaudo(dadosPaciente, laudoArray, imagensPaths, {
@@ -1065,7 +1113,8 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       customLayout: layout,
       nomeMedico,
       crmvMedico,
-      clinicaNome
+      clinicaNome,
+      compartilhamento: compartilhamentoPdf
     });
   } else {
     // Modo Padrão Vetaro (sem logo nem referência a UPA PET)
@@ -1115,11 +1164,23 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
     const autoFit = calcularAutoFitLaudoTextual(laudoArray, layout, opcoes);
     const laudoProcessado = autoFit.laudoAjustado;
 
+    const qrPadraoUri = compartilhamentoPdf?.qrCodeDataUri || '';
     const rodape = `
       <div class="footer">
         O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.
       </div>
     `;
+    const rodapeTextoComQr = qrPadraoUri ? `
+      <div class="footer" style="display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left;">
+        <div style="flex:1;">
+          O ultrassom é um exame complementar e seu resultado deve ser interpretado exclusivamente pelo médico veterinário responsável, em associação com os achados clínicos e laboratoriais do paciente.
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0;">
+          <img src="${qrPadraoUri}" alt="QR Code do laudo digital" style="width:44px; height:44px; display:block; border:1px solid #cbd5e1; border-radius:3px; padding:1px; background:#fff;">
+          <span style="font-size:6pt; font-style:normal; color:#475569; margin-top:1px; white-space:nowrap;">Laudo digital</span>
+        </div>
+      </div>
+    ` : rodape;
 
     const laudoTextoHTML = laudoProcessado.map(item =>
       sanitizarParagrafoOrgao(item, { organLabelCase: 'UPPERCASE', usarDiagDifSeparado: true })
@@ -1211,7 +1272,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
         <p><strong>${nomeMedico}</strong></p>
         ${crmvMedico ? `<p>${crmvMedico}</p>` : ''}
       </div>
-      ${rodape}
+      ${rodapeTextoComQr}
     </div>
   </div>
 
