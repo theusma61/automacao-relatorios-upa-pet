@@ -4,6 +4,30 @@
 
 const { prisma } = require('./db');
 
+// Controle em memória de gerações de ultrassom em andamento por usuário (evita bypass de cota por concorrência/TOCTOU)
+const geracoesEmAndamentoPorUsuario = new Map();
+
+function obterGeracoesEmAndamento(usuarioId) {
+  return geracoesEmAndamentoPorUsuario.get(String(usuarioId)) || 0;
+}
+
+function reservarSlotCotaUltrassom(usuarioId) {
+  if (!usuarioId) return;
+  const key = String(usuarioId);
+  geracoesEmAndamentoPorUsuario.set(key, (geracoesEmAndamentoPorUsuario.get(key) || 0) + 1);
+}
+
+function liberarSlotCotaUltrassom(usuarioId) {
+  if (!usuarioId) return;
+  const key = String(usuarioId);
+  const atual = geracoesEmAndamentoPorUsuario.get(key) || 0;
+  if (atual <= 1) {
+    geracoesEmAndamentoPorUsuario.delete(key);
+  } else {
+    geracoesEmAndamentoPorUsuario.set(key, atual - 1);
+  }
+}
+
 const TABELA_PLANOS = {
   GRATUITO: {
     chave: 'GRATUITO',
@@ -131,22 +155,33 @@ async function obterOuCriarAssinatura(usuarioId) {
       }
     });
   } else if (agora > sub.cicloFim) {
-    // Renovação automática do ciclo mensal
-    const novoFim = new Date(agora);
-    novoFim.setDate(novoFim.getDate() + 30);
+    // Só renova ciclo automaticamente para planos pagos/admin locais ativos sem controle direto da Stripe.
+    // Planos GRATUITO/TRIAL têm cota de cortesia única; planos Stripe são renovados exclusivamente via webhook.
+    const planoAtualUpper = String(sub.plano || '').toUpperCase();
+    const statusAtualUpper = String(sub.status || '').toUpperCase();
+    const podeRenovarLocal =
+      !['GRATUITO', 'TRIAL'].includes(planoAtualUpper) &&
+      ['ACTIVE', 'TRIALING'].includes(statusAtualUpper) &&
+      !sub.stripeSubscriptionId;
 
-    sub = await prisma.assinatura.update({
-      where: { id: sub.id },
-      data: {
-        cicloInicio: agora,
-        cicloFim: novoFim
-      },
-      include: {
-        faturas: {
-          orderBy: { dataFatura: 'desc' }
+    if (podeRenovarLocal) {
+      const novoFim = new Date(agora);
+      novoFim.setDate(novoFim.getDate() + 30);
+
+      sub = await prisma.assinatura.update({
+        where: { id: sub.id },
+        data: {
+          cicloInicio: agora,
+          cicloFim: novoFim
+        },
+        include: {
+          faturas: {
+            orderBy: { dataFatura: 'desc' },
+            take: 12
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   return sub;
@@ -195,33 +230,48 @@ async function obterMetricasUsoAssinatura(usuarioId) {
   const excedenteQtd = Math.max(0, ultrassomCicloQtd - cotaLimite);
   const excedenteValor = excedenteQtd * 1.50;
 
-  // 2. Histórico real dos últimos 6 meses
+  // 2. Histórico real dos últimos 6 meses (2 consultas leves em paralelo em vez de 12 COUNTs sequenciais)
   const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  const historicoMeses = [];
+  const inicio6Meses = new Date(agora.getFullYear(), agora.getMonth() - 5, 1);
 
+  const [exames6m, cirurgias6m] = await Promise.all([
+    prisma.exameLaudo.findMany({
+      where: {
+        usuarioId,
+        criadoEm: { gte: inicio6Meses }
+      },
+      select: { criadoEm: true }
+    }),
+    prisma.relatorioCirurgico.findMany({
+      where: {
+        usuarioId,
+        criadoEm: { gte: inicio6Meses }
+      },
+      select: { criadoEm: true }
+    })
+  ]);
+
+  const contagemUsPorMes = new Map();
+  for (const row of exames6m) {
+    const d = new Date(row.criadoEm);
+    const chave = `${d.getFullYear()}-${d.getMonth()}`;
+    contagemUsPorMes.set(chave, (contagemUsPorMes.get(chave) || 0) + 1);
+  }
+  const contagemCirPorMes = new Map();
+  for (const row of cirurgias6m) {
+    const d = new Date(row.criadoEm);
+    const chave = `${d.getFullYear()}-${d.getMonth()}`;
+    contagemCirPorMes.set(chave, (contagemCirPorMes.get(chave) || 0) + 1);
+  }
+
+  const historicoMeses = [];
   for (let i = 5; i >= 0; i--) {
-    const dRef = new Date();
-    dRef.setMonth(dRef.getMonth() - i);
+    const dRef = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
     const ano = dRef.getFullYear();
     const mes = dRef.getMonth();
-
-    const inicioMes = new Date(ano, mes, 1);
-    const fimMes = new Date(ano, mes + 1, 0, 23, 59, 59, 999);
-
-    const [uQtd, cQtd] = await Promise.all([
-      prisma.exameLaudo.count({
-        where: {
-          usuarioId,
-          criadoEm: { gte: inicioMes, lte: fimMes }
-        }
-      }),
-      prisma.relatorioCirurgico.count({
-        where: {
-          usuarioId,
-          criadoEm: { gte: inicioMes, lte: fimMes }
-        }
-      })
-    ]);
+    const chave = `${ano}-${mes}`;
+    const uQtd = contagemUsPorMes.get(chave) || 0;
+    const cQtd = contagemCirPorMes.get(chave) || 0;
 
     historicoMeses.push({
       mes: `${nomesMeses[mes]}/${String(ano).slice(2)}`,
@@ -355,28 +405,58 @@ async function verificarLimiteCotaUltrassom(usuarioId) {
     };
   }
 
-  const metricas = await obterMetricasUsoAssinatura(usuarioId);
-  const { cota, plano } = metricas;
+  const assinatura = await obterOuCriarAssinatura(usuarioId);
+  const planoKey = (assinatura.plano || 'GRATUITO').toUpperCase();
+  const planoDef = TABELA_PLANOS[planoKey] || TABELA_PLANOS.GRATUITO;
+  const statusUpper = String(assinatura.status || 'ACTIVE').toUpperCase();
 
-  const pagamentoPendente = String(plano.status || '').toUpperCase() === 'PAST_DUE';
-  const cotaAtingida = cota.consumido >= cota.limite;
-  const bloqueado = pagamentoPendente || cotaAtingida;
+  // Para GRATUITO/TRIAL, contabiliza todo o histórico de cortesia; para planos pagos, apenas o ciclo vigente.
+  const filtroData = ['GRATUITO', 'TRIAL'].includes(planoKey)
+    ? {}
+    : {
+        criadoEm: {
+          gte: assinatura.cicloInicio,
+          lte: assinatura.cicloFim
+        }
+      };
+
+  const consumidoBanco = await prisma.exameLaudo.count({
+    where: {
+      usuarioId,
+      ...filtroData
+    }
+  });
+  const emAndamento = obterGeracoesEmAndamento(usuarioId);
+  const consumidoEfetivo = consumidoBanco + emAndamento;
+  const cotaLimite = assinatura.cotaLimite || planoDef.cotaLimite;
+  const disponivel = Math.max(0, cotaLimite - consumidoEfetivo);
+  const porcentagem = cotaLimite > 0
+    ? Number(Math.min(100, (consumidoEfetivo / cotaLimite) * 100).toFixed(1))
+    : 100;
+
+  const pagamentoPendente = statusUpper === 'PAST_DUE';
+  const assinaturaCancelada = statusUpper === 'CANCELED' && !['GRATUITO', 'TRIAL'].includes(planoKey);
+  const cotaAtingida = consumidoEfetivo >= cotaLimite;
+  const bloqueado = pagamentoPendente || assinaturaCancelada || cotaAtingida;
   const motivo = pagamentoPendente
     ? 'Há uma fatura pendente na sua assinatura. Atualize seu cartão de crédito em Configurações → Plano e assinatura para liberar novos laudos.'
+    : assinaturaCancelada
+    ? 'Sua assinatura foi cancelada. Reative ou escolha um novo plano em Configurações → Plano e assinatura para continuar emitindo laudos.'
     : cotaAtingida
-    ? `Você atingiu o limite da sua cota mensal de ${cota.limite} laudo(s) de ultrassom (${cota.consumido}/${cota.limite} emitidos no plano ${plano.nome}). Para continuar gerando novos laudos oficiais, faça upgrade do seu plano.`
+    ? `Você atingiu o limite da sua cota de ${cotaLimite} laudo(s) de ultrassom (${consumidoBanco}/${cotaLimite} emitidos no plano ${planoDef.nome}). Para continuar gerando novos laudos oficiais, faça upgrade do seu plano.`
     : null;
 
   return {
     bloqueado,
     motivo,
     admin: false,
-    limite: cota.limite,
-    consumido: cota.consumido,
-    disponivel: cota.disponivel,
-    porcentagem: cota.porcentagem,
-    plano: plano.chave,
-    planoNome: plano.nome
+    limite: cotaLimite,
+    consumido: consumidoBanco,
+    emAndamento,
+    disponivel,
+    porcentagem,
+    plano: planoKey,
+    planoNome: planoDef.nome
   };
 }
 
@@ -385,5 +465,7 @@ module.exports = {
   obterOuCriarAssinatura,
   obterMetricasUsoAssinatura,
   atualizarPlanoAssinatura,
-  verificarLimiteCotaUltrassom
+  verificarLimiteCotaUltrassom,
+  reservarSlotCotaUltrassom,
+  liberarSlotCotaUltrassom
 };

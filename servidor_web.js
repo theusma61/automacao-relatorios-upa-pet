@@ -69,7 +69,9 @@ const {
 const {
   obterMetricasUsoAssinatura,
   atualizarPlanoAssinatura,
-  verificarLimiteCotaUltrassom
+  verificarLimiteCotaUltrassom,
+  reservarSlotCotaUltrassom,
+  liberarSlotCotaUltrassom
 } = require('./gerenciador_assinatura');
 const {
   isStripeConfigurado,
@@ -1823,16 +1825,17 @@ app.delete('/api/cirurgia/meu-perfil', exigirAutenticacao, async (req, res) => {
 app.get('/api/historico', exigirAutenticacao, async (req, res) => {
   try {
     const filtroUsuario = req.usuario.role === 'admin' ? {} : { usuarioId: req.usuario.id };
+    const limite = Math.min(50, Math.max(1, parseInt(req.query.limit || '25', 10) || 25));
     const [exames, cirurgias] = await Promise.all([
       prisma.exameLaudo.findMany({
         where: filtroUsuario,
         orderBy: { criadoEm: 'desc' },
-        take: 50
+        take: limite
       }),
       prisma.relatorioCirurgico.findMany({
         where: filtroUsuario,
         orderBy: { criadoEm: 'desc' },
-        take: 50
+        take: limite
       })
     ]);
     res.json({ sucesso: true, exames, cirurgias });
@@ -1971,15 +1974,19 @@ app.get('/api/assinatura/status-cota', exigirAutenticacao, async (req, res) => {
 app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrassom'), upload.array('imagens', 25), async (req, res) => {
   // TRAVA DE LIMITES DA COTA MENSAL DE ULTRASSOM (ADMINS E PLANOS ILIMITADOS NUNCA SÃO BLOQUEADOS)
   const isAdmin = req.usuario && (req.usuario.role === 'admin' || req.usuario.plano === 'ILIMITADO' || req.usuario.plano === 'ADMIN');
+  let slotCotaReservado = false;
+  const limparUploadsTemp = () => {
+    if (Array.isArray(req.files)) {
+      req.files.forEach((f) => {
+        try { fs.unlinkSync(f.path); } catch (_) {}
+      });
+    }
+  };
   if (!isAdmin) {
     try {
       const checagemCota = await verificarLimiteCotaUltrassom(req.usuario.id);
       if (checagemCota.bloqueado) {
-        if (Array.isArray(req.files)) {
-          req.files.forEach((f) => {
-            try { fs.unlinkSync(f.path); } catch (_) {}
-          });
-        }
+        limparUploadsTemp();
         return res.status(403).json({
           error: checagemCota.motivo,
           codigo: 'COTA_ATINGIDA',
@@ -1990,15 +1997,22 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
           planoNome: checagemCota.planoNome
         });
       }
+      reservarSlotCotaUltrassom(req.usuario.id);
+      slotCotaReservado = true;
     } catch (errCota) {
-      logger.warn('Aviso ao checar limite de cota de ultrassom', { error: errCota.message });
+      limparUploadsTemp();
+      logger.error('Falha ao validar cota de ultrassom (fail-closed)', { error: errCota.message, usuarioId: req.usuario?.id });
+      return res.status(503).json({ error: 'Não foi possível validar sua cota no momento. Tente novamente em instantes.' });
     }
   }
 
   if (!apiKey) {
+    if (slotCotaReservado) liberarSlotCotaUltrassom(req.usuario.id);
+    limparUploadsTemp();
     return res.status(400).json({ error: 'Chave da API Gemini não configurada (GEMINI_API_KEY).' });
   }
   if (!req.files || req.files.length === 0) {
+    if (slotCotaReservado) liberarSlotCotaUltrassom(req.usuario.id);
     return res.status(400).json({ error: 'Nenhuma imagem enviada para o exame.' });
   }
 
@@ -2107,6 +2121,9 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     console.error('Erro ao processar ultrassom:', err);
     res.status(500).json({ error: err.message || 'Erro interno ao processar laudo de ultrassom.' });
   } finally {
+    if (slotCotaReservado) {
+      liberarSlotCotaUltrassom(req.usuario.id);
+    }
     // Remove os arquivos temporários de uploads/
     req.files.forEach(f => {
       try { fs.unlinkSync(f.path); } catch (_) {}

@@ -144,6 +144,7 @@ model ExameLaudo {
   criadoEm         DateTime @default(now()) @map("criado_em")
 
   @@index([usuarioId])
+  @@index([usuarioId, criadoEm])
   @@index([pacienteNome])
   @@index([criadoEm])
   @@map("exames_laudos")
@@ -169,6 +170,7 @@ model RelatorioCirurgico {
   criadoEm        DateTime @default(now()) @map("criado_em")
 
   @@index([usuarioId])
+  @@index([usuarioId, criadoEm])
   @@index([pacienteNome])
   @@index([criadoEm])
   @@map("relatorios_cirurgicos")
