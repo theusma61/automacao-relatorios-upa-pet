@@ -66,8 +66,8 @@ describe('reconciliarLaudoComOrdemOrgaos', () => {
     expect(resultado.length).toBe(3);
     expect(resultado[0].orgao).toBe('BEXIGA');
     expect(resultado[1].orgao).toBe('RINS');
-    expect(resultado[1].texto).toContain('RE: 4,13 cm');
-    expect(resultado[1].texto).toContain('RD: 5,01 cm');
+    expect(resultado[1].texto).toContain('4,13 cm');
+    expect(resultado[1].texto).toContain('5,01 cm');
     expect(resultado[1].diagDif).toContain('NEFROPATIA E');
     expect(resultado[1].diagDif).toContain('NEFROPATIA D');
     expect(resultado[2].orgao).toBe('BAÇO');

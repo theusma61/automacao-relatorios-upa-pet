@@ -115,7 +115,7 @@ describe('Recompilação e Edição de Laudos e Cirurgias (motor_laudo.js e moto
   test('deve extrair texto e órgãos de um arquivo DOCX gerado utilizando JSZip', async () => {
     const JSZip = require('jszip');
     const pastaSaida = path.join(tmpDir, 'ultrassom_recompilado');
-    const docxPath = path.join(pastaSaida, 'Laudo_Thor_da_Silva.docx');
+    const docxPath = path.join(pastaSaida, 'THOR DA SILVA - CARLOS SILVA.docx');
     expect(fs.existsSync(docxPath)).toBe(true);
 
     const zip = await JSZip.loadAsync(fs.readFileSync(docxPath));

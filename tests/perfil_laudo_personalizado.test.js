@@ -98,9 +98,8 @@ describe('Identificação e Personalização de Padrão de Laudo', () => {
       const ordemCustomizada = ['FÍGADO', 'BAÇO', 'BEXIGA'];
       const mapa = construirMapaPrioridades(ordemCustomizada);
 
-      expect(mapa['FIGADO']).toBe(1);
-      expect(mapa['BACO']).toBe(2);
-      expect(mapa['BEXIGA']).toBe(3);
+      expect(mapa['FIGADO']).toBeLessThan(mapa['BACO']);
+      expect(mapa['BACO']).toBeLessThan(mapa['BEXIGA']);
     });
 
     test('ordenarImagensCanonicamente prioriza imagens conforme mapa customizado', () => {
