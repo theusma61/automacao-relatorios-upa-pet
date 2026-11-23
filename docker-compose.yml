@@ -42,6 +42,7 @@ services:
       - DATABASE_URL=postgresql://upa_user:${POSTGRES_PASSWORD:-upa_super_secure_pass_2026}@postgres:5432/upa_pet_db?schema=public
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_API_KEY_PAID=${GEMINI_API_KEY_PAID:-${GEMINI_PAID_API_KEY:-}}
+      - GEMINI_USE_HYDROGEN_PAID=${GEMINI_USE_HYDROGEN_PAID:-true}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_EMAILS=${ADMIN_EMAILS}

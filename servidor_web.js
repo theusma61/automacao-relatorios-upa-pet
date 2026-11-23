@@ -15,7 +15,11 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
 const { prisma } = require('./db');
-const { analisarExameComIA } = require('./analisador_ia');
+const {
+  analisarExameComIA,
+  obterConfigIaRuntime,
+  salvarConfigIaRuntime
+} = require('./analisador_ia');
 const { gerarDocumentosExame } = require('./motor_laudo');
 const { analisarCirurgiaComIA } = require('./analisador_cirurgia');
 const { gerarDocumentosCirurgicos, gerarPdfCirurgico } = require('./motor_cirurgia');
@@ -72,6 +76,10 @@ const {
   confirmarSessaoCheckout,
   processarWebhookStripe
 } = require('./servico_stripe');
+const {
+  registrarTelemetriaEdicao,
+  obterRankingTelemetriaEdicoes
+} = require('./telemetria_edicoes');
 
 const { logger, requestLogger } = require('./logger');
 const {
@@ -673,12 +681,25 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
     };
 
     let estiloOverrideUs = null;
+    let imagensExame = [];
     const metaUsPath = path.join(jobFolder, 'meta_exame.json');
     if (fs.existsSync(metaUsPath)) {
       try {
         const metaUs = JSON.parse(fs.readFileSync(metaUsPath, 'utf8'));
         if (metaUs.estiloOverride && typeof metaUs.estiloOverride === 'object') {
           estiloOverrideUs = metaUs.estiloOverride;
+        }
+        if (Array.isArray(metaUs.imagensPaths)) {
+          imagensExame = metaUs.imagensPaths
+            .filter((p) => typeof p === 'string' && fs.existsSync(p))
+            .map((p, idx) => {
+              const nome = path.basename(p);
+              return {
+                id: `${idx}-${nome}`,
+                nome,
+                url: `/api/exames/${encodeURIComponent(safeJobId)}/imagem/${encodeURIComponent(nome)}`
+              };
+            });
         }
       } catch (_) {}
     }
@@ -696,6 +717,7 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
         data: ''
       },
       laudo: laudo || [],
+      imagens: imagensExame,
       estiloPadrao: estiloPadraoUs,
       estiloOverride: estiloOverrideUs,
       pdfUrl: pdfUrl ? `${pdfUrl}${pdfUrl.includes('?') ? '&' : '?'}v=${Date.now()}` : '',
@@ -703,6 +725,32 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar dados do exame: ' + err.message });
+  }
+});
+
+// Serve individualmente uma imagem do exame para pré-visualização e reordenação no Vetaro Studio
+app.get('/api/exames/:jobId/imagem/:nomeArquivo', exigirAutenticacao, async (req, res) => {
+  try {
+    const safeJobId = path.basename(req.params.jobId || '');
+    const nomeAlvo = path.basename(req.params.nomeArquivo || '');
+    const jobFolder = path.join(outputDir, safeJobId);
+    const metaPath = path.join(jobFolder, 'meta_exame.json');
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).end();
+    }
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (req.usuario.role !== 'admin' && meta.usuarioId && meta.usuarioId !== req.usuario.id) {
+      return res.status(403).end();
+    }
+    const lista = Array.isArray(meta.imagensPaths) ? meta.imagensPaths : [];
+    const caminhoEncontrado = lista.find((p) => typeof p === 'string' && path.basename(p) === nomeAlvo);
+    if (!caminhoEncontrado || !fs.existsSync(caminhoEncontrado)) {
+      return res.status(404).end();
+    }
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.sendFile(path.resolve(caminhoEncontrado));
+  } catch (_) {
+    return res.status(404).end();
   }
 });
 
@@ -1614,6 +1662,37 @@ app.post('/api/assinatura/trocar-plano', exigirAutenticacao, async (req, res) =>
 });
 
 // ==================== STRIPE BILLING, CHECKOUT & CUSTOMER PORTAL ====================
+// Configuração em tempo real do motor de IA (Toggle Gemini 4 Hydrogen na chave paga — somente Admin)
+app.get('/api/admin/ia-config', exigirAutenticacao, (req, res) => {
+  if (req.usuario?.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores podem consultar a configuração de IA.' });
+  }
+  res.json({ sucesso: true, ...obterConfigIaRuntime() });
+});
+
+app.post('/api/admin/ia-config', exigirAutenticacao, (req, res) => {
+  if (req.usuario?.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores podem alterar a configuração de IA.' });
+  }
+  const { usarHydrogenPago } = req.body || {};
+  const salvo = salvarConfigIaRuntime({ usarHydrogenPago: Boolean(usarHydrogenPago) });
+  res.json({ sucesso: true, ...salvo });
+});
+
+// Ranking silencioso de órgãos mais editados pelos veterinários (somente Admin)
+app.get('/api/admin/telemetria-edicoes', exigirAutenticacao, async (req, res) => {
+  if (req.usuario?.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores podem consultar a telemetria clínica.' });
+  }
+  try {
+    const dias = req.query?.dias ? Number(req.query.dias) : 30;
+    const dados = await obterRankingTelemetriaEdicoes(dias);
+    res.json({ sucesso: true, ...dados });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar telemetria de edições: ' + err.message });
+  }
+});
+
 app.get('/api/stripe/config', exigirAutenticacao, (req, res) => {
   res.json({
     habilitado: isStripeConfigurado()
@@ -1781,6 +1860,7 @@ app.post('/api/ultrassom', exigirPermissao('gerar_ultrassom'), upload.array('ima
           jobId,
           paciente: resultadoIA.paciente,
           laudo: resultadoIA.laudo,
+          laudoOriginalIA: resultadoIA.laudo,
           imagensPaths: imagensOrdenadas,
           usuarioId: req.usuario?.id,
           criadoEm: new Date().toISOString()
@@ -2040,7 +2120,7 @@ app.post('/api/cirurgia', exigirPermissao('gerar_cirurgia'), upload.fields([
 // =========================================================================
 
 app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar_ultrassom'), async (req, res) => {
-  const { jobId, paciente, laudo, estiloOverride: estiloOverrideReq } = req.body;
+  const { jobId, paciente, laudo, estiloOverride: estiloOverrideReq, ordemImagens } = req.body;
   if (!jobId || !laudo || !Array.isArray(laudo)) {
     return res.status(400).json({ error: 'Parâmetros inválidos. Informe jobId, paciente e a lista de órgãos (laudo).' });
   }
@@ -2054,13 +2134,36 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
   try {
     const metaPath = path.join(jobFolder, 'meta_exame.json');
     let imagensOrdenadas = [];
+    let laudoOriginalIA = null;
     if (fs.existsSync(metaPath)) {
       try {
         const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
         if (req.usuario.role !== 'admin' && meta.usuarioId && meta.usuarioId !== req.usuario.id) {
           return res.status(403).json({ error: 'Você não tem permissão para editar este exame.' });
         }
-        imagensOrdenadas = meta.imagensPaths || [];
+        imagensOrdenadas = Array.isArray(meta.imagensPaths) ? meta.imagensPaths : [];
+        if (Array.isArray(ordemImagens) && ordemImagens.length > 0 && imagensOrdenadas.length > 0) {
+          const mapaPorNome = new Map(imagensOrdenadas.map((p) => [path.basename(p), p]));
+          const reordenadas = [];
+          const usados = new Set();
+          for (const nome of ordemImagens) {
+            const k = path.basename(String(nome || ''));
+            if (mapaPorNome.has(k) && !usados.has(k)) {
+              reordenadas.push(mapaPorNome.get(k));
+              usados.add(k);
+            }
+          }
+          for (const p of imagensOrdenadas) {
+            const k = path.basename(p);
+            if (!usados.has(k)) reordenadas.push(p);
+          }
+          imagensOrdenadas = reordenadas;
+        }
+        laudoOriginalIA = Array.isArray(meta.laudoOriginalIA)
+          ? meta.laudoOriginalIA
+          : Array.isArray(meta.laudo)
+          ? meta.laudo
+          : null;
       } catch (_) {}
     }
 
@@ -2174,16 +2277,29 @@ app.post('/api/ultrassom/recompilar', exigirAutenticacao, exigirPermissao('gerar
     const pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}?v=${cacheBuster}`;
     const docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}?v=${cacheBuster}`;
 
-    // Atualiza o arquivo de metadados
+    // Atualiza o arquivo de metadados preservando laudoOriginalIA como baseline imutável
     fs.writeFileSync(metaPath, JSON.stringify({
       jobId: safeJobId,
       paciente,
       laudo,
+      ...(laudoOriginalIA ? { laudoOriginalIA } : {}),
       estiloOverride: estiloOverrideLimpo,
       imagensPaths: imagensOrdenadas,
       usuarioId: req.usuario?.id,
       atualizadoEm: new Date().toISOString()
     }, null, 2), 'utf8');
+
+    // Telemetria silenciosa (não bloqueia a resposta do PDF)
+    if (req.usuario?.id && Array.isArray(laudoOriginalIA) && laudoOriginalIA.length > 0) {
+      registrarTelemetriaEdicao({
+        jobId: safeJobId,
+        usuarioId: req.usuario.id,
+        laudoOriginalIA,
+        laudoEditado: laudo
+      }).catch((telErr) => {
+        logger.warn({ err: telErr.message }, 'Aviso silencioso na telemetria de edições');
+      });
+    }
 
     // Atualiza o registro no PostgreSQL se existir
     if (req.usuario && req.usuario.id) {

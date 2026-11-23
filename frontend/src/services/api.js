@@ -120,6 +120,13 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role })
     }),
+  getAdminIaConfig: () => requestJson('/api/admin/ia-config'),
+  updateAdminIaConfig: (usarHydrogenPago) =>
+    requestJson('/api/admin/ia-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usarHydrogenPago: Boolean(usarHydrogenPago) })
+    }),
   updateAdminUserPlano: (email, plano) =>
     requestJson('/api/admin/usuarios/plano', {
       method: 'POST',

@@ -3,6 +3,65 @@ const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { obterLayout } = require('./gerenciador_layout');
 
+const IA_RUNTIME_CONFIG_PATH = path.join(
+  process.env.UPLOAD_PERSISTENT_DIR ? path.resolve(process.env.UPLOAD_PERSISTENT_DIR) : path.join(__dirname, 'uploads'),
+  'ia_runtime_config.json'
+);
+
+function obterConfigIaRuntime() {
+  const defaultEnv = String(process.env.GEMINI_USE_HYDROGEN_PAID || 'true').trim().toLowerCase() !== 'false';
+  try {
+    if (fs.existsSync(IA_RUNTIME_CONFIG_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(IA_RUNTIME_CONFIG_PATH, 'utf8'));
+      if (typeof parsed.usarHydrogenPago === 'boolean') {
+        return { usarHydrogenPago: parsed.usarHydrogenPago };
+      }
+    }
+  } catch (_) {}
+  return { usarHydrogenPago: defaultEnv };
+}
+
+function salvarConfigIaRuntime(dados = {}) {
+  const atual = obterConfigIaRuntime();
+  const proximo = {
+    usarHydrogenPago: typeof dados.usarHydrogenPago === 'boolean' ? dados.usarHydrogenPago : atual.usarHydrogenPago,
+    atualizadoEm: new Date().toISOString()
+  };
+  try {
+    const dir = path.dirname(IA_RUNTIME_CONFIG_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(IA_RUNTIME_CONFIG_PATH, JSON.stringify(proximo, null, 2), 'utf8');
+  } catch (_) {}
+  return proximo;
+}
+
+function calcularResumoTokens(usageMetadata, nomeModelo, rotuloChave, imagensQtd) {
+  if (!usageMetadata || typeof usageMetadata !== 'object') return null;
+  const promptTokens = Number(usageMetadata.promptTokenCount || 0);
+  const candidatesTokens = Number(usageMetadata.candidatesTokenCount || 0);
+  const thoughtsTokens = Number(usageMetadata.thoughtsTokenCount || 0);
+  const outputTokens = candidatesTokens + thoughtsTokens;
+  const totalTokens = Number(usageMetadata.totalTokenCount || (promptTokens + outputTokens));
+
+  // Preços de referência por 1M tokens (USD): Hydrogen $1.50/$7.50 | 3.8 Flash $0.75/$3.75 (promo até 31/12/2026)
+  const ehHydrogen = /hydrogen/i.test(nomeModelo || '');
+  const precoIn = ehHydrogen ? 1.50 : 0.75;
+  const precoOut = ehHydrogen ? 7.50 : 3.75;
+  const custoEstimadoUsd = Number((((promptTokens / 1e6) * precoIn) + ((outputTokens / 1e6) * precoOut)).toFixed(5));
+
+  return {
+    modelo: nomeModelo,
+    chave: rotuloChave,
+    imagensQtd,
+    promptTokens,
+    candidatesTokens,
+    thoughtsTokens,
+    outputTokens,
+    totalTokens,
+    custoEstimadoUsd
+  };
+}
+
 function fileToGenerativePart(filePath, mimeType) {
   return {
     inlineData: {
@@ -81,14 +140,15 @@ function obterGuiaSemiologiaUltrassom() {
 
 1. BAÇO E ESPLENOMEGALIA (AVALIAÇÃO QUALITATIVA E TOPOGRÁFICA):
    - ATENÇÃO: Na rotina ultrassonográfica veterinária, o baço NÃO possui mensuração métrica padrão única (calipers na tela). A esplenomegalia é diagnosticada VISUALMENTE por relações topográficas e bordos.
-   - Janela Baço x Rim Esquerdo (imagens com anotação "B" e "R", ou imagem com "BACO"):
-     * Se o parênquima da extremidade caudal do baço se estender caudalmente ultrapassando o polo cranial do rim esquerdo, ou se apresentar bordos abaulados/arredondados:
+   - Janelas topográficas de esplenomegalia (imagens com anotação "B" e "R", "BACO" e "BEX", ou "BACO"):
+     * Se houver imagem mostrando "BACO" adjacente/alcançando a "BEX" (extremidade caudal do baço chegando até a bexiga), OU se na janela "B" e "R" o baço se estender caudalmente ultrapassando o polo cranial do rim esquerdo, OU se apresentar bordos abaulados/arredondados:
        -> Laudar OBRIGATORIAMENTE: "Localizado em topografia habitual, com contornos regulares e bem definidos, com dimensões aumentadas, estendendo-se caudalmente e ultrapassando o polo cranial do rim esquerdo, parênquima com ecogenicidade usual e ecotextura homogênea."
        -> Inserir na propriedade "diagDif": "PROCESSO INFLAMATÓRIO / INFECCIOSO / HEMOPARASITOSES" (se ecotextura homogênea usual); ou "ESPLENOMEGALIA DIFUSA, HEMATOPOIESE EXTRAMEDULAR, HIPERPLASIA LINFOIDE DIFUSA, INFILTRAÇÃO NEOPLÁSICA (LINFOMA)" (se ecotextura heterogênea/rendilhada).
      * Somente laudar "dimensões preservadas" (diagDif: "") se o baço nitidamente não ultrapassar o polo cranial do rim esquerdo e mantiver bordos afilados.
 
 2. RINS (RIM ESQUERDO E RIM DIREITO) - DIFERENCIAÇÃO CÓRTICO-MEDULAR E PATOLOGIAS:
    - Extraia as medidas nos calipers ("RE" e "RD").
+   - ATENÇÃO A SIGLAS REPETIDAS NO APARELHO: é comum o operador esquecer de trocar "RE" para "RD" (ou vice-versa) no teclado do aparelho e salvar 2 imagens renais com a mesma sigla e medidas diferentes. Nesse caso, NUNCA invente uma medida fictícia — atribua as medidas reais das duas imagens (a segunda corresponde ao rim contralateral). Se realmente só houver 1 rim fotografado, informe que o contralateral não foi mensurado/visualizado, sem inventar números.
    - Inspecione a diferenciação córtico-medular e a ecogenicidade cortical:
      * Se houver perda da nitidez ou contraste entre o córtex e as pirâmides medulares (ou hiperecogenicidade difusa do córtex):
        -> Descrever: "Observa-se perda da diferenciação córticomedular."
@@ -100,48 +160,86 @@ function obterGuiaSemiologiaUltrassom() {
      * Se dilatação anecogênica da pelve/divertículos:
        -> diagDif: "HIDRONEFROSE, OBSTRUÇÃO URETERAL".
 
-3. FÍGADO E HEPATOMEGALIA:
+3. FÍGADO E HEPATOMEGALIA (COMPARAÇÃO CRUZADA ENTRE IMAGENS):
    - Avaliar dimensões pela projeção dos bordos hepáticos em relação ao gradil costal e estômago:
-     * Se o bordo hepático ultrapassar o gradil costal ou apresentar margens arredondadas:
+     * Dê atenção redobrada quando houver múltiplas capturas de "FIG" (3 ou mais imagens): inspecione se os lobos hepáticos apresentam bordos arredondados/proeminentes ou se estendem além do gradil costal/estômago.
+     * Se o bordo hepático ultrapassar o gradil costal ou apresentar margens arredondadas/proeminentes:
        -> Descrever: "dimensões aumentadas, ultrapassando o bordo costal e contornos regulares [ou arredondados]".
-     * Ecogenicidade do parênquima:
-       - Se aumentada/hiperecogênica (parênquima mais brilhante que o córtex renal):
-         -> diagDif: "HEPATOPATIA REACIONAL, LIPIDOSE HEPÁTICA, HEPATITE, FIBROSE, INFILTRADO GORDUROSO".
+     * Ecogenicidade do parênquima (COMPARAÇÃO DIRETA):
+       - Compare diretamente o brilho/ecogenicidade das fotos "FIG" com o córtex renal ("RE"/"RD") e com o baço ("BACO") do mesmo exame.
+       - Se o parênquima hepático estiver difusamente mais brilhante/hiperecogênico que o córtex renal (ou com atenuação posterior do feixe sonoro):
+         -> Descrever ecogenicidade aumentada e atribuir diagDif: "HEPATOPATIA REACIONAL, LIPIDOSE HEPÁTICA, HEPATITE, FIBROSE, INFILTRADO GORDUROSO".
        - Se diminuída/hipoecogênica difusa:
          -> diagDif: "HEPATITE AGUDA, CONGESTÃO HEPÁTICA".
        - Se heterogênea ou com nódulos:
          -> Descrever dimensões e diagDif: "HEPATOPATIA CRÔNICA, HIPERPLASIA NODULAR, PROCESSO NEOPLÁSICO".
+     * Ducto colédoco e vias biliares (ATENÇÃO ESPECIAL a imagens de fígado/vesícula ou imagens extras sem sigla com caliper medindo estrutura tubular anecogênica):
+       - Se houver estrutura tubular anecogênica dilatada e/ou tortuosa com paredes ecogênicas espessadas (ducto colédoco > 0,30 cm em cães ou > 0,40 cm em gatos):
+         -> Descrever obrigatoriamente dilatação/tortuosidade do ducto colédoco, características da parede/conteúdo e a medida exata do caliper (ex.: "Observa-se acentuada dilatação e tortuosidade do ducto colédoco, preenchido por conteúdo anecogênico e apresentando paredes ecogênicas espessadas, medindo cerca de X,XX cm") e associar diagDif compatível ("OBSTRUÇÃO BILIAR EXTRA-HEPÁTICA, COLANGITE / COLANGIOHEPATITE, COLECISTITE").
 
 4. BEXIGA - ESPESSURA PARIETAL, SEDIMENTOS E URÓLITOS:
    - Critérios métricos de espessura de parede:
      * Cães: normal até 0,25 cm. Acima de 0,25 cm -> "paredes espessadas, com margens internas irregulares".
      * Gatos: normal 0,13 a 0,15 cm. Acima de 0,15 cm -> "paredes espessadas, com margens internas irregulares".
-   - Conteúdo luminal:
-     * Imagens marcadas como "UROLITOS", "CALC", "SED" ou visualização de focos hiperecogênicos com forte sombra acústica posterior:
+   - Conteúdo luminal (DIFERENCIAR SEDIMENTÚRIA DE URÓLITOS):
+     * Imagens marcadas como "SED" ou visualização de material/pontilhado ecogênico de aspecto celular em suspensão no lúmen anecogênico SEM sombra acústica posterior:
+       -> Descrever: "Conteúdo anecogênico apresentando quantidade discreta/moderada/acentuada de material ecogênico de aspecto celular suspenso."
+       -> diagDif: "SEDIMENTÚRIA, CISTITE, PROCESSO INFLAMATÓRIO URINÁRIO".
+     * Imagens marcadas como "UROLITOS", "CALC" ou focos hiperecogênicos definidos COM forte sombra acústica posterior:
        -> Extrair as medidas de TODOS os calipers na bexiga (ex: "medindo cerca de 0,59 cm, 0,69 cm e 0,74 cm, acompanhados de sombra acústica distal").
        -> diagDif: "SEDIMENTOS ASSOCIADOS A URÓLITOS URINÁRIOS" ou "UROLÍTIASE, CISTITE".
-     * Se apenas espessamento de parede sem cálculos: diagDif: "CISTITE".
+     * Se apenas espessamento de parede sem cálculos/sedimentos: diagDif: "CISTITE".
 
 5. ESTÔMAGO:
    - Parede: normal até 0,50 cm em cães e 0,36 cm em gatos. Se superior -> "paredes espessadas, medindo X,XX cm" com diagDif: "GASTRITE (AGUDA / CRÔNICA), ENTEROPATIA INFLAMATÓRIA, ULCERAÇÃO GÁSTRICA, PROCESSO NEOPLÁSICO INFILTRATIVO".
    - Descrever pregueamento mucoso e presença de gás/conteúdo fluido.
 
 6. VESÍCULA BILIAR:
-   - Parede: normal até 0,10 cm. Se > 0,10 cm -> paredes espessadas ("COLECISTITE").
+   - Parede: normal até 0,15 cm em cães e 0,10 cm em gatos. Se > 0,15 cm em cães (ou > 0,10 cm em gatos, ou com aspecto de duplo contorno/halo hipoecoico) -> "Paredes espessas, medindo X,XX cm" com diagDif: "COLECISTITE, EDEMA DA PAREDE VESICULAR".
    - Conteúdo:
      * Se sedimento ecogênico móvel em região dependente -> diagDif: "LAMA BILIAR, ESTASE BILIAR, COLANGITE".
      * Se padrão estrelado/septado em roda de carroça imóvel -> diagDif: "MUCOCELE BILIAR".
      * Se cálculos com sombra acústica -> diagDif: "COLELITÍASE, COLECISTITE".
 
 7. ALÇAS INTESTINAIS:
-   - Extrair medidas dos calipers nas imagens DUO (duodeno: normal até 0,35 cm), JJ (jejuno: normal até 0,25 cm) e CD (cólon: normal até 0,15 cm).
-   - Avaliar motilidade e preservação da estratificação parietal em 5 camadas.
+   - Extrair medidas dos calipers nas imagens DUO (duodeno), JJ (jejuno) e CD (cólon descendente) respeitando o porte e a espécie:
+     * Cães: duodeno normal até 0,50 cm (pequeno/médio porte) ou 0,60 cm (grande porte); jejuno normal até 0,40 cm; cólon normal até 0,25 cm. Acima de 0,50 cm em cães de pequeno/médio porte (ex.: 0,52 cm) -> descrever discreto espessamento parietal em duodeno com diagDif: "DUODENITE / ENTEROPATIA INFLAMATÓRIA".
+     * Gatos: duodeno normal até 0,26 cm; jejuno normal até 0,26 cm; cólon normal até 0,17 cm.
+   - Somente laudar espessamento parietal se ultrapassar a referência da espécie/porte OU se houver perda/alteração da estratificação parietal em camadas.
 
 8. GLÂNDULAS ADRENAIS:
    - Extrair as 3 medidas de AE e AD quando visíveis (polo cranial, polo caudal e comprimento). Se formato preservado -> dimensões preservadas. Se aumento nodular assimétrico -> diagDif: "HIPERADRENOCORTICISMO, NEOPLASIA ADRENAL".
 
-9. CAVIDADE ABDOMINAL:
-   - Se houver acúmulo de líquido anecogênico interalças (efusão) -> descrever presença de líquido livre e atribuir diagDif: "EFUSÃO PERITONEAL / ASCITE". Se ausente -> "Ausência de liquido livre, sem alterações evidentes em linfonodos abdominais."
+9. CAVIDADE ABDOMINAL E LINFONODOS ABDOMINAIS:
+   - Líquido livre: se houver qualquer acúmulo de líquido anecogênico ou ecogênico/celular interalças ou próximo à bexiga/fígado/baço -> descrever volume (discreto/moderado/acentuado) e características, atribuindo diagDif: "EFUSÃO PERITONEAL / ASCITE / HEMOABDOME / PERITONITE".
+   - Linfonodos (mesentéricos, ilíacos, hepáticos, etc.): se houver imagem focada em linfonodo ou aumento de volume/arredondamento/hipoecogenicidade/heterogeneidade -> descrever dimensões dos calipers e atribuir diagDif: "LINFADENOPATIA REACIONAL, PROCESSO INFLAMATÓRIO/INFECCIOSO, NEOPLASIA (LINFOMA / METÁSTASE)".
+   - Mesentério / peritônio: se houver hiperecogenicidade focal ou difusa da gordura abdominal -> descrever reatividade mesentérica ("PERITONITE / ESTEATITE / PANCREATITE").
+
+10. BAÇO — LESÕES FOCAIS, NÓDULOS E MASSAS (ALÉM DE ESPLENOMEGALIA):
+   - Inspecione cuidadosamente TODO o parênquima esplênico quanto a nódulos/massas (hipoecogênicos, hiperecogênicos, mistos ou cavitados), aspecto heterogêneo "rendilhado / em queijo suíço" ou focos hiperecogênicos (mielolipomas).
+   - Se houver qualquer nódulo/massa -> descrever localização, ecogenicidade, contornos e TODAS as medidas dos calipers, atribuindo diagDif: "HIPERPLASIA NODULAR, HEMATOMA, NEOPLASIA ESPLÊNICA (HEMANGIOSSARCOMA / LINFOMA / MASTOCITOMA)".
+
+11. ÚTERO E OVÁRIOS (FÊMEAS):
+   - Se houver distensão luminal dos cornos uterinos (CUE/CUD) ou corpo uterino COM acúmulo claramente visível de conteúdo anecogênico, hipoecogênico ou ecogênico/flocular em seu interior, ou cistos endometriais evidentes -> descrever diâmetros dos calipers e conteúdo, atribuindo diagDif: "PIOMETRA / MUCOMETRA / HEMOMETRA / HIPERPLASIA ENDOMETRIAL CÍSTICA". Se o útero tiver paredes finas/homogêneas e ausência de conteúdo intraluminal visível, não sugerir piometra apenas pelo diâmetro isolado.
+   - Se houver estruturas císticas anecogênicas ou massas em topografia ovariana (OE/OD) -> descrever dimensões e atribuir diagDif: "CISTO OVARIANO / NEOPLASIA OVARIANA".
+   - Se houver vesículas gestacionais ou fetos -> descrever viabilidade/achados compatíveis com gestação.
+
+12. PRÓSTATA E TESTÍCULOS (MACHOS):
+   - Próstata (PTT/PROST): se aumentada de volume, assimétrica, heterogênea ou com cavitações/cistos anecogênicos intraparenquimatosos ou paraprostáticos -> descrever dimensões e achados, atribuindo diagDif: "HIPERPLASIA PROSTÁTICA BENIGNA (HPB), CISTOS PROSTÁTICOS, PROSTATITE, NEOPLASIA PROSTÁTICA".
+   - Testículos (TE/TD): se houver nódulos, heterogeneidade, assimetria ou localização intra-abdominal/inguinal -> descrever achados e atribuir diagDif: "NEOPLASIA TESTICULAR (SERTOLIOMA / SEMINOMA / LEYDIGOMA), ORQUITE, CRIPTORQUIDISMO".
+
+13. PÂNCREAS:
+   - Se houver imagem marcada "PANC" com caliper (ex.: 0,50 cm), SEMPRE informe que o pâncreas foi parcialmente visibilizado com a medida aferida do ramo pancreático (ex.: "Medindo ramo direito X,XX cm") — nunca ignore a imagem devolvendo apenas "Sem alteração em topografia de pâncreas".
+   - Se houver aumento de espessura/volume, parênquima hipoecogênico ou heterogêneo e/ou hiperecogenicidade da gordura peripancreática -> descrever achados e atribuir diagDif: "PANCREATITE AGUDA / CRÔNICA, EDEMA PANCREÁTICO, NEOPLASIA PANCREÁTICA".
+
+14. PROTOCOLO RIGOROSO ANTI-VIÉS DE NORMALIDADE (REGRA DE OURO):
+   - NUNCA entre em piloto automático de normalidade! Para CADA imagem enviada, você DEVE primeiro inspecionar visualmente o parênquima, contornos, paredes, conteúdo luminal, sombra acústica, estruturas adjacentes e TODOS os calipers antes de redigir o laudo.
+   - IMAGENS SEM SIGLA OU EXTRAS COM CALIPER: se houver qualquer imagem sem sigla no canto (ou fora da rotina) contendo um caliper medindo uma estrutura (ex.: ducto colédoco dilatado, nódulo, linfonodo, massa, cálculo), NUNCA ignore essa imagem! Identifique a estrutura pelo contexto anatômico e reporte a alteração e a medida exata no órgão correspondente.
+   - HISTÓRICO NO CABEÇALHO DO APARELHO: se o cabeçalho do aparelho trouxer indicação de castração (ex.: "CASTRAD", "CASTRADA", "OSH", "ORQ"), utilize essa informação ao laudar útero/ovários ou testículos.
+   - Se QUALQUER imagem de um órgão mostrar alteração visual (ecogenicidade alterada, heterogeneidade, nódulo/massa, cisto, cálculo/sedimento celular suspenso, lama biliar, espessamento parietal, perda de estratificação ou diferenciação córtico-medular, dilatação ductal/pielocalicial, líquido livre, linfonodomegalia, baço adjacente à bexiga ou ultrapassando rim esquerdo) OU se qualquer medida nos calipers ultrapassar a faixa normal para a espécie/porte (parede vesical > 0,25 cm cão / > 0,15 cm gato; parede gástrica > 0,50 cm cão / > 0,36 cm gato; parede vesícula biliar > 0,15 cm cão / > 0,10 cm gato; adrenal > 0,74 cm cão / > 0,48 cm gato):
+     -> É TERMINANTEMENTE PROIBIDO copiar a frase de normalidade daquele órgão!
+     -> Reescreva a descrição daquele órgão reportando objetivamente CADA alteração visual e métrica observada e inclua os diagnósticos diferenciais compatíveis.
+   - As frases padrão de normalidade só podem ser usadas quando a inspeção visual daquele órgão confirmar ausência de alterações.
 `;
 }
 
@@ -224,8 +322,9 @@ Sua missão é realizar a análise técnica das imagens de ultrassom fornecidas 
    - Extraia Nome, Tutor/Proprietário, Sexo, Data, Idade, Espécie e Raça (se constar na tela, ex: "pncher" -> "Pinscher", senão "SRD").
    - Se o veterinário requisitante constar na imagem ou metadados, preencha "requisitante", senão deixe "".
 
-2. SEQUÊNCIA EXATA, CAPITALIZAÇÃO E FRASES PADRÃO DOS ÓRGÃOS:
-   Você DEVE utilizar exatamente os nomes de órgãos abaixo (respeitando maiúsculas/minúsculas exatas) e seguir estas frases base substituindo apenas as medidas lidas nos calipers ("Dist X.XX cm" / "1 L X.XX cm") e descrevendo alterações reais visíveis nas imagens:
+2. SEQUÊNCIA EXATA, CAPITALIZAÇÃO E REFERÊNCIA DE ESTILO DOS ÓRGÃOS:
+   Você DEVE utilizar exatamente os nomes de órgãos abaixo (respeitando maiúsculas/minúsculas exatas).
+   ATENÇÃO CRÍTICA: As frases abaixo são APENAS referência de estilo/vocabulário para quando o órgão estiver CONFIRMADA E VISIVELMENTE NORMAL na inspeção das imagens. Se a imagem mostrar QUALQUER alteração (ecogenicidade, contornos, espessamento, sedimento/cálculo, lama biliar, nódulo/massa, cisto, distensão, perda de diferenciação, líquido livre ou medida fora da referência), NÃO copie a frase de normalidade — adapte/reescreva a descrição no estilo técnico do médico relatando todas as alterações reais visíveis e as medidas dos calipers ("Dist X.XX cm" / "1 L X.XX cm"):
    ${listaOrgaosInstrucao}
 
 3. FORMATAÇÃO ESTRUTURAL, CONCLUSÃO E SEXO:
@@ -289,7 +388,7 @@ ${listaOrgaosTexto}
    - Se Fêmea: OVÁRIOS (unificado em tópico único com medidas de OE e OD se visíveis), ÚTERO (ou histórico de ovariosalpingohisterectomia; medidas e achados de cornos uterinos CUE, CUD e corpo devem ser descritos conjuntamente no tópico ÚTERO). JAMAIS inclua PRÓSTATA em fêmeas.
    - Se Macho: TESTICULO ESQUERDO, TESTICULO DIREITO, PROSTATA (ou histórico de orquiectomia)
 
-3. CRITÉRIOS ESPECÍFICOS POR ÓRGÃO:
+3. REFERÊNCIA DE ESTILO POR ÓRGÃO (USAR APENAS QUANDO VISUALMENTE NORMAL — REESCREVER SEMPRE QUE HOUVER ALTERAÇÃO NA IMAGEM):
 ${regraRins}
 - BEXIGA: Começar com "Em topografia habitual com formato preservado e repleção liquida [pouca / adequada / cheia]...".
 - RIM ESQUERDO e RIM DIREITO: "Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente X,XX cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose."
@@ -312,11 +411,7 @@ ${obterGuiaSemiologiaUltrassom()}
 async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosCandidatos = [
-    'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-3.5-flash',
-    'gemini-flash-lite-latest',
-    'gemini-3.5-flash-lite'
+    'gemini-3.8-flash'
   ];
 
   const usuario = opcoes.usuario || null;
@@ -361,37 +456,11 @@ async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
 
 ---
 
-ORDENAÇÃO CANÔNICA DAS IMAGENS:
-Você DEVE identificar a sigla/órgão no canto superior de CADA uma das imagens enviadas.
-A lista de imagens foi fornecida com índices de 0 a N-1.
-Para CADA imagem (pelo seu índice 0 a N-1), preencha o array "classificacaoImagens" indicando:
-- "indice": número de 0 a N-1 correspondente à imagem enviada.
-- "nomeArquivo": nome do arquivo da imagem.
-- "sigla": sigla identificada na tela (ex: BEX, RE, RD, BACO, EST, FIG, VB, DUO, JJ, CD, OE, OD, UTERO, CUE, CUD, etc.).
-- "orgao": nome do órgão.
-- "prioridade": número de 1 a 20 correspondente à ordem canônica estrita:
-  1: BEXIGA e variações (BEX, SED, UROLITO)
-  2: RIM ESQUERDO (RE)
-  3: RIM DIREITO (RD)
-  4: BAÇO e variações (BACO, B)
-  5: ESTOMAGO (EST)
-  6: FIGADO (FIG)
-  7: VESICULA BILIAR (VB)
-  8: DUODENO (DUO)
-  9: JEJUNO (JJ)
-  10: COLON DESCENDENTE (CD)
-  11: OVÁRIO ESQUERDO (OE, TOP OE)
-  12: OVÁRIO DIREITO (OD, TOP OD)
-  13: UTERO (UTERO, CUE, CUD)
-  14: TESTICULO ESQUERDO (TE)
-  15: TESTICULO DIREITO (TD)
-  16: PROSTATA (PTT, PROST)
-  17: ADRENAL ESQUERDA (AE)
-  18: ADRENAL DIREITA (AD)
-  19: PANCREAS (PANC)
-  20: LIQUIDO LIVRE (LL)
+PASSO OBRIGATÓRIO DE RACIOCÍNIO CLÍNICO (SIGA ESTA ORDEM EXATA NO JSON):
+1) PRIMEIRO preencha "classificacaoImagens" para CADA imagem de 0 a N-1: identifique "sigla" (ex: BEX, SED, RE, RD, BACO, EST, FIG, VB, DUO, JJ, CD, OE, OD, UTERO, TE, TD, PTT, AE, AD, PANC, LL), "orgao", todas as medidas dos calipers ("medidasLidas"), os "achadosVisuais" objetivos e "statusVisual" ("NORMAL", "ALTERADO" ou "NAO_VISUALIZADO").
+2) SOMENTE DEPOIS preencha "laudo", garantindo 100% de coerência: todo órgão com qualquer imagem "ALTERADO" (ou medida fora da referência) DEVE descrever a alteração em "texto" (e preencher "diagDif" se o estilo usar), sendo PROIBIDO copiar frase de normalidade.
 
-RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem comentários):
+RETORNE EXCLUSIVAMENTE JSON VÁLIDO (sem markdown):
 {
   "paciente": {
     "nome": "string",
@@ -403,103 +472,97 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
     "sexo": "Macho ou Fêmea",
     "data": "DD/MM/AAAA"
   },
-  "laudo": [
-    {
-      "orgao": "Nome do Órgão",
-      "texto": "Descrição técnica...",
-      "diagDif": "DIAGNÓSTICOS DIFERENCIAIS EM CAIXA ALTA (ou vazio se normal ou se o médico não usar DIAG DIF.)"
-    }
-  ],
   "classificacaoImagens": [
     {
       "indice": 0,
-      "nomeArquivo": "nome_do_arquivo.jpeg",
       "sigla": "BEX",
       "orgao": "BEXIGA",
-      "prioridade": 1
+      "medidasLidas": ["1 D 0,34 cm"],
+      "achadosVisuais": "achados objetivos da imagem (paredes, parênquima, conteúdo, sombra acústica, nódulos, contornos)",
+      "statusVisual": "NORMAL | ALTERADO | NAO_VISUALIZADO"
     }
   ],
-  "nomesArquivosOrdenados": [
-    "lista dos nomes de arquivos exatamente na ordem canonica 1 a 20..."
+  "laudo": [
+    {
+      "orgao": "Nome do Órgão",
+      "texto": "Descrição técnica fiel aos achados visuais observados nas imagens...",
+      "diagDif": "DIAGNÓSTICOS DIFERENCIAIS EM CAIXA ALTA (ou vazio se normal ou se o médico não usar DIAG DIF.)"
+    }
   ]
 }
 `;
 
-  const listaArquivosTexto = caminhoImagens.map((p, idx) => `[Imagem ${idx}]: ${path.basename(p)}`).join('\n');
-  const promptFinal = promptInstrucoes + `\n\nLISTA DE IMAGENS ENVIADAS:\n${listaArquivosTexto}\n`;
+  const promptFinal = promptInstrucoes;
 
-  const imageParts = caminhoImagens.map(p => {
+  const conteudoMultimodal = [promptFinal];
+  caminhoImagens.forEach((p, idx) => {
     const ext = path.extname(p).toLowerCase();
-    const mime = (ext === '.png') ? 'image/png' : 'image/jpeg';
-    return fileToGenerativePart(p, mime);
+    const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+    conteudoMultimodal.push(`
+--- [IMAGEM ${idx} | Arquivo: ${path.basename(p)}] ---
+`);
+    conteudoMultimodal.push(fileToGenerativePart(p, mime));
   });
 
-  let ultimoErro = null;
-  const paidApiKey = opcoes.paidApiKey || process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_PAID_API_KEY;
-
-  // FASE 1: Chave Principal / Free Tier
-  for (const nomeModelo of modelosCandidatos) {
-    try {
-      console.log(`🤖 Chamando modelo ${nomeModelo}...`);
-      const model = genAI.getGenerativeModel({ model: nomeModelo });
-      const result = await model.generateContent([promptFinal, ...imageParts]);
-      const responseText = result.response.text().trim();
-
-      const jsonClean = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      const jsonParsed = JSON.parse(jsonClean);
-
-      jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
-      jsonParsed.laudo = reconciliarLaudoComOrdemOrgaos(
-        jsonParsed.laudo,
-        ordemOrgaos,
-        opcoes.perfilLaudo?.frasesNormalidade || {}
-      );
-
-      const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
-
-      jsonParsed.caminhosOrdenados = ordenarImagensCanonicamente(
-        caminhoImagens,
-        jsonParsed.classificacaoImagens,
-        jsonParsed.nomesArquivosOrdenados,
-        mapaPrioridadesEfetivo
-      );
-
-      return jsonParsed;
-    } catch (err) {
-      console.warn(`⚠️ Tentativa com ${nomeModelo} (chave free) falhou: ${err.message}${err.cause ? ' (Detalhe: ' + (err.cause.code || err.cause.message) + ')' : ''}.`);
-      ultimoErro = err;
-      await new Promise(res => setTimeout(res, 1000));
+  const NIVEIS_THINKING_VALIDOS = new Set(['LOW', 'MEDIUM', 'HIGH', 'XHIGH']);
+  const obterGenerationConfig = (nomeModelo) => {
+    if (/hydrogen/i.test(nomeModelo || '')) {
+      const nivelEnv = String(process.env.GEMINI_HYDROGEN_THINKING_LEVEL || 'HIGH').trim().toUpperCase();
+      const thinkingLevel = NIVEIS_THINKING_VALIDOS.has(nivelEnv) ? nivelEnv : 'HIGH';
+      return {
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel }
+      };
     }
-  }
+    return {
+      temperature: 0.15,
+      topP: 0.9,
+      responseMimeType: 'application/json'
+    };
+  };
 
-  // FASE 2: Fallback para a Chave Paga (se configurada)
-  if (paidApiKey && paidApiKey !== apiKey) {
-    console.log(`💳 [ANALISADOR IA] Chave principal/free esgotada ou indisponível. Acionando fallback para CHAVE PAGA...`);
-    const genAIPaid = new GoogleGenerativeAI(paidApiKey);
-    const modelosPagos = [
-      'gemini-3.8-flash',
-      'gemini-flash-latest',
-      'gemini-3.5-flash',
-      'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite'
-    ];
+  let ultimoErro = null;
+  const apiKeyLimpa = String(apiKey || '').trim();
+  const paidApiKey = String(
+    opcoes.paidApiKey ||
+    process.env.GEMINI_API_KEY_PAID ||
+    process.env.GEMINI_PAID_API_KEY ||
+    ''
+  ).trim();
 
-    for (const nomeModeloPago of modelosPagos) {
+  const executarChamadaModelo = async (client, nomeModelo, rotuloChave, maxTentativas = 2) => {
+    const generationConfig = obterGenerationConfig(nomeModelo);
+    const nivelThinkingAtivo = generationConfig?.thinkingConfig?.thinkingLevel || null;
+    for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
       try {
-        console.log(`💎 [ANALISADOR IA - CHAVE PAGA] Chamando modelo prioritário ${nomeModeloPago}...`);
-        const model = genAIPaid.getGenerativeModel({ model: nomeModeloPago });
-        const result = await model.generateContent([promptFinal, ...imageParts]);
+        console.log(`🤖 [${rotuloChave}] Chamando modelo ${nomeModelo}${nivelThinkingAtivo ? ` [thinking: ${nivelThinkingAtivo}]` : ''} (tentativa ${tentativa}/${maxTentativas})...`);
+        const model = client.getGenerativeModel({ model: nomeModelo, generationConfig });
+        const result = await model.generateContent(conteudoMultimodal);
         const responseText = result.response.text().trim();
 
         const jsonClean = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         const jsonParsed = JSON.parse(jsonClean);
 
+        const resumoTokens = calcularResumoTokens(
+          result?.response?.usageMetadata,
+          nomeModelo,
+          rotuloChave,
+          caminhoImagens.length
+        );
+        if (resumoTokens) {
+          if (nivelThinkingAtivo) resumoTokens.thinkingLevel = nivelThinkingAtivo;
+          jsonParsed.usoTokens = resumoTokens;
+          console.log(
+            `📊 [TOKENS LAUDO] Modelo: ${resumoTokens.modelo}${nivelThinkingAtivo ? ` [${nivelThinkingAtivo}]` : ''} (${resumoTokens.chave}) | Imagens: ${resumoTokens.imagensQtd} | Entrada: ${resumoTokens.promptTokens} | Saída: ${resumoTokens.outputTokens}${resumoTokens.thoughtsTokens ? ` (thinking: ${resumoTokens.thoughtsTokens})` : ''} | Total: ${resumoTokens.totalTokens} tokens | Custo est.: US$ ${resumoTokens.custoEstimadoUsd}`
+          );
+        }
+
         jsonParsed.paciente = sanitizarDadosPaciente(jsonParsed.paciente, nomeClinica);
-      jsonParsed.laudo = reconciliarLaudoComOrdemOrgaos(
-        jsonParsed.laudo,
-        ordemOrgaos,
-        opcoes.perfilLaudo?.frasesNormalidade || {}
-      );
+        jsonParsed.laudo = reconciliarLaudoComOrdemOrgaos(
+          jsonParsed.laudo,
+          ordemOrgaos,
+          opcoes.perfilLaudo?.frasesNormalidade || {}
+        );
 
         const mapaPrioridadesEfetivo = construirMapaPrioridades(ordemOrgaos);
 
@@ -511,12 +574,44 @@ RETORNE EXCLUSIVAMENTE UM OBJETO JSON VÁLIDO (sem blocos markdown e sem coment�
         );
 
         return jsonParsed;
-      } catch (errPago) {
-        console.warn(`⚠️ [ANALISADOR IA] Falha no fallback pago com ${nomeModeloPago}: ${errPago.message}${errPago.cause ? ' (Detalhe: ' + (errPago.cause.code || errPago.cause.message) + ')' : ''}.`);
-        ultimoErro = errPago;
-        await new Promise(res => setTimeout(res, 1000));
+      } catch (err) {
+        const status = err?.status || err?.response?.status || '';
+        const ehTransitorio = status === 503 || status === 429 || /503|429|high demand|overloaded|temporarily/i.test(String(err?.message || ''));
+        console.warn(`⚠️ [${rotuloChave}] Tentativa ${tentativa}/${maxTentativas} com ${nomeModelo} falhou: ${err.message}${err.cause ? ' (Detalhe: ' + (err.cause.code || err.cause.message) + ')' : ''}.`);
+        ultimoErro = err;
+        if (tentativa < maxTentativas && ehTransitorio) {
+          await new Promise(res => setTimeout(res, 3000));
+          continue;
+        }
+        break;
       }
     }
+    return null;
+  };
+
+  // FASE 1: Chave Principal / Free Tier (gemini-3.8-flash)
+  for (const nomeModelo of modelosCandidatos) {
+    const resFree = await executarChamadaModelo(genAI, nomeModelo, 'CHAVE FREE', 2);
+    if (resFree) return resFree;
+  }
+
+  // FASE 2: Fallback para a Chave Paga (se configurada e diferente da principal)
+  if (paidApiKey && paidApiKey !== apiKeyLimpa) {
+    const { usarHydrogenPago } = obterConfigIaRuntime();
+    const modelosPagos = usarHydrogenPago
+      ? ['gemini-4-hydrogen', 'gemini-3.8-flash']
+      : ['gemini-3.8-flash'];
+    console.log(`💳 [ANALISADOR IA] Chave principal/free indisponível ou esgotada. Acionando fallback para CHAVE PAGA (fila: ${modelosPagos.join(' -> ')})...`);
+    const genAIPaid = new GoogleGenerativeAI(paidApiKey);
+
+    for (const nomeModeloPago of modelosPagos) {
+      const resPago = await executarChamadaModelo(genAIPaid, nomeModeloPago, 'CHAVE PAGA', 2);
+      if (resPago) return resPago;
+    }
+  } else if (!paidApiKey) {
+    console.warn(`⚠️ [ANALISADOR IA] Fallback pago NÃO acionado: GEMINI_API_KEY_PAID (ou GEMINI_PAID_API_KEY) não está definida no ambiente.`);
+  } else {
+    console.warn(`⚠️ [ANALISADOR IA] Fallback pago ignorado: GEMINI_API_KEY_PAID é idêntica à GEMINI_API_KEY principal.`);
   }
 
   throw ultimoErro;
@@ -549,19 +644,48 @@ function normalizarTexto(texto) {
   return (texto || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
+const GRUPOS_SIGLAS_CANONICOS = [
+  { match: /BEXIGA|VESICA/i, chaves: ['BEX', 'BEXIGA', 'SED', 'SEDIMENTO', 'UROLITO', 'CALC', 'CALCULO', 'URETER'] },
+  { match: /RIM\s*ESQUERDO|^RE$/i, chaves: ['RE', 'RIM ESQUERDO', 'RIME', 'RIM E', 'R.E'] },
+  { match: /RIM\s*DIREITO|^RD$/i, chaves: ['RD', 'RIM DIREITO', 'RIMD', 'RIM D', 'R.D'] },
+  { match: /^RINS$/i, chaves: ['RE', 'RIM ESQUERDO', 'RIME', 'RIM E', 'R.E', 'RD', 'RIM DIREITO', 'RIMD', 'RIM D', 'R.D'] },
+  { match: /BACO|ESPLEN/i, chaves: ['BACO', 'BAÇO', 'B', 'ESPLEN', 'ESPLENO'] },
+  { match: /ESTOMAGO|GASTR/i, chaves: ['EST', 'ESTOMAGO', 'ESTÔMAGO'] },
+  { match: /FIGADO|HEPAT/i, chaves: ['FIG', 'FIGADO', 'FÍGADO', 'HEP'] },
+  { match: /VESICULA/i, chaves: ['VB', 'VESICULA BILIAR', 'VESÍCULA BILIAR', 'VESICULA', 'VESÍCULA'] },
+  { match: /ALCAS|INTESTIN|DUODENO|JEJUNO|COLON/i, chaves: ['DUO', 'DUODENO', 'JJ', 'JEJUNO', 'CD', 'COLON', 'CÓLON', 'COLON DESCENDENTE', 'CÓLON DESCENDENTE'] },
+  { match: /OVARIO/i, chaves: ['OE', 'OVARIO ESQUERDO', 'OVÁRIO ESQUERDO', 'TOP OE', 'OD', 'OVARIO DIREITO', 'OVÁRIO DIREITO', 'TOP OD'] },
+  { match: /UTERO/i, chaves: ['UTERO', 'ÚTERO', 'CUE', 'CUD', 'CORPO UTERINO'] },
+  { match: /TESTICULO/i, chaves: ['TE', 'TESTICULO ESQUERDO', 'TESTÍCULO ESQUERDO', 'TD', 'TESTICULO DIREITO', 'TESTÍCULO DIREITO'] },
+  { match: /PROSTATA/i, chaves: ['PTT', 'PROSTATA', 'PRÓSTATA', 'PROST'] },
+  { match: /ADRENAL/i, chaves: ['AE', 'ADRENAL ESQUERDA', 'ADRE', 'AD', 'ADRENAL DIREITA', 'ADRD'] },
+  { match: /PANCREAS/i, chaves: ['PANC', 'PANCREAS', 'PÂNCREAS'] },
+  { match: /CAVIDADE|LIQUIDO\s*LIVRE/i, chaves: ['LL', 'LIQUIDO LIVRE', 'LÍQUIDO LIVRE', 'CAVIDADE'] }
+];
+
 function construirMapaPrioridades(ordemOrgaos = []) {
   if (!Array.isArray(ordemOrgaos) || ordemOrgaos.length === 0) {
     return MAPA_ORDEM_CANONICA;
   }
-  const novoMapa = { ...MAPA_ORDEM_CANONICA };
+  // Escala por 10 para manter sub-ordem estável (ex: DUO antes de JJ antes de CD; AE antes de AD)
+  const novoMapa = {};
+  for (const [chave, pBase] of Object.entries(MAPA_ORDEM_CANONICA)) {
+    novoMapa[normalizarTexto(chave)] = 500 + pBase;
+  }
   ordemOrgaos.forEach((org, idx) => {
-    const prioridade = idx + 1;
+    const basePrio = (idx + 1) * 10;
     const orgNorm = normalizarTexto(org);
-    novoMapa[orgNorm] = prioridade;
-    for (const [chave] of Object.entries(MAPA_ORDEM_CANONICA)) {
-      const k = normalizarTexto(chave);
-      if (orgNorm.includes(k) || k.includes(orgNorm)) {
-        novoMapa[chave] = prioridade;
+    novoMapa[orgNorm] = basePrio;
+    for (const grupo of GRUPOS_SIGLAS_CANONICOS) {
+      if (grupo.match.test(orgNorm)) {
+        grupo.chaves.forEach((ch, subIdx) => {
+          const chNorm = normalizarTexto(ch);
+          // Preserva prioridade mais cedo se um grupo cobrir dois tópicos (ex: UTERO / OVARIOS)
+          const cand = basePrio + (subIdx * 0.1);
+          if (novoMapa[chNorm] === undefined || novoMapa[chNorm] >= 500) {
+            novoMapa[chNorm] = cand;
+          }
+        });
       }
     }
   });
@@ -574,13 +698,26 @@ function calcularPrioridadeOrgao(item, mapa = MAPA_ORDEM_CANONICA) {
   }
   const sigla = normalizarTexto(item ? item.sigla : '');
   const orgao = normalizarTexto(item ? item.orgao : '');
-  if (mapa[sigla]) return mapa[sigla];
-  if (mapa[orgao]) return mapa[orgao];
-  for (const [chave, p] of Object.entries(mapa)) {
-    const k = normalizarTexto(chave);
-    if (sigla.includes(k) || orgao.includes(k)) return p;
+
+  // 1. Correspondência exata por sigla (ex: "RE", "EST", "B", "DUO", "AD")
+  if (sigla && mapa[sigla] !== undefined) return mapa[sigla];
+  // Sigla composta (ex: "B / R" ou "BACO / BEX") -> pega o primeiro token
+  if (sigla) {
+    const primeiroToken = sigla.split(/[\s/,+-]+/).filter(Boolean)[0];
+    if (primeiroToken && mapa[primeiroToken] !== undefined) return mapa[primeiroToken];
   }
-  return 99;
+  // 2. Correspondência exata por nome do órgão
+  if (orgao && mapa[orgao] !== undefined) return mapa[orgao];
+  // 3. Correspondência por grupo anatômico (sem jamais fazer includes de siglas curtas como "RE" em "ADRENAL")
+  for (const grupo of GRUPOS_SIGLAS_CANONICOS) {
+    if (orgao && grupo.match.test(orgao)) {
+      for (const ch of grupo.chaves) {
+        const chNorm = normalizarTexto(ch);
+        if (mapa[chNorm] !== undefined) return mapa[chNorm];
+      }
+    }
+  }
+  return 999;
 }
 
 function ordenarImagensCanonicamente(caminhoImagens, classificacaoImagens, nomesArquivosOrdenados, mapaPrioridades = MAPA_ORDEM_CANONICA) {
@@ -656,8 +793,20 @@ function reconciliarLaudoComOrdemOrgaos(laudoArray = [], ordemDesejada = [], fra
       .replace(/\bLocalizados\b/gi, 'Localizado')
       .trim();
 
+    const temAlteracaoRins = Boolean(
+      (itemRins.diagDif && String(itemRins.diagDif).trim()) ||
+      /(perda\s+da\s+diferencia|hiperecogen|hipoecogen|heterog[eê]ne|lit[ií]ase|c[aá]lculo|hidronefrose|pielectasia|dilata[çc][aã]o|cisto|n[oó]dulo|massa|irregulares|aumentad|diminu[ií]d|alterad|nefropatia|mineraliza)/i.test(textoRins)
+    );
+
     function adaptarTextoRim(base, medida, fraseCustom) {
-      if (fraseCustom) return fraseCustom;
+      // NUNCA sobrescreve com frase de normalidade se a IA detectou alteração real!
+      if (!temAlteracaoRins && fraseCustom) {
+        let fc = fraseCustom;
+        if (medida && /X[,.]XX\s*cm/i.test(fc)) {
+          fc = fc.replace(/X[,.]XX\s*cm/i, `${medida} cm`);
+        }
+        return fc;
+      }
       if (!base) {
         return medida
           ? `Localizado em topografia habitual, com contornos regulares, superficie lisa e dimensões preservadas, medindo aproximadamente ${medida} cm. Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litiase ou hidronefrose.`
@@ -669,8 +818,8 @@ function reconciliarLaudoComOrdemOrgaos(laudoArray = [], ordemDesejada = [], fra
           t = t.replace(/medindo\s+aproximadamente\s*[\d,.]*\s*cm/i, `medindo aproximadamente ${medida} cm`);
         } else if (/dimensões\s+preservadas/i.test(t)) {
           t = t.replace(/(dimensões\s+preservadas)/i, `$1, medindo aproximadamente ${medida} cm`);
-        } else if (/Localizado\s+em\s+topografia\s+habitual,/i.test(t)) {
-          t = t.replace(/(Localizado\s+em\s+topografia\s+habitual,)/i, `$1 com dimensões preservadas, medindo aproximadamente ${medida} cm,`);
+        } else if (!t.includes(medida)) {
+          t = `${t} (medindo aproximadamente ${medida} cm)`;
         }
       }
       return t;
@@ -702,10 +851,21 @@ function reconciliarLaudoComOrdemOrgaos(laudoArray = [], ordemDesejada = [], fra
     const reStr = matchRE ? matchRE[1].replace('.', ',') : 'X,XX';
     const rdStr = matchRD ? matchRD[1].replace('.', ',') : 'X,XX';
 
-    const diagCombinado = [itemRE.diagDif, itemRD.diagDif].filter(Boolean).join(', ');
+    const diagCombinado = [...new Set([itemRE.diagDif, itemRD.diagDif].filter(Boolean))].join(', ');
+    const regexAltRim = /(perda\s+da\s+diferencia|hiperecogen|hipoecogen|heterog[eê]ne|lit[ií]ase|c[aá]lculo|hidronefrose|pielectasia|dilata[çc][aã]o|cisto|n[oó]dulo|massa|irregulares|aumentad|diminu[ií]d|alterad|nefropatia|mineraliza)/i;
+    const houveAlteracao = Boolean(
+      diagCombinado ||
+      regexAltRim.test(itemRE.texto || '') ||
+      regexAltRim.test(itemRD.texto || '')
+    );
+    // Se houve qualquer alteração em RE ou RD, preserva integralmente as descrições da IA
+    const textoUnificado = houveAlteracao
+      ? `Rim esquerdo: ${itemRE.texto || ''}
+Rim direito: ${itemRD.texto || ''}`.trim()
+      : `Localizados em topografia habitual, com contornos regulares, superfície lisa e dimensões preservadas (RE: ${reStr} cm; RD: ${rdStr} cm). Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litíase ou hidronefrose.`;
     const itemRinsUnificado = {
       orgao: 'RINS',
-      texto: `Localizados em topografia habitual, com contornos regulares, superfície lisa e dimensões preservadas (RE: ${reStr} cm; RD: ${rdStr} cm). Parênquima com ecogenicidade cortical e ecotextura homogênea. Observa-se diferenciação córticomedular. Não há evidências de litíase ou hidronefrose.`,
+      texto: textoUnificado,
       diagDif: diagCombinado
     };
 
@@ -736,6 +896,8 @@ function reconciliarLaudoComOrdemOrgaos(laudoArray = [], ordemDesejada = [], fra
 
 module.exports = {
   analisarExameComIA,
+  obterConfigIaRuntime,
+  salvarConfigIaRuntime,
   construirPromptClonado,
   construirPromptPadraoVetaro,
   ordenarImagensCanonicamente,

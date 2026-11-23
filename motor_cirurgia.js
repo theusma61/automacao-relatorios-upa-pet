@@ -1367,13 +1367,25 @@ async function gerarDocumentosCirurgicos(dadosPaciente, dadosCirurgia, pastaDest
   }
   const contexto = resolverContextoCirurgico({ ...opcoes, usuario, layout, perfilLaudo, perfilCirurgico });
 
-  const nomeLimpo = (dadosPaciente.nome || 'PACIENTE')
-    .toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Z0-9]/g, '_');
+  const limparSegmentoArquivo = (v) =>
+    String(v || '')
+      .trim()
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const petUpper = limparSegmentoArquivo(dadosPaciente?.nome) || 'PACIENTE';
+  const respBruto = String(dadosPaciente?.tutor || dadosPaciente?.responsavel || '').trim();
+  const respInvalido = /^(nao\s*informado|nao\s*identificado|n\/a|-)$/i.test(
+    respBruto.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  );
+  const respUpper = respInvalido ? '' : limparSegmentoArquivo(respBruto);
+  const nomeBaseArquivo = respUpper ? `${petUpper} - ${respUpper}` : petUpper;
 
-  const caminhoDocx = path.join(pastaDestino, `Relatorio_Cirurgico_${nomeLimpo}.docx`);
-  const caminhoPdf = path.join(pastaDestino, `Relatorio_Cirurgico_${nomeLimpo}.pdf`);
+  const caminhoDocx = path.join(pastaDestino, `${nomeBaseArquivo}.docx`);
+  const caminhoPdf = path.join(pastaDestino, `${nomeBaseArquivo}.pdf`);
 
   await gerarDocxCirurgico(dadosPaciente, dadosCirurgia, caminhoDocx, imagens, contexto);
   await gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoPdf, imagens, contexto);

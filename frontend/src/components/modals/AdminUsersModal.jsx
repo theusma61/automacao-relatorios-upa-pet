@@ -5,6 +5,8 @@ import { api } from '../../services/api';
 export default function AdminUsersModal({ darkMode, isOpen, onClose, onToast }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [usarHydrogenPago, setUsarHydrogenPago] = useState(true);
+  const [salvandoIa, setSalvandoIa] = useState(false);
 
   const carregarUsuarios = async () => {
     setLoading(true);
@@ -23,8 +25,33 @@ export default function AdminUsersModal({ darkMode, isOpen, onClose, onToast }) 
   useEffect(() => {
     if (isOpen) {
       carregarUsuarios();
+      api.getAdminIaConfig()
+        .then((res) => {
+          if (res && typeof res.usarHydrogenPago === 'boolean') {
+            setUsarHydrogenPago(res.usarHydrogenPago);
+          }
+        })
+        .catch(() => {});
     }
   }, [isOpen]);
+
+  const handleToggleHydrogen = async () => {
+    const proximo = !usarHydrogenPago;
+    setSalvandoIa(true);
+    try {
+      const res = await api.updateAdminIaConfig(proximo);
+      setUsarHydrogenPago(Boolean(res?.usarHydrogenPago));
+      onToast(
+        proximo
+          ? 'Gemini 4 Hydrogen ativado como 1º modelo da chave paga (fallback: 3.8 Flash).'
+          : 'Gemini 4 Hydrogen desativado. Chave paga usando apenas Gemini 3.8 Flash.'
+      );
+    } catch (err) {
+      onToast('Erro ao atualizar modelo de IA: ' + err.message);
+    } finally {
+      setSalvandoIa(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -72,6 +99,47 @@ export default function AdminUsersModal({ darkMode, isOpen, onClose, onToast }) 
             className="text-slate-400 hover:text-white font-bold px-2 py-1"
           >
             ✕
+          </button>
+        </div>
+
+        {/* Toggle do motor de IA na chave paga (Admin) */}
+        <div
+          className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+            darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}
+        >
+          <div>
+            <p className="text-xs font-extrabold flex items-center gap-2">
+              <span>Gemini 4 Hydrogen na chave paga</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  usarHydrogenPago
+                    ? 'bg-[#00D296]/20 text-[#00D296]'
+                    : 'bg-slate-700 text-slate-300'
+                }`}
+              >
+                {usarHydrogenPago ? 'ATIVO' : '3.8 FLASH'}
+              </span>
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {usarHydrogenPago
+                ? 'Chave paga tenta gemini-4-hydrogen primeiro (fallback para gemini-3.8-flash).'
+                : 'Desativado: chave paga chama diretamente gemini-3.8-flash.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={salvandoIa}
+            onClick={handleToggleHydrogen}
+            className={`w-12 h-6 rounded-full p-0.5 transition-colors flex items-center shrink-0 disabled:opacity-50 ${
+              usarHydrogenPago ? 'bg-[#00D296]' : 'bg-slate-600'
+            }`}
+            aria-label="Alternar Gemini 4 Hydrogen na chave paga"
+          >
+            <span
+              className="w-5 h-5 rounded-full bg-white shadow transform transition-transform"
+              style={{ transform: usarHydrogenPago ? 'translateX(22px)' : 'translateX(2px)' }}
+            />
           </button>
         </div>
 

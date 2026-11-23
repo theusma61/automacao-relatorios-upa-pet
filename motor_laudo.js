@@ -1234,9 +1234,26 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
 </html>`;
   }
 
-  const caminhoHtmlTemp = path.join(os.tmpdir(), `laudo_temp_${Date.now()}_${nomeSanitizado}.html`);
-  const caminhoPdf = path.join(pastaSaida, `Laudo_${nomeSanitizado}.pdf`);
-  const caminhoDocx = path.join(pastaSaida, `Laudo_${nomeSanitizado}.docx`);
+  const limparSegmentoArquivo = (v) =>
+    String(v || '')
+      .trim()
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const petUpper = limparSegmentoArquivo(dadosPaciente?.nome) || 'PACIENTE';
+  const respBruto = String(dadosPaciente?.tutor || dadosPaciente?.responsavel || '').trim();
+  const respInvalido = /^(nao\s*informado|nao\s*identificado|n\/a|-)$/i.test(
+    respBruto.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  );
+  const respUpper = respInvalido ? '' : limparSegmentoArquivo(respBruto);
+  const nomeBaseArquivo = respUpper ? `${petUpper} - ${respUpper}` : petUpper;
+
+  const caminhoHtmlTemp = path.join(os.tmpdir(), `laudo_temp_${Date.now()}_${nomeBaseArquivo}.html`);
+  const caminhoPdf = path.join(pastaSaida, `${nomeBaseArquivo}.pdf`);
+  const caminhoDocx = path.join(pastaSaida, `${nomeBaseArquivo}.docx`);
 
   fs.writeFileSync(caminhoHtmlTemp, html, 'utf8');
   await compilarPDF(caminhoHtmlTemp, caminhoPdf);

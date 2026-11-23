@@ -228,6 +228,9 @@ export default function ReportPreviewModal({
   const [estiloUltrassomForm, setEstiloUltrassomForm] = useState(ESTILO_ULTRASSOM_BASE);
   const [temEstiloUltrassomCustom, setTemEstiloUltrassomCustom] = useState(false);
   const [autoAtualizarPdf, setAutoAtualizarPdf] = useState(true);
+  const [imagensUltrassom, setImagensUltrassom] = useState([]);
+  const [dragFotoUsIdx, setDragFotoUsIdx] = useState(null);
+  const [dragOverFotoUsIdx, setDragOverFotoUsIdx] = useState(null);
   const loadedJobIdRef = useRef('');
   const recompilarControllerRef = useRef(null);
   const studioContainerRef = useRef(null);
@@ -528,6 +531,9 @@ export default function ReportPreviewModal({
               }));
               setLaudoForm(orgaosServidor);
             }
+            if (dados && Array.isArray(dados.imagens)) {
+              setImagensUltrassom(dados.imagens);
+            }
             if (dados && dados.paciente) {
               setPacienteForm((prev) => ({
                 ...prev,
@@ -757,7 +763,8 @@ export default function ReportPreviewModal({
           jobId: initialJobId,
           paciente: pacienteForm,
           laudo: laudoForm,
-          estiloOverride: temEstiloUltrassomCustom ? estiloUltrassomForm : null
+          estiloOverride: temEstiloUltrassomCustom ? estiloUltrassomForm : null,
+          ...(imagensUltrassom.length > 0 ? { ordemImagens: imagensUltrassom.map((f) => f.nome) } : {})
         }, { signal: controller.signal });
       }
 
@@ -820,6 +827,7 @@ export default function ReportPreviewModal({
     temEstiloCustomizado,
     fotosCirurgia,
     laudoForm,
+    imagensUltrassom,
     estiloUltrassomForm,
     temEstiloUltrassomCustom
   ]);
@@ -851,6 +859,30 @@ export default function ReportPreviewModal({
   const mostrarCardPaciente = !isStudioMode || studioSection === 'todos' || studioSection === 'paciente';
   const mostrarCardEstilo = !isStudioMode || studioSection === 'todos' || studioSection === 'estilo';
   const mostrarCardConteudo = !isStudioMode || studioSection === 'todos' || studioSection === 'conteudo';
+  const mostrarCardFotos = !isSurgery && imagensUltrassom.length > 0 && (!isStudioMode || studioSection === 'todos' || studioSection === 'fotos');
+
+  const handleMoverFotoUs = (idx, direcao) => {
+    const novoIdx = direcao === 'antes' ? idx - 1 : idx + 1;
+    if (novoIdx < 0 || novoIdx >= imagensUltrassom.length) return;
+    setImagensUltrassom((prev) => {
+      const copia = [...prev];
+      const [movida] = copia.splice(idx, 1);
+      copia.splice(novoIdx, 0, movida);
+      return copia;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  const handleDropFotoUs = (fromIdx, toIdx) => {
+    if (fromIdx === null || fromIdx === undefined || fromIdx === toIdx) return;
+    setImagensUltrassom((prev) => {
+      const copia = [...prev];
+      const [movida] = copia.splice(fromIdx, 1);
+      copia.splice(toIdx, 0, movida);
+      return copia;
+    });
+    setHasUnsavedChanges(true);
+  };
 
   return (
     <div
@@ -970,6 +1002,9 @@ export default function ReportPreviewModal({
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                 {[
                   { id: 'conteudo', label: isSurgery ? 'Seções' : 'Órgãos', icon: Layers },
+                  ...(!isSurgery && imagensUltrassom.length > 0
+                    ? [{ id: 'fotos', label: `Fotos (${imagensUltrassom.length})`, icon: Camera }]
+                    : []),
                   { id: 'paciente', label: 'Paciente', icon: User },
                   { id: 'estilo', label: 'Padrões', icon: Palette },
                   { id: 'todos', label: 'Tudo', icon: LayoutGrid }
@@ -1170,6 +1205,9 @@ export default function ReportPreviewModal({
               {[
                 { id: 'paciente', label: 'Paciente', icon: User },
                 { id: 'conteudo', label: isSurgery ? 'Seções' : 'Órgãos', icon: Layers },
+                ...(!isSurgery && imagensUltrassom.length > 0
+                  ? [{ id: 'fotos', label: `Fotos (${imagensUltrassom.length})`, icon: Camera }]
+                  : []),
                 { id: 'estilo', label: 'Estilo', icon: Palette },
                 { id: 'todos', label: 'Tudo', icon: LayoutGrid }
               ].map((nav) => {
@@ -2561,6 +2599,111 @@ export default function ReportPreviewModal({
                     );
                   })}
                   </>
+                  )}
+
+                  {/* Reorganizador de Imagens do Exame (Ultrassom — Drag & Drop + Setas) */}
+                  {mostrarCardFotos && (
+                    <div
+                      className={`rounded-2xl border p-4 sm:p-5 space-y-3.5 transition ${
+                        darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-[#00D296]/15 text-[#00D296] flex items-center justify-center shrink-0">
+                            <Camera className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-extrabold">
+                              Ordem das Imagens no PDF ({imagensUltrassom.length})
+                            </h4>
+                            <p className="text-[11px] text-slate-400">
+                              Arraste as capturas ou use as setas para ajustar a sequência antes de baixar o PDF.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {imagensUltrassom.map((img, idx) => {
+                          const isDragging = dragFotoUsIdx === idx;
+                          const isDragOver = dragOverFotoUsIdx === idx && dragFotoUsIdx !== null && dragFotoUsIdx !== idx;
+                          return (
+                            <div
+                              key={img.id || img.nome}
+                              draggable
+                              onDragStart={() => setDragFotoUsIdx(idx)}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                if (dragOverFotoUsIdx !== idx) setDragOverFotoUsIdx(idx);
+                              }}
+                              onDragLeave={() => {
+                                if (dragOverFotoUsIdx === idx) setDragOverFotoUsIdx(null);
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                handleDropFotoUs(dragFotoUsIdx, idx);
+                                setDragFotoUsIdx(null);
+                                setDragOverFotoUsIdx(null);
+                              }}
+                              onDragEnd={() => {
+                                setDragFotoUsIdx(null);
+                                setDragOverFotoUsIdx(null);
+                              }}
+                              className={`rounded-xl border overflow-hidden transition cursor-grab active:cursor-grabbing ${
+                                isDragging
+                                  ? 'opacity-45 border-[#00D296] scale-[0.98]'
+                                  : isDragOver
+                                  ? 'border-[#00D296] ring-2 ring-[#00D296]/40'
+                                  : darkMode
+                                  ? 'bg-[#0A141D] border-slate-800 hover:border-slate-600'
+                                  : 'bg-slate-50 border-slate-200 hover:border-slate-400'
+                              }`}
+                            >
+                              <div className="relative aspect-[4/3] bg-black overflow-hidden">
+                                <img
+                                  src={img.url}
+                                  alt={`Captura ${idx + 1}`}
+                                  loading="lazy"
+                                  className="w-full h-full object-contain pointer-events-none select-none"
+                                />
+                                <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-[#0A141D]/85 text-[#00D296] border border-[#00D296]/40">
+                                  #{idx + 1}
+                                </span>
+                                <span className="absolute top-1.5 right-1.5 p-1 rounded-md bg-[#0A141D]/75 text-slate-300">
+                                  <GripVertical className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
+                              <div className="px-2.5 py-1.5 flex items-center justify-between gap-1 border-t border-slate-800/60">
+                                <span className="text-[10px] font-bold text-slate-400 truncate">
+                                  Foto {idx + 1}
+                                </span>
+                                <div className="inline-flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoverFotoUs(idx, 'antes')}
+                                    title="Mover para antes"
+                                    className="px-2 py-1 rounded-lg text-[11px] font-extrabold border border-slate-700/80 text-slate-300 hover:border-[#00D296] hover:text-[#00D296] disabled:opacity-25 disabled:cursor-not-allowed transition"
+                                  >
+                                    ←
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === imagensUltrassom.length - 1}
+                                    onClick={() => handleMoverFotoUs(idx, 'depois')}
+                                    title="Mover para depois"
+                                    className="px-2 py-1 rounded-lg text-[11px] font-extrabold border border-slate-700/80 text-slate-300 hover:border-[#00D296] hover:text-[#00D296] disabled:opacity-25 disabled:cursor-not-allowed transition"
+                                  >
+                                    →
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

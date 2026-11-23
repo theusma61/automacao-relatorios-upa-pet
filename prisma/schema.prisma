@@ -231,6 +231,28 @@ model StripeWebhookEvent {
   @@map("stripe_webhook_events")
 }
 
+model TelemetriaEdicaoLaudo {
+  id            String   @id @default(cuid())
+  jobId         String   @map("job_id")
+  exameId       String?  @map("exame_id")
+  usuarioId     String   @map("usuario_id")
+  orgao         String
+  tipoEdicao    String   @map("tipo_edicao")
+  iaDisseNormal Boolean  @default(false) @map("ia_disse_normal")
+  textoAntes    String?  @db.Text @map("texto_antes")
+  textoDepois   String?  @db.Text @map("texto_depois")
+  diagDifAntes  String?  @map("diag_dif_antes")
+  diagDifDepois String?  @map("diag_dif_depois")
+  criadoEm      DateTime @default(now()) @map("criado_em")
+
+  @@unique([jobId, orgao])
+  @@index([orgao])
+  @@index([usuarioId])
+  @@index([iaDisseNormal])
+  @@index([criadoEm])
+  @@map("telemetria_edicoes_laudo")
+}
+
 model PerfilLaudo {
   id                    String    @id @default(cuid())
   usuarioId             String    @unique @map("usuario_id")
