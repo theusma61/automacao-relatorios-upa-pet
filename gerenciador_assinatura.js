@@ -443,7 +443,7 @@ async function verificarLimiteCotaUltrassom(usuarioId) {
     : assinaturaCancelada
     ? 'Sua assinatura foi cancelada. Reative ou escolha um novo plano em Configurações → Plano e assinatura para continuar emitindo laudos.'
     : cotaAtingida
-    ? `Você atingiu o limite da sua cota de ${cotaLimite} laudo(s) de ultrassom (${consumidoBanco}/${cotaLimite} emitidos no plano ${planoDef.nome}). Para continuar gerando novos laudos oficiais, faça upgrade do seu plano.`
+    ? `Você atingiu o limite da sua cota mensal de ${cotaLimite} laudo(s) de ultrassom (${consumidoBanco}/${cotaLimite} emitidos no plano ${planoDef.nome}). Para continuar gerando novos laudos oficiais, faça upgrade do seu plano.`
     : null;
 
   return {
