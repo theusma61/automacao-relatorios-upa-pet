@@ -20,6 +20,7 @@ const UltrasoundGenerator = lazy(() => import('./pages/UltrasoundGenerator'));
 const SurgeryGenerator = lazy(() => import('./pages/SurgeryGenerator'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const MeusPadroesPage = lazy(() => import('./pages/MeusPadroesPage'));
+const ClinicasFinanceiroPage = lazy(() => import('./pages/ClinicasFinanceiroPage'));
 
 function LazyFallback({ darkMode }) {
   return (
@@ -399,6 +400,18 @@ export default function App() {
           onOpenProfile={(tab = 'perfil') => openFromProfileMenu(tab)}
           onNavigateHome={() => setActiveNav('inicio')}
           onAddActivity={handleAddActivity}
+          onToast={showToast}
+        />
+      );
+    }
+
+    if (activeNav === 'volante') {
+      return (
+        <ClinicasFinanceiroPage
+          darkMode={darkMode}
+          userProfile={usuario}
+          setUserProfile={atualizarUsuarioLocal}
+          onOpenAssinatura={() => openFromProfileMenu('assinatura')}
           onToast={showToast}
         />
       );

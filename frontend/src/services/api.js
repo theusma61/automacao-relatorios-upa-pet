@@ -259,5 +259,56 @@ export const api = {
   registrarEnvioCompartilhamento: (tipo, id) =>
     requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/registrar-envio`, {
       method: 'POST'
-    })
+    }),
+
+  // Fase 2 — Modo Volante (Clínicas Parceiras e Controle Financeiro)
+  listarClinicasParceiras: (incluirInativas = false) =>
+    requestJson(`/api/clinicas-parceiras${incluirInativas ? '?incluirInativas=1' : ''}`),
+  criarClinicaParceira: (formData) =>
+    requestJson('/api/clinicas-parceiras', {
+      method: 'POST',
+      body: formData
+    }),
+  atualizarClinicaParceira: (id, formData) =>
+    requestJson(`/api/clinicas-parceiras/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: formData
+    }),
+  desativarClinicaParceira: (id) =>
+    requestJson(`/api/clinicas-parceiras/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    }),
+  getResumoFinanceiro: (mes = '') =>
+    requestJson(`/api/financeiro/resumo${mes ? `?mes=${encodeURIComponent(mes)}` : ''}`),
+  getLancamentosFinanceiros: ({ mes = '', clinicaId = '', statusPagamento = '', tipo = '' } = {}) => {
+    const qs = new URLSearchParams();
+    if (mes) qs.set('mes', mes);
+    if (clinicaId) qs.set('clinicaId', clinicaId);
+    if (statusPagamento) qs.set('statusPagamento', statusPagamento);
+    if (tipo) qs.set('tipo', tipo);
+    const q = qs.toString();
+    return requestJson(`/api/financeiro/lancamentos${q ? `?${q}` : ''}`);
+  },
+  atualizarLancamentoFinanceiro: (tipo, id, payload) =>
+    requestJson(`/api/financeiro/lancamentos/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  quitarPendentesClinica: (clinicaId, payload = {}) =>
+    requestJson(`/api/financeiro/clinicas/${encodeURIComponent(clinicaId)}/quitar-pendentes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  getUrlExtratoPdfClinica: (clinicaId, mes = '') =>
+    `/api/financeiro/clinicas/${encodeURIComponent(clinicaId)}/extrato.pdf${mes ? `?mes=${encodeURIComponent(mes)}` : ''}`,
+  getUrlExportarCsvFinanceiro: ({ mes = '', clinicaId = '', statusPagamento = '' } = {}) => {
+    const qs = new URLSearchParams();
+    if (mes) qs.set('mes', mes);
+    if (clinicaId) qs.set('clinicaId', clinicaId);
+    if (statusPagamento) qs.set('statusPagamento', statusPagamento);
+    const q = qs.toString();
+    return `/api/financeiro/exportar.csv${q ? `?${q}` : ''}`;
+  }
 };

@@ -5,7 +5,8 @@ import {
   Settings,
   HelpCircle,
   Palette,
-  ArrowUpRight
+  ArrowUpRight,
+  Wallet
 } from 'lucide-react';
 import { VetaroLogo, UltrasoundIcon } from '../icons/VetaroIcons';
 
@@ -22,7 +23,8 @@ export default function Sidebar({
     { id: 'inicio', label: 'Início', icon: Home },
     { id: 'ultrassom', label: 'Ultrassom', icon: UltrasoundIcon },
     { id: 'relatorio', label: 'Relatório', icon: FileText },
-    ...(newUiEnabled ? [{ id: 'meus-padroes', label: 'Meus Padrões', icon: Palette, badge: 'Novo' }] : []),
+    ...(newUiEnabled ? [{ id: 'meus-padroes', label: 'Meus Padrões', icon: Palette }] : []),
+    { id: 'volante', label: 'Volante', icon: Wallet, badge: 'Novo' },
     { id: 'configuracoes', label: 'Configurações', icon: Settings }
   ];
 

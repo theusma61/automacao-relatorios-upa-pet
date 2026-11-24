@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, FileText, Settings, Palette } from 'lucide-react';
+import { Home, FileText, Settings, Palette, Wallet } from 'lucide-react';
 
 export default function MobileTabBar({ darkMode, activeNav, setActiveNav, newUiEnabled = false }) {
   if (newUiEnabled) {
@@ -11,6 +11,7 @@ export default function MobileTabBar({ darkMode, activeNav, setActiveNav, newUiE
         icon: FileText,
         active: activeNav === 'ultrassom' || activeNav === 'relatorio'
       },
+      { id: 'volante', label: 'Volante', icon: Wallet, active: activeNav === 'volante' },
       { id: 'meus-padroes', label: 'Padrões', icon: Palette, active: activeNav === 'meus-padroes' },
       { id: 'configuracoes', label: 'Ajustes', icon: Settings, active: activeNav === 'configuracoes' }
     ];
@@ -19,7 +20,7 @@ export default function MobileTabBar({ darkMode, activeNav, setActiveNav, newUiE
       <nav
         translate="no"
         aria-label="Navegação principal"
-        className={`notranslate border-t backdrop-blur-xl pt-2 pb-[max(0.65rem,env(safe-area-inset-bottom))] px-2 grid grid-cols-4 items-center gap-1 transition-colors ${
+        className={`notranslate border-t backdrop-blur-xl pt-2 pb-[max(0.65rem,env(safe-area-inset-bottom))] px-2 grid grid-cols-5 items-center gap-1 transition-colors ${
           darkMode
             ? 'bg-[#0C1720]/95 border-slate-800/90 text-slate-400 shadow-[0_-8px_24px_rgba(0,0,0,0.32)]'
             : 'bg-white/95 border-slate-200 text-slate-500 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]'

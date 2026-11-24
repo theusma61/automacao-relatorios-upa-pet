@@ -217,7 +217,10 @@ export default function ShareReportModal({
       ].join('\n');
     }
 
-    const phone = normalizarTelefoneWhatsApp(telefoneDestino);
+    const telefoneEfetivo =
+      telefoneDestino.trim() ||
+      (destino === 'clinica' ? (dados?.clinicaParceira?.whatsapp || '') : '');
+    const phone = normalizarTelefoneWhatsApp(telefoneEfetivo);
     const whatsappUrl = phone
       ? `https://wa.me/${phone}?text=${encodeURIComponent(mensagem)}`
       : `https://api.whatsapp.com/send?text=${encodeURIComponent(mensagem)}`;
@@ -510,7 +513,11 @@ export default function ShareReportModal({
                     }`}
                   >
                     <Building2 className="w-4 h-4 text-[#00D296]" />
-                    <span>Enviar para Clínica</span>
+                    <span>
+                      {dados?.clinicaParceira?.nome
+                        ? `Enviar p/ ${dados.clinicaParceira.nome.slice(0, 18)}`
+                        : 'Enviar para Clínica'}
+                    </span>
                   </button>
                 </div>
               </div>

@@ -28,6 +28,7 @@ import {
 import LayoutEditorDrawer from '../components/modals/LayoutEditorDrawer';
 import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
+import VolanteSelectorBar from '../components/VolanteSelectorBar';
 
 // Limites seguros calibrados para VPS Linux 2 vCPUs / 4 GB RAM
 // (Ultrassom carrega até 25 capturas Mindray por aba -> 4 abas abertas e até 2 gerações simultâneas; excedentes entram em fila)
@@ -176,6 +177,7 @@ export default function UltrasoundGenerator({
 
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id || '');
   const [previewModalTabId, setPreviewModalTabId] = useState(null);
+  const [volanteInfo, setVolanteInfo] = useState({ clinicaParceiraId: '', valorExame: '', quemPagou: 'CLINICA' });
 
   const tabsRef = useRef(tabs);
   useEffect(() => {
@@ -366,6 +368,9 @@ export default function UltrasoundGenerator({
         currentTab.rawFiles.map((f) => comprimirImagemUltrassom(f))
       );
       arquivosOtimizados.forEach((f) => fd.append('imagens', f));
+      if (volanteInfo?.clinicaParceiraId) fd.append('clinicaParceiraId', volanteInfo.clinicaParceiraId);
+      if (volanteInfo?.valorExame) fd.append('valorExame', volanteInfo.valorExame);
+      if (volanteInfo?.quemPagou) fd.append('quemPagou', volanteInfo.quemPagou);
       const res = await api.gerarUltrassom(fd);
       const pac = res.paciente || {};
       const resumoReal =
@@ -379,6 +384,7 @@ export default function UltrasoundGenerator({
 
       const novoRelatorio = {
         id: `ultra-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        dbId: res.exameId || null,
         jobId: res.jobId,
         type: 'ultrassom',
         title: 'Laudo de Ultrassom',
@@ -984,6 +990,13 @@ export default function UltrasoundGenerator({
             </button>
           </div>
         )}
+
+        <VolanteSelectorBar
+          tipo="ultrassom"
+          darkMode={darkMode}
+          value={volanteInfo}
+          onChange={setVolanteInfo}
+        />
 
         {/* Botão Largo Principal */}
         <button

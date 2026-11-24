@@ -30,6 +30,7 @@ import {
 import ModeloCirurgicoModal from '../components/modals/ModeloCirurgicoModal';
 import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
+import VolanteSelectorBar from '../components/VolanteSelectorBar';
 
 // Limites seguros calibrados para VPS Linux 2 vCPUs / 4 GB RAM
 // (Frontend limita 5 abas abertas e no máximo 2 gerações simultâneas; excedentes entram na fila automática)
@@ -138,6 +139,7 @@ export default function SurgeryGenerator({
 
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id || '');
   const [previewModalTabId, setPreviewModalTabId] = useState(null);
+  const [volanteInfo, setVolanteInfo] = useState({ clinicaParceiraId: '', valorExame: '', quemPagou: 'CLINICA' });
 
   const tabsRef = useRef(tabs);
   useEffect(() => {
@@ -361,6 +363,9 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
         fd.append('textoDigitado', currentTab.surgeryText.trim());
       }
       currentTab.rawPhotoFiles.forEach((f) => fd.append('fotos', f));
+      if (volanteInfo?.clinicaParceiraId) fd.append('clinicaParceiraId', volanteInfo.clinicaParceiraId);
+      if (volanteInfo?.valorExame) fd.append('valorExame', volanteInfo.valorExame);
+      if (volanteInfo?.quemPagou) fd.append('quemPagou', volanteInfo.quemPagou);
 
       const res = await api.gerarCirurgia(fd);
       const pac = res.paciente || {};
@@ -382,6 +387,7 @@ Paciente extubado acordado, parâmetros fisiológicos estáveis, sem hipotermia 
 
       const novoRelatorio = {
         id: `cirurg-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        dbId: res.relatorioId || null,
         jobId: res.jobId,
         type: 'relatorio',
         title: `Relatório Cirúrgico — ${cir.procedimento || 'Oficial'}`,
@@ -1003,6 +1009,15 @@ Recuperação: Paciente extubado acordado, sem hipotermia ou sangramentos.`}
             </button>
           </div>
         )}
+
+        <div className="mb-4">
+          <VolanteSelectorBar
+            tipo="cirurgia"
+            darkMode={darkMode}
+            value={volanteInfo}
+            onChange={setVolanteInfo}
+          />
+        </div>
 
         {/* Botão Largo Principal */}
         <button
