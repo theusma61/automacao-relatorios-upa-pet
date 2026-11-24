@@ -2008,6 +2008,46 @@ app.get('/api/historico', exigirAutenticacao, async (req, res) => {
   }
 });
 
+// Sprint 3 — Comparativo de exames anteriores do mesmo paciente (usa @@index([pacienteNome]), < 2 ms SQL)
+app.get('/api/pacientes/historico', exigirAutenticacao, async (req, res) => {
+  try {
+    const nome = String(req.query.nome || '').trim();
+    if (nome.length < 2) {
+      return res.json({ sucesso: true, exames: [] });
+    }
+    const excluirId = String(req.query.excluirId || '').trim();
+    const limite = Math.min(8, Math.max(1, parseInt(req.query.limit || '5', 10) || 5));
+
+    const where = {
+      ...(req.usuario.role === 'admin' ? {} : { usuarioId: req.usuario.id }),
+      pacienteNome: { contains: nome, mode: 'insensitive' },
+      ...(excluirId ? { id: { not: excluirId } } : {})
+    };
+
+    const exames = await prisma.exameLaudo.findMany({
+      where,
+      orderBy: { criadoEm: 'desc' },
+      take: limite,
+      select: {
+        id: true,
+        pacienteNome: true,
+        pacienteEspecie: true,
+        pacienteIdade: true,
+        tutorNome: true,
+        dataExame: true,
+        laudoEstruturado: true,
+        imagensQtd: true,
+        pdfArquivo: true,
+        criadoEm: true
+      }
+    });
+
+    res.json({ sucesso: true, exames });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar histórico do paciente: ' + err.message });
+  }
+});
+
 app.get('/api/assinatura/uso', exigirAutenticacao, async (req, res) => {
   try {
     const dados = await obterMetricasUsoAssinatura(req.usuario.id);

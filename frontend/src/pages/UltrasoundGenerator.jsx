@@ -28,6 +28,7 @@ import {
 import LayoutEditorDrawer from '../components/modals/LayoutEditorDrawer';
 import ReportPreviewModal from '../components/modals/ReportPreviewModal';
 import { api } from '../services/api';
+import { salvarFotosRascunho, carregarFotosRascunho, limparFotosRascunho } from '../services/offlineDraftDb';
 import VolanteSelectorBar from '../components/VolanteSelectorBar';
 
 // Limites seguros calibrados para VPS Linux 2 vCPUs / 4 GB RAM
@@ -206,6 +207,55 @@ export default function UltrasoundGenerator({
     } catch (_) {}
   }, [tabs, storageKey]);
 
+  // Restaura fotos pendentes salvas em IndexedDB (sobrevive refresh / 4G instável no celular)
+  const restoredDraftsRef = useRef(false);
+  useEffect(() => {
+    if (restoredDraftsRef.current) return;
+    restoredDraftsRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const updates = [];
+      for (const tab of tabsRef.current) {
+        if (tab.status !== 'done' && (!tab.rawFiles || tab.rawFiles.length === 0)) {
+          const files = await carregarFotosRascunho(`${storageKey}_${tab.id}`);
+          if (files.length > 0) {
+            updates.push({ tabId: tab.id, files });
+          }
+        }
+      }
+      if (cancelled || updates.length === 0) return;
+      setTabs((prev) =>
+        prev.map((tab) => {
+          const match = updates.find((u) => u.tabId === tab.id);
+          if (!match || (tab.rawFiles && tab.rawFiles.length > 0)) return tab;
+          const mindrayFiles = match.files.map((f, i) => ({
+            id: `${tab.id}-restored-${i}-${Date.now()}`,
+            name: f.name,
+            size: f.size,
+            previewUrl: URL.createObjectURL(f)
+          }));
+          return { ...tab, rawFiles: match.files, mindrayFiles };
+        })
+      );
+      if (onToast) onToast('Capturas pendentes restauradas do rascunho offline.');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, onToast]);
+
+  // Sincroniza fotos pendentes no IndexedDB (limpa automaticamente quando o laudo conclui)
+  useEffect(() => {
+    tabs.forEach((t) => {
+      const key = `${storageKey}_${t.id}`;
+      if (t.status === 'done' || !t.rawFiles || t.rawFiles.length === 0) {
+        limparFotosRascunho(key);
+      } else {
+        salvarFotosRascunho(key, t.rawFiles);
+      }
+    });
+  }, [tabs, storageKey]);
+
   // Libera ObjectURLs das capturas Mindray ao desmontar componente
   useEffect(() => {
     return () => {
@@ -348,6 +398,7 @@ export default function UltrasoundGenerator({
     activeGenerationsRef.current += 1;
     updateTabById(tabId, {
       status: 'generating',
+      progressStage: '1/3 Comprimindo capturas...',
       errorMessage: '',
       generatedOutput: '',
       downloadLinks: { pdfUrl: '', docxUrl: '' },
@@ -371,7 +422,16 @@ export default function UltrasoundGenerator({
       if (volanteInfo?.clinicaParceiraId) fd.append('clinicaParceiraId', volanteInfo.clinicaParceiraId);
       if (volanteInfo?.valorExame) fd.append('valorExame', volanteInfo.valorExame);
       if (volanteInfo?.quemPagou) fd.append('quemPagou', volanteInfo.quemPagou);
-      const res = await api.gerarUltrassom(fd);
+      updateTabById(tabId, { progressStage: '2/3 Analisando imagens com IA...' });
+      const stageTimer = setTimeout(() => {
+        updateTabById(tabId, { progressStage: '3/3 Compilando PDF A4 e Word...' });
+      }, 9000);
+      let res;
+      try {
+        res = await api.gerarUltrassom(fd);
+      } finally {
+        clearTimeout(stageTimer);
+      }
       const pac = res.paciente || {};
       const resumoReal =
         `LAUDO OFICIAL DE ULTRASSONOGRAFIA ABDOMINAL\n` +
@@ -401,6 +461,7 @@ export default function UltrasoundGenerator({
 
       updateTabById(tabId, {
         status: 'done',
+        progressStage: '',
         errorMessage: '',
         generatedOutput: resumoReal,
         downloadLinks: { pdfUrl: res.pdfUrl || '', docxUrl: res.docxUrl || '' },
@@ -473,6 +534,22 @@ export default function UltrasoundGenerator({
 
     executeGenerationForTab(activeTab.id);
   };
+
+  useEffect(() => {
+    const temTrabalhoAtivo = tabs.some(
+      (t) =>
+        t.status === 'generating' ||
+        t.status === 'queued' ||
+        (Array.isArray(t.rawFiles) && t.rawFiles.length > 0 && t.status !== 'done')
+    );
+    if (!temTrabalhoAtivo) return undefined;
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [tabs]);
 
   const generatingCount = tabs.filter((t) => t.status === 'generating').length;
   const queuedCount = tabs.filter((t) => t.status === 'queued').length;
@@ -982,7 +1059,7 @@ export default function UltrasoundGenerator({
               <Wand2 className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
               <span>
                 {isGenerating
-                  ? 'Gerando laudo com IA...'
+                  ? (activeTab?.progressStage || 'Gerando laudo com IA...')
                   : isQueued
                   ? 'Na fila de geração...'
                   : `Gerar Laudo (${activeTab.rawFiles.length} ${activeTab.rawFiles.length === 1 ? 'foto' : 'fotos'})`}
@@ -1039,7 +1116,7 @@ export default function UltrasoundGenerator({
               <Wand2 className={`w-5 h-5 ${isGenerating ? 'animate-spin' : ''}`} />
               <span>
                 {isGenerating
-                  ? 'Analisando capturas do Mindray com IA e compilando PDF/DOCX (15-30s)...'
+                  ? (activeTab?.progressStage || 'Analisando capturas do Mindray com IA e compilando PDF/DOCX (15-30s)...')
                   : 'Gerar Laudo Oficial com IA'}
               </span>
             </>

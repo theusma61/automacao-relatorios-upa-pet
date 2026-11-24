@@ -61,7 +61,20 @@ export const api = {
     }),
 
   // Histórico Multi-Tenant (Exames de Ultrassom + Relatórios Cirúrgicos)
-  getHistorico: () => requestJson('/api/historico'),
+  getHistorico: ({ limit = 25, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (limit) qs.set('limit', String(limit));
+    if (offset) qs.set('offset', String(offset));
+    const q = qs.toString();
+    return requestJson(`/api/historico${q ? `?${q}` : ''}`);
+  },
+  getHistoricoPaciente: ({ nome = '', excluirId = '', limit = 5 } = {}) => {
+    const qs = new URLSearchParams();
+    if (nome) qs.set('nome', nome);
+    if (excluirId) qs.set('excluirId', excluirId);
+    if (limit) qs.set('limit', String(limit));
+    return requestJson(`/api/pacientes/historico?${qs.toString()}`);
+  },
 
   // Geradores com IA Gemini
   gerarUltrassom: (formData) =>

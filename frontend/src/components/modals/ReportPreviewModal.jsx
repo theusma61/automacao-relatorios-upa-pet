@@ -31,6 +31,7 @@ import {
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
 import ShareReportModal from './ShareReportModal';
+import VoiceDictationButton from '../VoiceDictationButton';
 import UltrasoundImageAnalyzer, {
   resolverIndiceOrgaoParaImagem,
   resolverIndiceImagemParaOrgao
@@ -81,6 +82,34 @@ const SECOES_CIRURGIA_META = {
     extraClass: ''
   }
 };
+
+const MACROS_RAPIDAS_ULTRASSOM = [
+  {
+    label: 'Normal',
+    texto: 'Dimensões, contornos, arquitetura e ecogenicidade preservados, sem alterações sonográficas evidentes.',
+    substituir: true
+  },
+  {
+    label: 'Lama biliar',
+    texto: 'Presença de moderada quantidade de conteúdo ecogênico depositado em porção gravidade-dependente (lama biliar).',
+    substituir: false
+  },
+  {
+    label: 'Esplenomegalia discreta',
+    texto: 'Dimensões discretamente aumentadas, contornos regulares e parênquima homogêneo (esplenomegalia discreta).',
+    substituir: false
+  },
+  {
+    label: 'Sedimento urinário',
+    texto: 'Conteúdo anecogênico com presença de pontos ecogênicos em suspensão compatíveis com sedimento celular/cristalúria.',
+    substituir: false
+  },
+  {
+    label: 'Linfonodomegalia',
+    texto: 'Linfonodos regionais com dimensões discretamente aumentadas e ecogenicidade preservada (linfonodomegalia reacional).',
+    substituir: false
+  }
+];
 
 const ORDEM_SECOES_CIRURGIA_PADRAO = ['diagnostico', 'descricao', 'evolucao'];
 
@@ -253,6 +282,9 @@ export default function ReportPreviewModal({
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [mobileStyleSheetOpen, setMobileStyleSheetOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [examesAnteriores, setExamesAnteriores] = useState([]);
+  const [evolucaoAberta, setEvolucaoAberta] = useState(false);
+  const [exameAnteriorIdx, setExameAnteriorIdx] = useState(0);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [syncedOrgaoIdx, setSyncedOrgaoIdx] = useState(-1);
   const orgaoCardRefs = useRef({});
@@ -812,6 +844,66 @@ export default function ReportPreviewModal({
       }
     }
   };
+
+  const handleSalvarERecompilarRef = useRef(handleSalvarERecompilar);
+  useEffect(() => {
+    handleSalvarERecompilarRef.current = handleSalvarERecompilar;
+  });
+
+  // Atalhos de teclado no Vetaro Studio: Ctrl+S (recompilar) e Ctrl+Enter (compartilhar)
+  useEffect(() => {
+    if (!report) return undefined;
+    const handleStudioKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = String(e.key || '').toLowerCase();
+      if (key === 's') {
+        e.preventDefault();
+        if (initialJobId && !isRecompiling) {
+          handleSalvarERecompilarRef.current();
+        }
+      } else if (key === 'enter') {
+        e.preventDefault();
+        if (hasUnsavedChanges && initialJobId && !isRecompiling) {
+          Promise.resolve(handleSalvarERecompilarRef.current({ silent: true })).then(() => {
+            setShareModalOpen(true);
+          });
+        } else {
+          setShareModalOpen(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleStudioKeyDown);
+    return () => window.removeEventListener('keydown', handleStudioKeyDown);
+  }, [report, initialJobId, isRecompiling, hasUnsavedChanges]);
+
+  // Sprint 3 — Busca leve de exames anteriores do mesmo paciente para comparativo clínico
+  useEffect(() => {
+    if (!report || isSurgery) {
+      setExamesAnteriores([]);
+      setEvolucaoAberta(false);
+      return undefined;
+    }
+    const nomePac = String(pacienteForm?.nome || report?.paciente?.nome || '').trim();
+    if (nomePac.length < 2 || /^n[aã]o identificado$/i.test(nomePac)) {
+      setExamesAnteriores([]);
+      return undefined;
+    }
+    let cancelled = false;
+    api
+      .getHistoricoPaciente({ nome: nomePac, excluirId: report?.dbId || '', limit: 5 })
+      .then((res) => {
+        if (cancelled) return;
+        const lista = Array.isArray(res?.exames) ? res.exames : [];
+        setExamesAnteriores(lista);
+        setExameAnteriorIdx(0);
+      })
+      .catch(() => {
+        if (!cancelled) setExamesAnteriores([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [report?.dbId, report?.id, isSurgery, pacienteForm?.nome]);
 
   useEffect(() => {
     return () => {
@@ -2051,6 +2143,21 @@ export default function ReportPreviewModal({
                           </div>
                         </div>
 
+                        <div className="flex justify-end mb-1.5">
+                          <VoiceDictationButton
+                            darkMode={darkMode}
+                            compact
+                            label="Ditar"
+                            title={`Ditar em ${metaSec.titulo} (pt-BR)`}
+                            onTranscript={(chunk) => {
+                              const atual = cirurgiaForm[metaSec.campo] || '';
+                              handleCirurgiaChange(
+                                metaSec.campo,
+                                atual ? `${atual.trimEnd()} ${chunk}` : chunk
+                              );
+                            }}
+                          />
+                        </div>
                         <textarea
                           rows={metaSec.rows}
                           value={cirurgiaForm[metaSec.campo] || ''}
@@ -2524,6 +2631,85 @@ export default function ReportPreviewModal({
                     </div>
                   )}
 
+                  {/* Sprint 3 — Comparativo de Exames Anteriores do Mesmo Paciente */}
+                  {examesAnteriores.length > 0 && (
+                    <div
+                      className={`rounded-2xl border p-3.5 transition ${
+                        darkMode
+                          ? 'bg-[#0B1823] border-[#00D296]/30'
+                          : 'bg-emerald-50/60 border-[#0D5C56]/25'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEvolucaoAberta((v) => !v)}
+                          className="flex items-center gap-2 text-left text-xs font-extrabold"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-[#00D296] shrink-0" />
+                          <span>
+                            Evolução clínica · {examesAnteriores.length}{' '}
+                            {examesAnteriores.length === 1 ? 'exame anterior' : 'exames anteriores'} de{' '}
+                            {pacienteForm?.nome || 'este paciente'}
+                          </span>
+                          {evolucaoAberta ? (
+                            <ChevronUp className="w-3.5 h-3.5 opacity-70" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                          )}
+                        </button>
+
+                        {evolucaoAberta && examesAnteriores.length > 1 && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {examesAnteriores.map((ant, aIdx) => (
+                              <button
+                                key={ant.id}
+                                type="button"
+                                onClick={() => setExameAnteriorIdx(aIdx)}
+                                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition ${
+                                  exameAnteriorIdx === aIdx
+                                    ? 'bg-[#00D296] text-[#062E2B]'
+                                    : darkMode
+                                    ? 'bg-slate-800 text-slate-300 hover:text-white'
+                                    : 'bg-white text-slate-600 border border-slate-200'
+                                }`}
+                              >
+                                {ant.dataExame || new Date(ant.criadoEm).toLocaleDateString('pt-BR')}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {evolucaoAberta && examesAnteriores[exameAnteriorIdx] && (
+                        <div className="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {Array.isArray(examesAnteriores[exameAnteriorIdx].laudoEstruturado) &&
+                          examesAnteriores[exameAnteriorIdx].laudoEstruturado.length > 0 ? (
+                            examesAnteriores[exameAnteriorIdx].laudoEstruturado.map((org, oIdx) => (
+                              <div
+                                key={`${examesAnteriores[exameAnteriorIdx].id}-${oIdx}`}
+                                className={`p-2.5 rounded-xl border text-[11px] leading-relaxed ${
+                                  darkMode
+                                    ? 'bg-[#0A141D] border-slate-800 text-slate-300'
+                                    : 'bg-white border-slate-200 text-slate-700'
+                                }`}
+                              >
+                                <span className="font-extrabold text-[#00A878] mr-1.5">
+                                  {org.orgao || 'ÓRGÃO'}:
+                                </span>
+                                <span>{org.texto || org.achados || ''}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-[11px] text-slate-400">
+                              Sem achados estruturados registrados neste exame anterior.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Cards de cada Órgão */}
                   {laudoForm.map((item, idx) => {
                     const isDragging = draggedOrgaoIdx === idx;
@@ -2689,6 +2875,46 @@ export default function ReportPreviewModal({
                             : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-[#0D5C56]'
                         }`}
                       />
+
+                      {/* Barra rápida: ditado por voz + macros clínicas (0 MB na VPS) */}
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <VoiceDictationButton
+                          darkMode={darkMode}
+                          compact
+                          label="Ditar"
+                          title={`Ditar achados em ${item.orgao || 'órgão'} (pt-BR)`}
+                          onTranscript={(chunk) => {
+                            const atual = item.texto || '';
+                            handleAlterarOrgao(
+                              idx,
+                              'texto',
+                              atual ? `${atual.trimEnd()} ${chunk}` : chunk
+                            );
+                          }}
+                        />
+                        {MACROS_RAPIDAS_ULTRASSOM.map((macro) => (
+                          <button
+                            key={macro.label}
+                            type="button"
+                            onClick={() => {
+                              const atual = (item.texto || '').trim();
+                              const proximo =
+                                macro.substituir || !atual
+                                  ? macro.texto
+                                  : `${atual} ${macro.texto}`;
+                              handleAlterarOrgao(idx, 'texto', proximo);
+                            }}
+                            title={macro.texto}
+                            className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
+                              darkMode
+                                ? 'bg-[#0A141D] border-slate-800 text-slate-300 hover:border-[#00D296] hover:text-[#00D296]'
+                                : 'bg-white border-slate-200 text-slate-600 hover:border-[#0D5C56] hover:text-[#0D5C56]'
+                            }`}
+                          >
+                            + {macro.label}
+                          </button>
+                        ))}
+                      </div>
 
                       {/* Campo Opcional: Diagnóstico Diferencial */}
                       <div className="mt-2 flex items-center gap-2">

@@ -240,6 +240,11 @@ function criarPrismaMockMemoria() {
       findMany: async ({ where, take = 50, skip = 0, select } = {}) => {
         let arr = Array.from(store.exames.values());
         if (where?.usuarioId) arr = arr.filter(e => e.usuarioId === where.usuarioId);
+        if (where?.id?.not) arr = arr.filter(e => e.id !== where.id.not);
+        if (where?.pacienteNome?.contains) {
+          const needle = String(where.pacienteNome.contains).toLowerCase();
+          arr = arr.filter(e => String(e.pacienteNome || '').toLowerCase().includes(needle));
+        }
         const page = arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(skip, skip + take);
         if (!select) return page;
         return page.map((item) => {
