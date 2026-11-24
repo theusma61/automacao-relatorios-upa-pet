@@ -69,14 +69,20 @@ export default function ShareReportModal({
   const [salvandoResumo, setSalvandoResumo] = useState(false);
 
   const [telefoneDestino, setTelefoneDestino] = useState('');
+  const [exibirQrRodape, setExibirQrRodape] = useState(false);
+  const [salvandoQrRodape, setSalvandoQrRodape] = useState(false);
 
   const carregarDadosLink = useCallback(async () => {
     if (!isOpen || !documentoId) return;
     setLoading(true);
     setErro('');
     try {
-      const res = await api.obterLinkCompartilhamento(tipo, documentoId);
+      const [res, qrPref] = await Promise.all([
+        api.obterLinkCompartilhamento(tipo, documentoId),
+        api.getPreferenciaQrCodeRodape().catch(() => ({ exibirQrCodeRodape: false }))
+      ]);
       setDados(res);
+      setExibirQrRodape(Boolean(qrPref?.exibirQrCodeRodape));
       const txt = res?.resumoTutor || '';
       setResumoText(txt);
       setResumoOriginal(txt);
@@ -394,6 +400,36 @@ export default function ShareReportModal({
                       )}
                     </div>
                   </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-700/40 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-400">
+                    Imprimir QR Code no rodapé dos próximos PDFs
+                  </span>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                    <input
+                      type="checkbox"
+                      checked={exibirQrRodape}
+                      disabled={salvandoQrRodape}
+                      onChange={async (e) => {
+                        const val = e.target.checked;
+                        setExibirQrRodape(val);
+                        setSalvandoQrRodape(true);
+                        try {
+                          await api.salvarPreferenciaQrCodeRodape(val);
+                          if (onToast) {
+                            onToast(val ? 'QR Code ativado no rodapé dos próximos PDFs.' : 'QR Code removido do rodapé dos próximos PDFs.');
+                          }
+                        } catch (_) {
+                          setExibirQrRodape(!val);
+                        } finally {
+                          setSalvandoQrRodape(false);
+                        }
+                      }}
+                      className="w-3.5 h-3.5 accent-[#00D296]"
+                    />
+                    <span>{exibirQrRodape ? 'Ativo' : 'Desativado'}</span>
+                  </label>
                 </div>
               </div>
 

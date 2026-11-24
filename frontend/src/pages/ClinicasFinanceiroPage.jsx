@@ -116,7 +116,7 @@ export default function ClinicasFinanceiroPage({
     try {
       const fd = new FormData();
       fd.append('chavePix', chavePix.trim());
-      const res = await api.atualizarPerfilProfissional(fd);
+      const res = await api.updatePerfilProfissional(fd);
       if (setUserProfile && res?.usuario) {
         setUserProfile((prev) => ({ ...prev, chavePix: res.usuario.chavePix }));
       }

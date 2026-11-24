@@ -2119,7 +2119,8 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     const imagensOrdenadas = resultadoIA.caminhosOrdenados || caminhosArquivos;
     const publicToken = gerarPublicToken();
     const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicToken, {
-      baseUrl: resolverOriginSeguro(req)
+      baseUrl: resolverOriginSeguro(req),
+      exibirQrCode: obterPreferenciaQrCodeRodape(layoutUsuario)
     });
     const docs = await gerarDocumentosExame(
       resultadoIA.paciente,
@@ -2353,7 +2354,8 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
 
     const publicToken = gerarPublicToken();
     const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicToken, {
-      baseUrl: resolverOriginSeguro(req)
+      baseUrl: resolverOriginSeguro(req),
+      exibirQrCode: obterPreferenciaQrCodeRodape(layoutUsuario)
     });
     const docs = await gerarDocumentosCirurgicos(
       resultadoIA.paciente,
@@ -2624,7 +2626,8 @@ app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, 
       publicTokenExistente = gerarPublicToken();
     }
     const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicTokenExistente, {
-      baseUrl: resolverOriginSeguro(req)
+      baseUrl: resolverOriginSeguro(req),
+      exibirQrCode: obterPreferenciaQrCodeRodape(layoutEfetivoUs || layoutUsuario)
     });
 
     const docs = await gerarDocumentosExame(
@@ -2809,7 +2812,8 @@ app.post('/api/cirurgia/recompilar', limiterGeracaoPesada, exigirAutenticacao, e
       publicTokenExistente = gerarPublicToken();
     }
     const compartilhamentoPdf = await prepararDadosQrCodeCompartilhamento(publicTokenExistente, {
-      baseUrl: resolverOriginSeguro(req)
+      baseUrl: resolverOriginSeguro(req),
+      exibirQrCode: obterPreferenciaQrCodeRodape(layoutUsuario)
     });
 
     const docs = await gerarDocumentosCirurgicos(
@@ -2936,6 +2940,61 @@ app.get('/favicon.svg', (req, res) => {
 // SERVIÇO ESTÁTICO DO FRONTEND REACT (VETARO DESIGN SYSTEM)
 // =========================================================================
 
+
+function obterPreferenciaQrCodeRodape(layoutUsuario) {
+  return Boolean(
+    layoutUsuario?.visual_config_json?.exibirQrCodeRodape === true ||
+    layoutUsuario?.visualConfigJson?.exibirQrCodeRodape === true
+  );
+}
+
+app.get('/api/preferencias/qrcode-rodape', exigirAutenticacao, async (req, res) => {
+  try {
+    const layoutUsuario = await obterLayout(req.usuario.id);
+    res.json({
+      sucesso: true,
+      exibirQrCodeRodape: obterPreferenciaQrCodeRodape(layoutUsuario)
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao consultar preferência de QR Code.' });
+  }
+});
+
+app.put('/api/preferencias/qrcode-rodape', exigirAutenticacao, async (req, res) => {
+  try {
+    const ativo = Boolean(req.body?.exibirQrCodeRodape === true);
+    const existente = await prisma.configuracaoLayout.findFirst({
+      where: { usuarioId: req.usuario.id }
+    });
+    if (existente) {
+      const visualAtual =
+        existente.visualConfigJson && typeof existente.visualConfigJson === 'object'
+          ? existente.visualConfigJson
+          : {};
+      await prisma.configuracaoLayout.update({
+        where: { id: existente.id },
+        data: {
+          visualConfigJson: {
+            ...visualAtual,
+            exibirQrCodeRodape: ativo
+          }
+        }
+      });
+    } else {
+      await prisma.configuracaoLayout.create({
+        data: {
+          usuarioId: req.usuario.id,
+          nome: 'Padrão Vetaro',
+          visualConfigJson: { exibirQrCodeRodape: ativo }
+        }
+      });
+    }
+    res.json({ sucesso: true, exibirQrCodeRodape: ativo });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao salvar preferência de QR Code no rodapé');
+    res.status(500).json({ error: 'Erro ao salvar preferência de QR Code.' });
+  }
+});
 
 // ==================== FASE 2: MODO VOLANTE (CLÍNICAS PARCEIRAS & FINANCEIRO) ====================
 

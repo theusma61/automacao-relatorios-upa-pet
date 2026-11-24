@@ -56,6 +56,38 @@ export default function SettingsPage({
   const [assinaturaFile, setAssinaturaFile] = useState(null);
   const [assinaturaPreview, setAssinaturaPreview] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [exibirQrCodeRodape, setExibirQrCodeRodape] = useState(false);
+  const [salvandoQrPref, setSalvandoQrPref] = useState(false);
+
+  useEffect(() => {
+    api.getPreferenciaQrCodeRodape()
+      .then((res) => {
+        if (typeof res?.exibirQrCodeRodape === 'boolean') {
+          setExibirQrCodeRodape(res.exibirQrCodeRodape);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleQrCodeRodape = async (novoValor) => {
+    setExibirQrCodeRodape(novoValor);
+    setSalvandoQrPref(true);
+    try {
+      await api.salvarPreferenciaQrCodeRodape(novoValor);
+      if (onToast) {
+        onToast(
+          novoValor
+            ? 'QR Code ativado no rodapé dos próximos PDFs!'
+            : 'QR Code removido do rodapé dos próximos PDFs.'
+        );
+      }
+    } catch (err) {
+      setExibirQrCodeRodape(!novoValor);
+      if (onToast) onToast('Erro ao salvar preferência de QR Code.');
+    } finally {
+      setSalvandoQrPref(false);
+    }
+  };
 
   const getMediaUrl = (url) => {
     if (!url) return '';
@@ -757,6 +789,33 @@ export default function SettingsPage({
                   </span>
                 </button>
               </div>
+            </div>
+
+            <div
+              className={`rounded-xl border p-3.5 flex items-center justify-between gap-3 ${
+                darkMode
+                  ? 'bg-[#0A141D] border-slate-800'
+                  : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <div>
+                <p className="text-xs font-extrabold">Exibir QR Code no rodapé dos PDFs</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Opcional (desmarcado por padrão). Imprime um QR Code discreto no rodapé dos laudos e cirurgias para acesso digital rápido.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={exibirQrCodeRodape}
+                  disabled={salvandoQrPref}
+                  onChange={(e) => handleToggleQrCodeRodape(e.target.checked)}
+                  className="w-4 h-4 accent-[#00D296]"
+                />
+                <span className="text-xs font-bold">
+                  {exibirQrCodeRodape ? 'Ativo' : 'Desativado'}
+                </span>
+              </label>
             </div>
 
             <div className="flex justify-end pt-2">

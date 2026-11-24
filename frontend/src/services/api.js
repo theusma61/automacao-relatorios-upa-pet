@@ -260,6 +260,14 @@ export const api = {
     requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/registrar-envio`, {
       method: 'POST'
     }),
+  getPreferenciaQrCodeRodape: () =>
+    requestJson('/api/preferencias/qrcode-rodape'),
+  salvarPreferenciaQrCodeRodape: (exibirQrCodeRodape) =>
+    requestJson('/api/preferencias/qrcode-rodape', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exibirQrCodeRodape: Boolean(exibirQrCodeRodape) })
+    }),
 
   // Fase 2 — Modo Volante (Clínicas Parceiras e Controle Financeiro)
   listarClinicasParceiras: (incluirInativas = false) =>
