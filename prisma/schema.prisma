@@ -37,6 +37,7 @@ model Usuario {
   assinaturaUrl     String?              @map("assinatura_url")
   foto              String?
   telefone          String?
+  chavePix          String?              @map("chave_pix")
   temaPreferencia   String               @default("system") @map("tema_preferencia")
   ativo             Boolean              @default(true)
 
@@ -50,6 +51,7 @@ model Usuario {
   assinatura        Assinatura?
   perfilLaudo       PerfilLaudo?
   perfilCirurgico   PerfilCirurgico?
+  clinicasParceiras ClinicaParceira[]
 
   criadoEm          DateTime             @default(now()) @map("criado_em")
   atualizadoEm      DateTime             @updatedAt @map("atualizado_em")
@@ -150,12 +152,26 @@ model ExameLaudo {
   ultimaVisualizacaoEm   DateTime? @map("ultima_visualizacao_em")
   compartilhadoEm        DateTime? @map("compartilhado_em")
 
+  // Fase 2 — Modo Volante e Financeiro
+  clinicaParceiraId  String?          @map("clinica_parceira_id")
+  clinicaParceira    ClinicaParceira? @relation(fields: [clinicaParceiraId], references: [id], onDelete: SetNull)
+  valorExame         Decimal?         @db.Decimal(10, 2) @map("valor_exame")
+  quemPagou          String           @default("CLINICA") @map("quem_pagou")
+  valorRepasse       Decimal?         @db.Decimal(10, 2) @map("valor_repasse")
+  statusPagamento    String           @default("PENDENTE") @map("status_pagamento")
+  statusRepasse      String           @default("NAO_APLICAVEL") @map("status_repasse")
+  formaPagamento     String?          @map("forma_pagamento")
+  pagoEm             DateTime?        @map("pago_em")
+  repassadoEm        DateTime?        @map("repassado_em")
+
   criadoEm         DateTime @default(now()) @map("criado_em")
 
   @@index([usuarioId])
   @@index([usuarioId, criadoEm])
   @@index([pacienteNome])
   @@index([criadoEm])
+  @@index([clinicaParceiraId])
+  @@index([statusPagamento])
   @@map("exames_laudos")
 }
 
@@ -185,12 +201,26 @@ model RelatorioCirurgico {
   ultimaVisualizacaoEm   DateTime? @map("ultima_visualizacao_em")
   compartilhadoEm        DateTime? @map("compartilhado_em")
 
+  // Fase 2 — Modo Volante e Financeiro
+  clinicaParceiraId  String?          @map("clinica_parceira_id")
+  clinicaParceira    ClinicaParceira? @relation(fields: [clinicaParceiraId], references: [id], onDelete: SetNull)
+  valorExame         Decimal?         @db.Decimal(10, 2) @map("valor_exame")
+  quemPagou          String           @default("CLINICA") @map("quem_pagou")
+  valorRepasse       Decimal?         @db.Decimal(10, 2) @map("valor_repasse")
+  statusPagamento    String           @default("PENDENTE") @map("status_pagamento")
+  statusRepasse      String           @default("NAO_APLICAVEL") @map("status_repasse")
+  formaPagamento     String?          @map("forma_pagamento")
+  pagoEm             DateTime?        @map("pago_em")
+  repassadoEm        DateTime?        @map("repassado_em")
+
   criadoEm        DateTime @default(now()) @map("criado_em")
 
   @@index([usuarioId])
   @@index([usuarioId, criadoEm])
   @@index([pacienteNome])
   @@index([criadoEm])
+  @@index([clinicaParceiraId])
+  @@index([statusPagamento])
   @@map("relatorios_cirurgicos")
 }
 
@@ -328,4 +358,38 @@ model PerfilCirurgico {
 
   @@index([usuarioId])
   @@map("perfis_cirurgia")
+}
+
+model ClinicaParceira {
+  id                    String   @id @default(cuid())
+  usuarioId             String   @map("usuario_id")
+  usuario               Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  nome                  String
+  nomeContato           String?  @map("nome_contato")
+  whatsapp              String?
+  email                 String?
+  cidade                String?
+  cnpj                  String?
+
+  logoUrl               String?  @map("logo_url")
+  rodapeContato         String?  @map("rodape_contato")
+  usarIdentidadePropria Boolean  @default(false) @map("usar_identidade_propria")
+
+  valorPadraoUltrassom  Decimal  @default(0) @db.Decimal(10, 2) @map("valor_padrao_ultrassom")
+  valorPadraoCirurgia   Decimal  @default(0) @db.Decimal(10, 2) @map("valor_padrao_cirurgia")
+  percentualRepasse     Decimal  @default(0) @db.Decimal(5, 2) @map("percentual_repasse")
+  diaFechamento         Int?     @map("dia_fechamento")
+  observacoes           String?  @db.Text
+  ativa                 Boolean  @default(true)
+
+  exames                ExameLaudo[]
+  cirurgias             RelatorioCirurgico[]
+
+  criadoEm              DateTime @default(now()) @map("criado_em")
+  atualizadoEm          DateTime @updatedAt @map("atualizado_em")
+
+  @@index([usuarioId])
+  @@index([usuarioId, ativa])
+  @@map("clinicas_parceiras")
 }

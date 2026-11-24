@@ -93,6 +93,16 @@ const {
   renderizarPaginaPublicaLaudo,
   renderizarPaginaIndisponivel
 } = require('./servico_compartilhamento');
+const {
+  normalizarNumeroDecimal,
+  obterLimiteClinicasPorPlano,
+  podeExportarExtratoPdfOficial,
+  resolverIntervaloMes,
+  calcularValoresFinanceirosExame,
+  agregarResumoFinanceiro,
+  gerarCsvLancamentos,
+  gerarPdfExtratoCobranca
+} = require('./servico_volante');
 
 const { logger, requestLogger } = require('./logger');
 const {
@@ -594,7 +604,8 @@ app.post('/api/perfil/profissional', exigirAutenticacao, (req, res, next) => {
     const dados = {
       nome: req.body.nome,
       crmv: req.body.crmv,
-      nomeClinica: req.body.nomeClinica
+      nomeClinica: req.body.nomeClinica,
+      ...(req.body.chavePix !== undefined ? { chavePix: req.body.chavePix } : {})
     };
     if (logoFile) dados.logoUrl = `/uploads/logos/${logoFile.filename}`;
     if (assinaturaFile) dados.assinaturaUrl = `/uploads/assinaturas/${assinaturaFile.filename}`;
@@ -2075,12 +2086,27 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     console.log(`📡 [WEB - ULTRASSOM] [Usuário: ${req.usuario.email}] Processando ${caminhosArquivos.length} imagens...`);
     const layoutUsuario = await obterLayout(req.usuario?.id || null);
     const perfilDoUsuario = await obterPerfilLaudo(req.usuario?.id || null);
+    let clinicaParceiraSelecionada = null;
+    const clinicaParceiraIdReq = String(req.body?.clinicaParceiraId || '').trim();
+    if (clinicaParceiraIdReq && req.usuario?.id) {
+      clinicaParceiraSelecionada = await prisma.clinicaParceira.findFirst({
+        where: { id: clinicaParceiraIdReq, usuarioId: req.usuario.id }
+      }).catch(() => null);
+    }
+    const usarIdentidadeParceiraUs = Boolean(
+      clinicaParceiraSelecionada && clinicaParceiraSelecionada.usarIdentidadePropria
+    );
+
     const usuarioEfetivo = {
       ...req.usuario,
       nome: perfilDoUsuario?.nomeDetectado || req.usuario.nome,
       crmv: perfilDoUsuario?.crmvDetectado || req.usuario.crmv,
-      nomeClinica: perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica,
-      logoUrl: req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null,
+      nomeClinica: usarIdentidadeParceiraUs
+        ? clinicaParceiraSelecionada.nome
+        : (perfilDoUsuario?.clinicaDetectada || req.usuario.nomeClinica),
+      logoUrl: (usarIdentidadeParceiraUs && clinicaParceiraSelecionada.logoUrl)
+        ? clinicaParceiraSelecionada.logoUrl
+        : (req.usuario?.logoUrl || perfilDoUsuario?.templateVisual?.headerLogoUrl || layoutUsuario?.header_banner_url || layoutUsuario?.visual_config_json?.headerLogoUrl || null),
       assinaturaUrl: req.usuario?.assinaturaUrl || perfilDoUsuario?.templateVisual?.assinaturaUrl || layoutUsuario?.assinatura_extraida_url || layoutUsuario?.visual_config_json?.assinaturaUrl || null
     };
 
@@ -2123,6 +2149,7 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
           laudo: resultadoIA.laudo,
           laudoOriginalIA: resultadoIA.laudo,
           imagensPaths: imagensOrdenadas,
+          clinicaParceiraId: clinicaParceiraSelecionada?.id || null,
           usuarioId: req.usuario?.id,
           criadoEm: new Date().toISOString()
         }, null, 2),
@@ -2131,6 +2158,14 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     } catch (metaErr) {
       logger.warn('Aviso ao salvar meta_exame.json', { error: metaErr.message });
     }
+
+    const finUltrassom = calcularValoresFinanceirosExame({
+      clinica: clinicaParceiraSelecionada,
+      tipo: 'ultrassom',
+      valorOverride: req.body?.valorExame,
+      quemPagou: req.body?.quemPagou,
+      formaPagamento: req.body?.formaPagamento
+    });
 
     let exameCriadoId = null;
     if (req.usuario && req.usuario.id) {
@@ -2147,7 +2182,9 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
           imagensQtd: caminhosArquivos.length,
           pdfArquivo: pdfUrl,
           docxArquivo: docxUrl,
-          publicToken
+          publicToken,
+          clinicaParceiraId: clinicaParceiraSelecionada?.id || null,
+          ...finUltrassom
         }
       }).catch(e => {
         logger.warn('Aviso ao salvar histórico de ultrassom', { error: e.message });
@@ -2276,12 +2313,27 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
     });
     resultadoIA.cirurgia.legendasFotos = legendasFotos;
 
+    let clinicaParceiraCir = null;
+    const clinicaParceiraIdCir = String(req.body?.clinicaParceiraId || '').trim();
+    if (clinicaParceiraIdCir && req.usuario?.id) {
+      clinicaParceiraCir = await prisma.clinicaParceira.findFirst({
+        where: { id: clinicaParceiraIdCir, usuarioId: req.usuario.id }
+      }).catch(() => null);
+    }
+    const usarIdentidadeParceiraCir = Boolean(
+      clinicaParceiraCir && clinicaParceiraCir.usarIdentidadePropria
+    );
+
     const usuarioEfetivo = {
       ...(req.usuario || {}),
       nome: perfilCirurgicoUsuario?.nomeDetectado || req.usuario?.nome,
       crmv: perfilCirurgicoUsuario?.crmvDetectado || req.usuario?.crmv,
-      nomeClinica: perfilCirurgicoUsuario?.clinicaDetectada || req.usuario?.nomeClinica,
-      logoUrl: req.usuario?.logoUrl ||
+      nomeClinica: usarIdentidadeParceiraCir
+        ? clinicaParceiraCir.nome
+        : (perfilCirurgicoUsuario?.clinicaDetectada || req.usuario?.nomeClinica),
+      logoUrl: (usarIdentidadeParceiraCir && clinicaParceiraCir.logoUrl)
+        ? clinicaParceiraCir.logoUrl
+        : (req.usuario?.logoUrl ||
         perfilCirurgicoUsuario?.templateVisual?.ativosVisuais?.headerLogoUrl ||
         perfilCirurgicoUsuario?.templateVisual?.headerLogoUrl ||
         perfilDoUsuario?.templateVisual?.ativosVisuais?.headerLogoUrl ||
@@ -2290,7 +2342,7 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
         layoutUsuario?.header_logo_url ||
         layoutUsuario?.visual_config_json?.headerLogoUrl ||
         layoutUsuario?.header_banner_url ||
-        null,
+        null),
       assinaturaUrl: req.usuario?.assinaturaUrl ||
         perfilCirurgicoUsuario?.templateVisual?.ativosVisuais?.assinaturaUrl ||
         perfilDoUsuario?.templateVisual?.ativosVisuais?.assinaturaUrl ||
@@ -2342,6 +2394,7 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
           cirurgia: resultadoIA.cirurgia,
           fotosCaminhos,
           legendasFotos,
+          clinicaParceiraId: clinicaParceiraCir?.id || null,
           usuarioId: req.usuario?.id,
           criadoEm: new Date().toISOString()
         }, null, 2),
@@ -2350,6 +2403,14 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
     } catch (metaErr) {
       logger.warn('Aviso ao salvar meta_cirurgia.json', { error: metaErr.message });
     }
+
+    const finCirurgia = calcularValoresFinanceirosExame({
+      clinica: clinicaParceiraCir,
+      tipo: 'cirurgia',
+      valorOverride: req.body?.valorExame,
+      quemPagou: req.body?.quemPagou,
+      formaPagamento: req.body?.formaPagamento
+    });
 
     let relatorioCriadoId = null;
     if (req.usuario && req.usuario.id) {
@@ -2365,7 +2426,9 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
           possuiFoto: fotosCaminhos.length > 0,
           pdfArquivo: pdfUrl,
           docxArquivo: docxUrl,
-          publicToken
+          publicToken,
+          clinicaParceiraId: clinicaParceiraCir?.id || null,
+          ...finCirurgia
         }
       }).catch(e => {
         logger.warn('Aviso ao salvar histórico cirúrgico', { error: e.message });
@@ -2873,6 +2936,471 @@ app.get('/favicon.svg', (req, res) => {
 // SERVIÇO ESTÁTICO DO FRONTEND REACT (VETARO DESIGN SYSTEM)
 // =========================================================================
 
+
+// ==================== FASE 2: MODO VOLANTE (CLÍNICAS PARCEIRAS & FINANCEIRO) ====================
+
+app.get('/api/clinicas-parceiras', exigirAutenticacao, async (req, res) => {
+  try {
+    const incluirInativas = req.query.incluirInativas === '1';
+    const [clinicas, assinatura] = await Promise.all([
+      prisma.clinicaParceira.findMany({
+        where: {
+          usuarioId: req.usuario.id,
+          ...(incluirInativas ? {} : { ativa: true })
+        },
+        orderBy: [{ ativa: 'desc' }, { nome: 'asc' }]
+      }),
+      prisma.assinatura.findUnique({ where: { usuarioId: req.usuario.id } }).catch(() => null)
+    ]);
+
+    const planoAtual = assinatura?.plano || req.usuario.plano || 'GRATUITO';
+    const limite = obterLimiteClinicasPorPlano(planoAtual, req.usuario.role);
+    const ativasCount = clinicas.filter((c) => c.ativa).length;
+
+    res.json({
+      sucesso: true,
+      clinicas: clinicas.map((c) => ({
+        ...c,
+        valorPadraoUltrassom: Number(c.valorPadraoUltrassom || 0),
+        valorPadraoCirurgia: Number(c.valorPadraoCirurgia || 0),
+        percentualRepasse: Number(c.percentualRepasse || 0)
+      })),
+      plano: planoAtual,
+      limiteClinicas: limite,
+      ativasCount,
+      podeExportarPdfOficial: podeExportarExtratoPdfOficial(planoAtual, req.usuario.role)
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao listar clínicas parceiras');
+    res.status(500).json({ error: 'Erro ao listar clínicas parceiras.' });
+  }
+});
+
+app.post('/api/clinicas-parceiras', exigirAutenticacao, (req, res, next) => {
+  uploadPerfil.single('logo')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Erro no upload da logo.' });
+    return next();
+  });
+}, async (req, res) => {
+  try {
+    const nome = String(req.body?.nome || '').trim();
+    if (!nome) {
+      return res.status(400).json({ error: 'Informe o nome da clínica parceira.' });
+    }
+
+    const [ativasCount, assinatura] = await Promise.all([
+      prisma.clinicaParceira.count({ where: { usuarioId: req.usuario.id, ativa: true } }),
+      prisma.assinatura.findUnique({ where: { usuarioId: req.usuario.id } }).catch(() => null)
+    ]);
+    const planoAtual = assinatura?.plano || req.usuario.plano || 'GRATUITO';
+    const limite = obterLimiteClinicasPorPlano(planoAtual, req.usuario.role);
+    if (limite !== null && ativasCount >= limite) {
+      return res.status(403).json({
+        error: `Seu plano atual permite até ${limite} clínicas parceiras ativas. Faça upgrade para o Plano Especialista Pro para cadastrar clínicas ilimitadas.`,
+        codigo: 'LIMITE_CLINICAS_ATINGIDO',
+        limite
+      });
+    }
+
+    const diaFechRaw = req.body?.diaFechamento;
+    const diaFech = diaFechRaw !== undefined && String(diaFechRaw).trim() !== ''
+      ? Math.min(31, Math.max(1, parseInt(diaFechRaw, 10) || 1))
+      : null;
+
+    const criada = await prisma.clinicaParceira.create({
+      data: {
+        usuarioId: req.usuario.id,
+        nome: nome.slice(0, 140),
+        nomeContato: String(req.body?.nomeContato || '').trim().slice(0, 120) || null,
+        whatsapp: String(req.body?.whatsapp || '').trim().slice(0, 40) || null,
+        email: String(req.body?.email || '').trim().slice(0, 140) || null,
+        cidade: String(req.body?.cidade || '').trim().slice(0, 100) || null,
+        cnpj: String(req.body?.cnpj || '').trim().slice(0, 30) || null,
+        logoUrl: req.file ? `/uploads/logos/${req.file.filename}` : null,
+        rodapeContato: String(req.body?.rodapeContato || '').trim().slice(0, 240) || null,
+        usarIdentidadePropria: String(req.body?.usarIdentidadePropria) === 'true' || req.body?.usarIdentidadePropria === true,
+        valorPadraoUltrassom: normalizarNumeroDecimal(req.body?.valorPadraoUltrassom, 0),
+        valorPadraoCirurgia: normalizarNumeroDecimal(req.body?.valorPadraoCirurgia, 0),
+        percentualRepasse: Math.min(100, normalizarNumeroDecimal(req.body?.percentualRepasse, 0)),
+        diaFechamento: diaFech,
+        observacoes: String(req.body?.observacoes || '').trim().slice(0, 1000) || null,
+        ativa: true
+      }
+    });
+
+    res.status(201).json({
+      sucesso: true,
+      clinica: {
+        ...criada,
+        valorPadraoUltrassom: Number(criada.valorPadraoUltrassom || 0),
+        valorPadraoCirurgia: Number(criada.valorPadraoCirurgia || 0),
+        percentualRepasse: Number(criada.percentualRepasse || 0)
+      }
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao criar clínica parceira');
+    res.status(500).json({ error: 'Erro ao cadastrar clínica parceira.' });
+  }
+});
+
+app.put('/api/clinicas-parceiras/:id', exigirAutenticacao, (req, res, next) => {
+  uploadPerfil.single('logo')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Erro no upload da logo.' });
+    return next();
+  });
+}, async (req, res) => {
+  try {
+    const existente = await prisma.clinicaParceira.findFirst({
+      where: { id: req.params.id, usuarioId: req.usuario.id }
+    });
+    if (!existente) {
+      return res.status(404).json({ error: 'Clínica parceira não encontrada.' });
+    }
+
+    const dataUpdate = {};
+    if (req.body?.nome !== undefined && String(req.body.nome).trim()) {
+      dataUpdate.nome = String(req.body.nome).trim().slice(0, 140);
+    }
+    if (req.body?.nomeContato !== undefined) dataUpdate.nomeContato = String(req.body.nomeContato || '').trim().slice(0, 120) || null;
+    if (req.body?.whatsapp !== undefined) dataUpdate.whatsapp = String(req.body.whatsapp || '').trim().slice(0, 40) || null;
+    if (req.body?.email !== undefined) dataUpdate.email = String(req.body.email || '').trim().slice(0, 140) || null;
+    if (req.body?.cidade !== undefined) dataUpdate.cidade = String(req.body.cidade || '').trim().slice(0, 100) || null;
+    if (req.body?.cnpj !== undefined) dataUpdate.cnpj = String(req.body.cnpj || '').trim().slice(0, 30) || null;
+    if (req.body?.rodapeContato !== undefined) dataUpdate.rodapeContato = String(req.body.rodapeContato || '').trim().slice(0, 240) || null;
+    if (req.body?.usarIdentidadePropria !== undefined) {
+      dataUpdate.usarIdentidadePropria = String(req.body.usarIdentidadePropria) === 'true' || req.body.usarIdentidadePropria === true;
+    }
+    if (req.body?.valorPadraoUltrassom !== undefined) {
+      dataUpdate.valorPadraoUltrassom = normalizarNumeroDecimal(req.body.valorPadraoUltrassom, 0);
+    }
+    if (req.body?.valorPadraoCirurgia !== undefined) {
+      dataUpdate.valorPadraoCirurgia = normalizarNumeroDecimal(req.body.valorPadraoCirurgia, 0);
+    }
+    if (req.body?.percentualRepasse !== undefined) {
+      dataUpdate.percentualRepasse = Math.min(100, normalizarNumeroDecimal(req.body.percentualRepasse, 0));
+    }
+    if (req.body?.diaFechamento !== undefined) {
+      dataUpdate.diaFechamento = String(req.body.diaFechamento).trim() !== ''
+        ? Math.min(31, Math.max(1, parseInt(req.body.diaFechamento, 10) || 1))
+        : null;
+    }
+    if (req.body?.observacoes !== undefined) dataUpdate.observacoes = String(req.body.observacoes || '').trim().slice(0, 1000) || null;
+    if (req.body?.ativa !== undefined) dataUpdate.ativa = String(req.body.ativa) === 'true' || req.body.ativa === true;
+    if (req.file) {
+      dataUpdate.logoUrl = `/uploads/logos/${req.file.filename}`;
+    } else if (String(req.body?.removerLogo) === 'true') {
+      dataUpdate.logoUrl = null;
+    }
+
+    const atualizada = await prisma.clinicaParceira.update({
+      where: { id: existente.id },
+      data: dataUpdate
+    });
+
+    res.json({
+      sucesso: true,
+      clinica: {
+        ...atualizada,
+        valorPadraoUltrassom: Number(atualizada.valorPadraoUltrassom || 0),
+        valorPadraoCirurgia: Number(atualizada.valorPadraoCirurgia || 0),
+        percentualRepasse: Number(atualizada.percentualRepasse || 0)
+      }
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao atualizar clínica parceira');
+    res.status(500).json({ error: 'Erro ao atualizar clínica parceira.' });
+  }
+});
+
+app.delete('/api/clinicas-parceiras/:id', exigirAutenticacao, async (req, res) => {
+  try {
+    const existente = await prisma.clinicaParceira.findFirst({
+      where: { id: req.params.id, usuarioId: req.usuario.id }
+    });
+    if (!existente) {
+      return res.status(404).json({ error: 'Clínica parceira não encontrada.' });
+    }
+    await prisma.clinicaParceira.update({
+      where: { id: existente.id },
+      data: { ativa: false }
+    });
+    res.json({ sucesso: true, id: existente.id, ativa: false });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao desativar clínica parceira');
+    res.status(500).json({ error: 'Erro ao desativar clínica parceira.' });
+  }
+});
+
+async function consultarMovimentacaoFinanceiraUsuario(usuarioId, query = {}) {
+  const periodo = resolverIntervaloMes(query.mes);
+  const clinicaIdFiltro = String(query.clinicaId || '').trim();
+  const statusPagFiltro = String(query.statusPagamento || '').trim().toUpperCase();
+  const statusRepFiltro = String(query.statusRepasse || '').trim().toUpperCase();
+  const tipoFiltro = String(query.tipo || '').trim().toLowerCase();
+
+  const whereBase = {
+    usuarioId,
+    criadoEm: { gte: periodo.inicio, lte: periodo.fim },
+    ...(clinicaIdFiltro ? { clinicaParceiraId: clinicaIdFiltro === 'particular' ? null : clinicaIdFiltro } : {}),
+    ...(statusPagFiltro && ['PENDENTE', 'PAGO', 'ISENTO'].includes(statusPagFiltro) ? { statusPagamento: statusPagFiltro } : {}),
+    ...(statusRepFiltro && ['PENDENTE', 'REPASSADO', 'NAO_APLICAVEL'].includes(statusRepFiltro) ? { statusRepasse: statusRepFiltro } : {})
+  };
+
+  const [exames, cirurgias, clinicas] = await Promise.all([
+    tipoFiltro === 'cirurgia'
+      ? Promise.resolve([])
+      : prisma.exameLaudo.findMany({
+          where: whereBase,
+          include: { clinicaParceira: { select: { id: true, nome: true, whatsapp: true, nomeContato: true } } },
+          orderBy: { criadoEm: 'desc' }
+        }),
+    tipoFiltro === 'ultrassom'
+      ? Promise.resolve([])
+      : prisma.relatorioCirurgico.findMany({
+          where: whereBase,
+          include: { clinicaParceira: { select: { id: true, nome: true, whatsapp: true, nomeContato: true } } },
+          orderBy: { criadoEm: 'desc' }
+        }),
+    prisma.clinicaParceira.findMany({
+      where: { usuarioId, ativa: true },
+      orderBy: { nome: 'asc' }
+    })
+  ]);
+
+  const agregado = agregarResumoFinanceiro(exames, cirurgias, clinicas);
+  return { periodo, ...agregado };
+}
+
+app.get('/api/financeiro/resumo', exigirAutenticacao, async (req, res) => {
+  try {
+    const dados = await consultarMovimentacaoFinanceiraUsuario(req.usuario.id, req.query);
+    res.json({
+      sucesso: true,
+      mes: dados.periodo.mes,
+      periodoRotulo: dados.periodo.rotulo,
+      totais: dados.totais,
+      porClinica: dados.porClinica
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao carregar resumo financeiro');
+    res.status(500).json({ error: 'Erro ao carregar resumo financeiro.' });
+  }
+});
+
+app.get('/api/financeiro/lancamentos', exigirAutenticacao, async (req, res) => {
+  try {
+    const dados = await consultarMovimentacaoFinanceiraUsuario(req.usuario.id, req.query);
+    res.json({
+      sucesso: true,
+      mes: dados.periodo.mes,
+      periodoRotulo: dados.periodo.rotulo,
+      totais: dados.totais,
+      lancamentos: dados.lancamentos
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao listar lançamentos financeiros');
+    res.status(500).json({ error: 'Erro ao listar lançamentos financeiros.' });
+  }
+});
+
+app.patch('/api/financeiro/lancamentos/:tipo/:id', exigirAutenticacao, async (req, res) => {
+  try {
+    const tipoNorm = String(req.params.tipo || '').toLowerCase();
+    if (tipoNorm !== 'ultrassom' && tipoNorm !== 'cirurgia') {
+      return res.status(400).json({ error: 'Tipo inválido. Use "ultrassom" ou "cirurgia".' });
+    }
+    const model = tipoNorm === 'cirurgia' ? prisma.relatorioCirurgico : prisma.exameLaudo;
+    const registro = await model.findFirst({
+      where: { id: req.params.id, usuarioId: req.usuario.id }
+    });
+    if (!registro) {
+      return res.status(404).json({ error: 'Lançamento não encontrado.' });
+    }
+
+    const body = req.body || {};
+    const dataUpdate = {};
+
+    if (body.clinicaParceiraId !== undefined) {
+      const cid = String(body.clinicaParceiraId || '').trim();
+      if (!cid) {
+        dataUpdate.clinicaParceiraId = null;
+      } else {
+        const clinicaOk = await prisma.clinicaParceira.findFirst({
+          where: { id: cid, usuarioId: req.usuario.id },
+          select: { id: true }
+        });
+        if (!clinicaOk) return res.status(400).json({ error: 'Clínica parceira inválida.' });
+        dataUpdate.clinicaParceiraId = clinicaOk.id;
+      }
+    }
+
+    if (body.valorExame !== undefined) {
+      const v = normalizarNumeroDecimal(body.valorExame, 0);
+      dataUpdate.valorExame = v > 0 ? v : null;
+    }
+    if (body.quemPagou !== undefined) {
+      dataUpdate.quemPagou = String(body.quemPagou).toUpperCase() === 'TUTOR' ? 'TUTOR' : 'CLINICA';
+    }
+    if (body.valorRepasse !== undefined) {
+      const vr = normalizarNumeroDecimal(body.valorRepasse, 0);
+      dataUpdate.valorRepasse = vr > 0 ? vr : null;
+    }
+    if (body.formaPagamento !== undefined) {
+      dataUpdate.formaPagamento = String(body.formaPagamento || '').trim().toUpperCase().slice(0, 30) || null;
+    }
+    if (body.statusPagamento !== undefined) {
+      const sp = String(body.statusPagamento).toUpperCase();
+      if (['PENDENTE', 'PAGO', 'ISENTO'].includes(sp)) {
+        dataUpdate.statusPagamento = sp;
+        dataUpdate.pagoEm = sp === 'PAGO' ? new Date() : null;
+      }
+    }
+    if (body.statusRepasse !== undefined) {
+      const sr = String(body.statusRepasse).toUpperCase();
+      if (['NAO_APLICAVEL', 'PENDENTE', 'REPASSADO'].includes(sr)) {
+        dataUpdate.statusRepasse = sr;
+        dataUpdate.repassadoEm = sr === 'REPASSADO' ? new Date() : null;
+      }
+    }
+
+    const atualizado = await model.update({
+      where: { id: registro.id },
+      data: dataUpdate
+    });
+
+    res.json({
+      sucesso: true,
+      lancamento: {
+        id: atualizado.id,
+        tipo: tipoNorm,
+        clinicaParceiraId: atualizado.clinicaParceiraId,
+        valorExame: Number(atualizado.valorExame || 0),
+        quemPagou: atualizado.quemPagou,
+        valorRepasse: Number(atualizado.valorRepasse || 0),
+        statusPagamento: atualizado.statusPagamento,
+        statusRepasse: atualizado.statusRepasse,
+        formaPagamento: atualizado.formaPagamento,
+        pagoEm: atualizado.pagoEm,
+        repassadoEm: atualizado.repassadoEm
+      }
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao atualizar lançamento financeiro');
+    res.status(500).json({ error: 'Erro ao atualizar lançamento financeiro.' });
+  }
+});
+
+app.post('/api/financeiro/clinicas/:clinicaId/quitar-pendentes', exigirAutenticacao, async (req, res) => {
+  try {
+    const clinica = await prisma.clinicaParceira.findFirst({
+      where: { id: req.params.clinicaId, usuarioId: req.usuario.id }
+    });
+    if (!clinica) {
+      return res.status(404).json({ error: 'Clínica parceira não encontrada.' });
+    }
+
+    const periodo = resolverIntervaloMes(req.body?.mes || req.query?.mes);
+    const forma = String(req.body?.formaPagamento || 'PIX').trim().toUpperCase().slice(0, 30);
+    const agora = new Date();
+    const whereQuitar = {
+      usuarioId: req.usuario.id,
+      clinicaParceiraId: clinica.id,
+      statusPagamento: 'PENDENTE',
+      criadoEm: { gte: periodo.inicio, lte: periodo.fim }
+    };
+
+    const [resEx, resCir] = await Promise.all([
+      prisma.exameLaudo.updateMany({
+        where: whereQuitar,
+        data: { statusPagamento: 'PAGO', pagoEm: agora, formaPagamento: forma }
+      }),
+      prisma.relatorioCirurgico.updateMany({
+        where: whereQuitar,
+        data: { statusPagamento: 'PAGO', pagoEm: agora, formaPagamento: forma }
+      })
+    ]);
+
+    res.json({
+      sucesso: true,
+      quitados: (resEx.count || 0) + (resCir.count || 0),
+      mes: periodo.mes
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao quitar pendências da clínica');
+    res.status(500).json({ error: 'Erro ao quitar pendências da clínica.' });
+  }
+});
+
+app.get('/api/financeiro/clinicas/:clinicaId/extrato.pdf', limiterGeracaoPesada, exigirAutenticacao, async (req, res) => {
+  try {
+    const clinica = await prisma.clinicaParceira.findFirst({
+      where: { id: req.params.clinicaId, usuarioId: req.usuario.id }
+    });
+    if (!clinica) {
+      return res.status(404).json({ error: 'Clínica parceira não encontrada.' });
+    }
+
+    const [assinatura, usuarioDb, dados] = await Promise.all([
+      prisma.assinatura.findUnique({ where: { usuarioId: req.usuario.id } }).catch(() => null),
+      prisma.usuario.findUnique({ where: { id: req.usuario.id } }).catch(() => null),
+      consultarMovimentacaoFinanceiraUsuario(req.usuario.id, {
+        mes: req.query.mes,
+        clinicaId: clinica.id
+      })
+    ]);
+
+    const planoAtual = assinatura?.plano || req.usuario.plano || 'GRATUITO';
+    const oficial = podeExportarExtratoPdfOficial(planoAtual, req.usuario.role);
+    const apenasPendentes = req.query.todos !== '1';
+    const itensExtrato = apenasPendentes
+      ? dados.lancamentos.filter((it) => it.statusPagamento === 'PENDENTE')
+      : dados.lancamentos;
+
+    const pdfBuffer = await gerarPdfExtratoCobranca({
+      medico: {
+        nome: usuarioDb?.nome || req.usuario.nome,
+        crmv: usuarioDb?.crmv || req.usuario.crmv,
+        nomeClinica: usuarioDb?.nomeClinica || req.usuario.nomeClinica,
+        chavePix: usuarioDb?.chavePix || ''
+      },
+      clinica,
+      periodoRotulo: dados.periodo.rotulo,
+      itens: itensExtrato,
+      totais: dados.totais,
+      preview: !oficial
+    });
+
+    const slugClinica = String(clinica.nome || 'clinica')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .toLowerCase();
+    const nomeArquivo = `Extrato_${slugClinica}_${dados.periodo.mes}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.send(pdfBuffer);
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao gerar extrato PDF de cobrança');
+    res.status(500).json({ error: 'Erro ao gerar relatório de cobrança em PDF.' });
+  }
+});
+
+app.get('/api/financeiro/exportar.csv', exigirAutenticacao, async (req, res) => {
+  try {
+    const dados = await consultarMovimentacaoFinanceiraUsuario(req.usuario.id, req.query);
+    const csv = gerarCsvLancamentos(dados.lancamentos);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Vetaro_Financeiro_${dados.periodo.mes}.csv"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.send(csv);
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao exportar CSV financeiro');
+    res.status(500).json({ error: 'Erro ao exportar CSV financeiro.' });
+  }
+});
+
 // ==================== FASE 1: ENTREGA INTELIGENTE (LINK PÚBLICO, QR CODE, RESUMO TUTOR) ====================
 
 function resolverCaminhoPdfDisco(pdfArquivo = '') {
@@ -2903,6 +3431,11 @@ async function localizarRegistroCompartilhamento(tipo, idOuJobId, usuario) {
         { id: chave },
         { pdfArquivo: { contains: chave } }
       ]
+    },
+    include: {
+      clinicaParceira: {
+        select: { id: true, nome: true, whatsapp: true, nomeContato: true }
+      }
     }
   });
   if (!registro) {
@@ -2941,7 +3474,8 @@ app.post('/api/compartilhamento/:tipo/:id/link', exigirAutenticacao, async (req,
       visualizacoes: registro.visualizacoes || 0,
       primeiraVisualizacaoEm: registro.primeiraVisualizacaoEm,
       ultimaVisualizacaoEm: registro.ultimaVisualizacaoEm,
-      compartilhadoEm: registro.compartilhadoEm
+      compartilhadoEm: registro.compartilhadoEm,
+      clinicaParceira: registro.clinicaParceira || null
     });
   } catch (err) {
     logger.error({ err: err.message }, 'Erro ao obter/gerar link público de compartilhamento');

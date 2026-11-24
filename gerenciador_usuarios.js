@@ -74,6 +74,7 @@ function perfilParaResposta(usuario) {
     nomeClinica: (/upa\s*pet/i.test(usuario.nomeClinica || '') ? 'Vetaro' : (usuario.nomeClinica || (usuario.clinica && usuario.clinica.nome) || 'Vetaro')),
     logoUrl: normalizarUrlUploadPublica(usuario.logoUrl),
     assinaturaUrl: normalizarUrlUploadPublica(usuario.assinaturaUrl),
+    chavePix: usuario.chavePix || null,
     temaPreferencia: usuario.temaPreferencia || 'system',
     plano: usuario.assinatura ? usuario.assinatura.plano : 'GRATUITO'
   };
@@ -227,6 +228,9 @@ async function atualizarPerfilProfissional(usuarioId, dados = {}) {
   }
   if (dados.assinaturaUrl !== undefined) {
     dataUpdate.assinaturaUrl = normalizarUrlUploadPublica(dados.assinaturaUrl);
+  }
+  if (dados.chavePix !== undefined) {
+    dataUpdate.chavePix = String(dados.chavePix || '').trim().slice(0, 140) || null;
   }
 
   const atualizado = await prisma.usuario.update({
