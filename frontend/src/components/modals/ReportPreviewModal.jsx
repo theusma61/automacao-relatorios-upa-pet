@@ -236,6 +236,7 @@ export default function ReportPreviewModal({
   report,
   darkMode,
   newUiEnabled = false,
+  initialOrigin = 'generator',
   onClose,
   onToast,
   onUpdateReport
@@ -252,9 +253,15 @@ export default function ReportPreviewModal({
     return '';
   }, [report]);
 
-  const [activeTab, setActiveTab] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth >= 1024 ? 'split' : 'edit'
-  );
+  const [activeTab, setActiveTab] = useState(() => {
+    if (initialOrigin === 'history') return 'preview';
+    return typeof window !== 'undefined' && window.innerWidth >= 1024 ? 'split' : 'edit';
+  });
+  const userTouchedTabRef = useRef(false);
+  const handleSelectTab = (tab) => {
+    userTouchedTabRef.current = true;
+    setActiveTab(tab);
+  };
   const [isRecompiling, setIsRecompiling] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [dadosPacienteAbertos, setDadosPacienteAbertos] = useState(false);
@@ -964,6 +971,20 @@ export default function ReportPreviewModal({
   const isAnaliseMode = activeTab === 'analise' && !isSurgery && imagensUltrassom.length > 0;
 
   useEffect(() => {
+    if (
+      initialOrigin === 'generator' &&
+      !isSurgery &&
+      !userTouchedTabRef.current &&
+      imagensUltrassom.length > 0 &&
+      typeof window !== 'undefined' &&
+      window.innerWidth >= 1024
+    ) {
+      setStudioSection('conteudo');
+      setActiveTab('analise');
+    }
+  }, [initialOrigin, isSurgery, imagensUltrassom.length]);
+
+  useEffect(() => {
     if (!isAnaliseMode) {
       setSyncedOrgaoIdx(-1);
       return;
@@ -1086,7 +1107,7 @@ export default function ReportPreviewModal({
               </button>
             </div>
 
-            {/* Linha 2: Controle Segmentado Nativo (PDF | Editar Texto) */}
+            {/* Linha 2: Controle Segmentado Nativo (Editar Texto | Visualizar PDF) */}
             <div
               className={`p-1 rounded-xl border grid grid-cols-2 gap-1 ${
                 darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-100 border-slate-200'
@@ -1094,21 +1115,7 @@ export default function ReportPreviewModal({
             >
               <button
                 type="button"
-                onClick={() => setActiveTab('preview')}
-                className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                  activeTab === 'preview'
-                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
-                    : darkMode
-                    ? 'text-slate-400'
-                    : 'text-slate-600'
-                }`}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Visualizar PDF</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('edit')}
+                onClick={() => handleSelectTab('edit')}
                 className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                   activeTab === 'edit'
                     ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
@@ -1119,6 +1126,20 @@ export default function ReportPreviewModal({
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Editar Texto</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectTab('preview')}
+                className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+                  activeTab === 'preview'
+                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
+                    : darkMode
+                    ? 'text-slate-400'
+                    : 'text-slate-600'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Visualizar PDF</span>
               </button>
             </div>
 
@@ -1207,59 +1228,19 @@ export default function ReportPreviewModal({
             </div>
           </div>
 
-          {/* Seletor de Modo / Abas (Centralizado no Desktop) */}
+          {/* Seletor de Modo / Abas (Fluxo clínico: Análise -> Lado a lado -> Editar Texto -> Visualizar PDF) */}
           <div className="flex items-center justify-center">
             <div
               className={`p-1 rounded-xl border flex items-center gap-1 ${
                 darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-100 border-slate-200'
               }`}
             >
-              <button
-                type="button"
-                onClick={() => setActiveTab('preview')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition ${
-                  activeTab === 'preview'
-                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Visualizar</span> PDF
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('edit')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition ${
-                  activeTab === 'edit'
-                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Editar Texto</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('split')}
-                title="Modo Lado a Lado (Texto + PDF)"
-                className={`hidden md:flex px-2.5 py-1.5 rounded-lg text-xs font-extrabold items-center gap-1 transition ${
-                  activeTab === 'split'
-                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Columns className="w-3.5 h-3.5" />
-                <span>Split</span>
-              </button>
-
               {!isSurgery && imagensUltrassom.length > 0 && (
                 <button
                   type="button"
                   onClick={() => {
                     setStudioSection('conteudo');
-                    setActiveTab('analise');
+                    handleSelectTab('analise');
                   }}
                   title="Analisar imagens lado a lado com os órgãos"
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition ${
@@ -1272,6 +1253,46 @@ export default function ReportPreviewModal({
                   <span>Análise</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => handleSelectTab('split')}
+                title="Modo Lado a Lado (Texto + PDF ao vivo)"
+                className={`hidden md:flex px-2.5 py-1.5 rounded-lg text-xs font-extrabold items-center gap-1.5 transition ${
+                  activeTab === 'split'
+                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Columns className="w-3.5 h-3.5" />
+                <span>Lado a lado</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectTab('edit')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition ${
+                  activeTab === 'edit'
+                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Editar Texto</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectTab('preview')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition ${
+                  activeTab === 'preview'
+                    ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Visualizar</span> PDF
+              </button>
             </div>
           </div>
 

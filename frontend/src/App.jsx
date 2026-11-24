@@ -81,6 +81,9 @@ export default function App() {
 
   const [activities, setActivities] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [shareReportTarget, setShareReportTarget] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
@@ -96,100 +99,140 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3200);
   }, []);
 
+  const mapearHistoricoServidor = useCallback((res) => {
+    const exames = Array.isArray(res?.exames) ? res.exames : [];
+    const cirurgias = Array.isArray(res?.cirurgias) ? res.cirurgias : [];
+
+    const mappedExames = exames.map((ex) => {
+      const jobId = ex.pdfArquivo ? ex.pdfArquivo.split('/')[2] : '';
+      return {
+        id: `ex-${ex.id}`,
+        dbId: ex.id,
+        jobId,
+        publicToken: ex.publicToken || '',
+        linkAtivo: ex.linkAtivo !== false,
+        visualizacoes: ex.visualizacoes || 0,
+        ultimaVisualizacaoEm: ex.ultimaVisualizacaoEm || null,
+        compartilhadoEm: ex.compartilhadoEm || null,
+        type: 'ultrassom',
+        title: 'Laudo de Ultrassom',
+        patient: `${ex.pacienteNome || 'Paciente'} (${ex.pacienteEspecie || 'Canina'})`,
+        tutor: ex.tutorNome || '',
+        date: ex.criadoEm ? formatDatePtBr(ex.criadoEm) : `Gerado em ${ex.dataExame || ''}`,
+        timestamp: ex.criadoEm ? new Date(ex.criadoEm).getTime() : 0,
+        status: 'Concluído',
+        pdfUrl: ex.pdfArquivo || '',
+        docxUrl: ex.docxArquivo || '',
+        paciente: {
+          nome: ex.pacienteNome || '',
+          especie: ex.pacienteEspecie || 'Canina',
+          sexo: ex.pacienteSexo || 'Macho',
+          idade: ex.pacienteIdade || '',
+          tutor: ex.tutorNome || '',
+          data: ex.dataExame || ''
+        },
+        laudo: ex.laudoEstruturado || [],
+        laudoEstruturado: ex.laudoEstruturado || [],
+        summary: Array.isArray(ex.laudoEstruturado)
+          ? ex.laudoEstruturado
+              .map((item) => `• ${item.orgao || ''}: ${item.texto || item.achados || ''}`)
+              .join('\n')
+          : `Laudo de Ultrassonografia Abdominal — Paciente ${ex.pacienteNome} (${
+              ex.imagensQtd || 0
+            } imagens).`
+      };
+    });
+
+    const mappedCirurgias = cirurgias.map((c) => {
+      const jobId = c.pdfArquivo ? c.pdfArquivo.split('/')[2] : '';
+      return {
+        id: `cir-${c.id}`,
+        dbId: c.id,
+        jobId,
+        publicToken: c.publicToken || '',
+        linkAtivo: c.linkAtivo !== false,
+        visualizacoes: c.visualizacoes || 0,
+        ultimaVisualizacaoEm: c.ultimaVisualizacaoEm || null,
+        compartilhadoEm: c.compartilhadoEm || null,
+        type: 'relatorio',
+        title: `Relatório Cirúrgico — ${c.procedimento || 'Oficial'}`,
+        patient: `${c.pacienteNome || 'Paciente'}${
+          c.pacienteEspecie ? ` (${c.pacienteEspecie})` : ''
+        }`,
+        tutor: '',
+        date: formatDatePtBr(c.criadoEm),
+        timestamp: c.criadoEm ? new Date(c.criadoEm).getTime() : 0,
+        status: 'Concluído',
+        pdfUrl: c.pdfArquivo || '',
+        docxUrl: c.docxArquivo || '',
+        paciente: {
+          nome: c.pacienteNome || '',
+          especie: c.pacienteEspecie || 'Canina'
+        },
+        cirurgia: c.dadosCirurgia || {},
+        summary:
+          c.dadosCirurgia?.descricaoProcedimento ||
+          `Procedimento: ${c.procedimento || 'Cirurgia'}\nDiagnóstico: ${
+            c.diagnostico || 'Padrão'
+          }`
+      };
+    });
+
+    return [...mappedExames, ...mappedCirurgias].sort((a, b) => b.timestamp - a.timestamp);
+  }, []);
+
   const carregarHistoricoServidor = useCallback(async () => {
     if (!usuario) return;
     setLoadingHistory(true);
     try {
-      const res = await api.getHistorico();
-      const exames = Array.isArray(res.exames) ? res.exames : [];
-      const cirurgias = Array.isArray(res.cirurgias) ? res.cirurgias : [];
-
-      const mappedExames = exames.map((ex) => {
-        const jobId = ex.pdfArquivo ? ex.pdfArquivo.split('/')[2] : '';
-        return {
-          id: `ex-${ex.id}`,
-          dbId: ex.id,
-          jobId,
-          publicToken: ex.publicToken || '',
-          linkAtivo: ex.linkAtivo !== false,
-          visualizacoes: ex.visualizacoes || 0,
-          ultimaVisualizacaoEm: ex.ultimaVisualizacaoEm || null,
-          compartilhadoEm: ex.compartilhadoEm || null,
-          type: 'ultrassom',
-          title: 'Laudo de Ultrassom',
-          patient: `${ex.pacienteNome || 'Paciente'} (${ex.pacienteEspecie || 'Canina'})`,
-          tutor: ex.tutorNome || '',
-          date: ex.criadoEm ? formatDatePtBr(ex.criadoEm) : `Gerado em ${ex.dataExame || ''}`,
-          timestamp: ex.criadoEm ? new Date(ex.criadoEm).getTime() : 0,
-          status: 'Concluído',
-          pdfUrl: ex.pdfArquivo || '',
-          docxUrl: ex.docxArquivo || '',
-          paciente: {
-            nome: ex.pacienteNome || '',
-            especie: ex.pacienteEspecie || 'Canina',
-            sexo: ex.pacienteSexo || 'Macho',
-            idade: ex.pacienteIdade || '',
-            tutor: ex.tutorNome || '',
-            data: ex.dataExame || ''
-          },
-          laudo: ex.laudoEstruturado || [],
-          laudoEstruturado: ex.laudoEstruturado || [],
-          summary: Array.isArray(ex.laudoEstruturado)
-            ? ex.laudoEstruturado
-                .map((item) => `• ${item.orgao || ''}: ${item.texto || item.achados || ''}`)
-                .join('\n')
-            : `Laudo de Ultrassonografia Abdominal — Paciente ${ex.pacienteNome} (${
-                ex.imagensQtd || 0
-              } imagens).`
-        };
-      });
-
-      const mappedCirurgias = cirurgias.map((c) => {
-        const jobId = c.pdfArquivo ? c.pdfArquivo.split('/')[2] : '';
-        return {
-          id: `cir-${c.id}`,
-          dbId: c.id,
-          jobId,
-          publicToken: c.publicToken || '',
-          linkAtivo: c.linkAtivo !== false,
-          visualizacoes: c.visualizacoes || 0,
-          ultimaVisualizacaoEm: c.ultimaVisualizacaoEm || null,
-          compartilhadoEm: c.compartilhadoEm || null,
-          type: 'relatorio',
-          title: `Relatório Cirúrgico — ${c.procedimento || 'Oficial'}`,
-          patient: `${c.pacienteNome || 'Paciente'}${
-            c.pacienteEspecie ? ` (${c.pacienteEspecie})` : ''
-          }`,
-          tutor: '',
-          date: formatDatePtBr(c.criadoEm),
-          timestamp: c.criadoEm ? new Date(c.criadoEm).getTime() : 0,
-          status: 'Concluído',
-          pdfUrl: c.pdfArquivo || '',
-          docxUrl: c.docxArquivo || '',
-          paciente: {
-            nome: c.pacienteNome || '',
-            especie: c.pacienteEspecie || 'Canina'
-          },
-          cirurgia: c.dadosCirurgia || {},
-          summary:
-            c.dadosCirurgia?.descricaoProcedimento ||
-            `Procedimento: ${c.procedimento || 'Cirurgia'}\nDiagnóstico: ${
-              c.diagnostico || 'Padrão'
-            }`
-        };
-      });
-
-      const combined = [...mappedExames, ...mappedCirurgias].sort(
-        (a, b) => b.timestamp - a.timestamp
-      );
-
+      const limit = 25;
+      const res = await api.getHistorico({ limit, offset: 0 });
+      const combined = mapearHistoricoServidor(res);
       setActivities(combined);
+      setHistoryOffset(limit);
+      setHistoryHasMore(
+        typeof res.hasMore === 'boolean'
+          ? res.hasMore
+          : (res.exames?.length || 0) >= limit || (res.cirurgias?.length || 0) >= limit
+      );
     } catch (_) {
       setActivities([]);
+      setHistoryHasMore(false);
     } finally {
       setLoadingHistory(false);
     }
-  }, [usuario]);
+  }, [usuario, mapearHistoricoServidor]);
+
+  const carregarMaisHistorico = useCallback(async () => {
+    if (!usuario || loadingMoreHistory || !historyHasMore) return;
+    setLoadingMoreHistory(true);
+    try {
+      const limit = 25;
+      const res = await api.getHistorico({ limit, offset: historyOffset });
+      const novos = mapearHistoricoServidor(res);
+      setActivities((prev) => {
+        const vistos = new Set(prev.map((item) => item.id));
+        const mesclados = [...prev];
+        for (const item of novos) {
+          if (!vistos.has(item.id)) {
+            vistos.add(item.id);
+            mesclados.push(item);
+          }
+        }
+        return mesclados.sort((a, b) => b.timestamp - a.timestamp);
+      });
+      setHistoryOffset((prev) => prev + limit);
+      setHistoryHasMore(
+        typeof res.hasMore === 'boolean'
+          ? res.hasMore
+          : (res.exames?.length || 0) >= limit || (res.cirurgias?.length || 0) >= limit
+      );
+    } catch (_) {
+      showToast('Não foi possível carregar mais registros do histórico.');
+    } finally {
+      setLoadingMoreHistory(false);
+    }
+  }, [usuario, loadingMoreHistory, historyHasMore, historyOffset, mapearHistoricoServidor, showToast]);
 
   useEffect(() => {
     if (usuario) {
@@ -364,7 +407,10 @@ export default function App() {
           isMobileLayout={isMobile}
           activities={activities}
           loadingHistory={loadingHistory}
+          loadingMoreHistory={loadingMoreHistory}
+          hasMoreHistory={historyHasMore}
           onRefreshHistory={carregarHistoricoServidor}
+          onLoadMoreHistory={carregarMaisHistorico}
           onNavigate={(dest) => setActiveNav(dest)}
           onSelectReport={(rep) => setSelectedReport(rep)}
           onShareReport={(rep) => setShareReportTarget(rep)}
@@ -672,6 +718,7 @@ export default function App() {
             report={selectedReport}
             darkMode={darkMode}
             newUiEnabled={newUiEnabled}
+            initialOrigin="history"
             onClose={() => setSelectedReport(null)}
             onToast={showToast}
             onUpdateReport={(updated) => {
