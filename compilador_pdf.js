@@ -47,8 +47,16 @@ function agendarFechamentoOcioso() {
   }
 }
 
+function browserEstaConectado(browser) {
+  if (!browser) return false;
+  if (typeof browser.isConnected === 'function') {
+    return Boolean(browser.isConnected());
+  }
+  return Boolean(browser.connected);
+}
+
 async function obterBrowserPuppeteer(puppeteer, argsLaunch, executablePath) {
-  if (browserCompartilhado && browserCompartilhado.isConnected()) {
+  if (browserEstaConectado(browserCompartilhado)) {
     if (timerFecharBrowser) clearTimeout(timerFecharBrowser);
     return browserCompartilhado;
   }

@@ -627,9 +627,18 @@ app.post('/api/perfil/profissional', exigirAutenticacao, (req, res, next) => {
           where: { usuarioId: req.usuario.id }
         });
         if (layoutUsuario) {
+          const visualAtual =
+            layoutUsuario.visualConfigJson && typeof layoutUsuario.visualConfigJson === 'object'
+              ? layoutUsuario.visualConfigJson
+              : {};
           await prisma.configuracaoLayout.update({
             where: { id: layoutUsuario.id },
-            data: { headerLogoUrl: logoFile.path }
+            data: {
+              visualConfigJson: {
+                ...visualAtual,
+                headerLogoUrl: `/uploads/logos/${logoFile.filename}`
+              }
+            }
           });
         }
       } catch (_) {}
