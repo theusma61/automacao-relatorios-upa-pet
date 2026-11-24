@@ -1,0 +1,61 @@
+# Vetaro — robots.txt
+# Permite indexação pública pelo Google, Bing e mecanismos de busca por IA
+# Bloqueia rotas privadas, APIs e links individuais de laudos (privacidade LGPD)
+
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /downloads/
+Disallow: /uploads/
+Disallow: /l/
+
+Sitemap: https://vetaro.com.br/sitemap.xml

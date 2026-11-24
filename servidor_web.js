@@ -94,6 +94,10 @@ const {
   renderizarPaginaIndisponivel
 } = require('./servico_compartilhamento');
 const {
+  isCrawlerSemJs,
+  renderizarLandingSemanticaParaCrawler
+} = require('./servico_seo');
+const {
   normalizarNumeroDecimal,
   obterLimiteClinicasPorPlano,
   podeExportarExtratoPdfOficial,
@@ -3789,7 +3793,40 @@ app.get('/l/:token/pdf', limiterLinkPublico, async (req, res) => {
   }
 });
 
+// ==================== SEO & GEO/AEO (ROBOTS, SITEMAP, LLMS.TXT, OG IMAGE E CRAWLER SSR) ====================
+const frontendPublicPath = path.join(__dirname, 'frontend', 'public');
 const frontendDistPath = path.join(__dirname, 'frontend', 'dist');
+
+function enviarArquivoPublicoSeo(res, nomeArquivo, contentType) {
+  const candidatos = [
+    path.join(frontendDistPath, nomeArquivo),
+    path.join(frontendPublicPath, nomeArquivo)
+  ];
+  for (const cand of candidatos) {
+    if (fs.existsSync(cand)) {
+      if (contentType) res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.sendFile(cand);
+    }
+  }
+  return res.status(404).send('Arquivo não encontrado.');
+}
+
+app.get('/robots.txt', (req, res) => enviarArquivoPublicoSeo(res, 'robots.txt', 'text/plain; charset=utf-8'));
+app.get('/sitemap.xml', (req, res) => enviarArquivoPublicoSeo(res, 'sitemap.xml', 'application/xml; charset=utf-8'));
+app.get('/llms.txt', (req, res) => enviarArquivoPublicoSeo(res, 'llms.txt', 'text/markdown; charset=utf-8'));
+app.get('/og-image.png', (req, res) => enviarArquivoPublicoSeo(res, 'og-image.png', 'image/png'));
+
+// Entrega HTML semântico enxuto em GET / para crawlers de IA/redes sociais que não executam JS
+app.get('/', (req, res, next) => {
+  const ua = req.headers['user-agent'] || '';
+  if (isCrawlerSemJs(ua)) {
+    res.setHeader('Vary', 'User-Agent');
+    res.setHeader('Cache-Control', 'public, max-age=1800');
+    return res.status(200).type('html').send(renderizarLandingSemanticaParaCrawler());
+  }
+  return next();
+});
 if (fs.existsSync(frontendDistPath)) {
   app.use('/assets', express.static(path.join(frontendDistPath, 'assets'), {
     maxAge: '1y',
