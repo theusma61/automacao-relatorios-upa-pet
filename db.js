@@ -237,10 +237,18 @@ function criarPrismaMockMemoria() {
         store.exames.set(id, novo);
         return novo;
       },
-      findMany: async ({ where, take = 50 } = {}) => {
+      findMany: async ({ where, take = 50, skip = 0, select } = {}) => {
         let arr = Array.from(store.exames.values());
         if (where?.usuarioId) arr = arr.filter(e => e.usuarioId === where.usuarioId);
-        return arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(0, take);
+        const page = arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(skip, skip + take);
+        if (!select) return page;
+        return page.map((item) => {
+          const out = {};
+          for (const [k, v] of Object.entries(select)) {
+            if (v) out[k] = item[k];
+          }
+          return out;
+        });
       },
       count: async ({ where } = {}) => {
         let arr = Array.from(store.exames.values());
@@ -257,10 +265,18 @@ function criarPrismaMockMemoria() {
         store.cirurgias.set(id, novo);
         return novo;
       },
-      findMany: async ({ where, take = 50 } = {}) => {
+      findMany: async ({ where, take = 50, skip = 0, select } = {}) => {
         let arr = Array.from(store.cirurgias.values());
         if (where?.usuarioId) arr = arr.filter(c => c.usuarioId === where.usuarioId);
-        return arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(0, take);
+        const page = arr.sort((a, b) => b.criadoEm - a.criadoEm).slice(skip, skip + take);
+        if (!select) return page;
+        return page.map((item) => {
+          const out = {};
+          for (const [k, v] of Object.entries(select)) {
+            if (v) out[k] = item[k];
+          }
+          return out;
+        });
       },
       count: async ({ where } = {}) => {
         let arr = Array.from(store.cirurgias.values());

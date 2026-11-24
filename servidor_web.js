@@ -9,6 +9,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const zlib = require('zlib');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -17,6 +18,7 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
 const { prisma } = require('./db');
+const { fecharBrowserCompartilhado } = require('./compilador_pdf');
 const {
   analisarExameComIA,
   obterConfigIaRuntime,
@@ -177,6 +179,41 @@ app.use(cors({
   credentials: true
 }));
 app.use(cookieParser());
+
+// Compressão HTTP Gzip nativa (zero dependências extras) para payloads JSON/HTML/JS/CSS >= 1 KB
+app.use((req, res, next) => {
+  if (req.method === 'HEAD' || req.path === '/api/stripe/webhook') return next();
+  const acceptEncoding = String(req.headers['accept-encoding'] || '');
+  if (!/gzip/i.test(acceptEncoding)) return next();
+
+  const origSend = res.send.bind(res);
+  res.send = function compressedSend(body) {
+    if (res.headersSent || res.getHeader('Content-Encoding') || body == null) {
+      return origSend(body);
+    }
+    const ct = String(res.getHeader('Content-Type') || '');
+    const isCompressible =
+      !ct ||
+      /^(text\/|application\/(json|javascript|xml|xhtml\+xml)|image\/svg\+xml)/i.test(ct);
+    if (!isCompressible) return origSend(body);
+
+    const buf = Buffer.isBuffer(body)
+      ? body
+      : (typeof body === 'string' ? Buffer.from(body, 'utf8') : null);
+    if (!buf || buf.length < 1024) return origSend(body);
+
+    try {
+      const zipped = zlib.gzipSync(buf, { level: 6 });
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader('Content-Length', zipped.length);
+      return origSend(zipped);
+    } catch (_) {
+      return origSend(body);
+    }
+  };
+  return next();
+});
 
 const skipRateLimit = () => process.env.NODE_ENV === 'test';
 const limiterApiGeral = rateLimit({
@@ -1885,19 +1922,78 @@ app.get('/api/historico', exigirAutenticacao, async (req, res) => {
   try {
     const filtroUsuario = req.usuario.role === 'admin' ? {} : { usuarioId: req.usuario.id };
     const limite = Math.min(50, Math.max(1, parseInt(req.query.limit || '25', 10) || 25));
+    const offset = Math.max(0, parseInt(req.query.offset || req.query.skip || '0', 10) || 0);
+    const incluirConteudo = req.query.incluirConteudo === '1' || req.query.incluirConteudo === 'true';
+
+    const selectExame = incluirConteudo
+      ? undefined
+      : {
+          id: true,
+          usuarioId: true,
+          pacienteNome: true,
+          pacienteEspecie: true,
+          pacienteSexo: true,
+          pacienteIdade: true,
+          tutorNome: true,
+          dataExame: true,
+          imagensQtd: true,
+          pdfArquivo: true,
+          docxArquivo: true,
+          publicToken: true,
+          linkAtivo: true,
+          visualizacoes: true,
+          primeiraVisualizacaoEm: true,
+          ultimaVisualizacaoEm: true,
+          compartilhadoEm: true,
+          clinicaParceiraId: true,
+          valorExame: true,
+          statusPagamento: true,
+          criadoEm: true
+        };
+
+    const selectCirurgia = incluirConteudo
+      ? undefined
+      : {
+          id: true,
+          usuarioId: true,
+          pacienteNome: true,
+          pacienteEspecie: true,
+          procedimento: true,
+          diagnostico: true,
+          modeloUtilizado: true,
+          possuiFoto: true,
+          pdfArquivo: true,
+          docxArquivo: true,
+          publicToken: true,
+          linkAtivo: true,
+          visualizacoes: true,
+          primeiraVisualizacaoEm: true,
+          ultimaVisualizacaoEm: true,
+          compartilhadoEm: true,
+          clinicaParceiraId: true,
+          valorExame: true,
+          statusPagamento: true,
+          criadoEm: true
+        };
+
     const [exames, cirurgias] = await Promise.all([
       prisma.exameLaudo.findMany({
         where: filtroUsuario,
         orderBy: { criadoEm: 'desc' },
-        take: limite
+        skip: offset,
+        take: limite,
+        ...(selectExame ? { select: selectExame } : {})
       }),
       prisma.relatorioCirurgico.findMany({
         where: filtroUsuario,
         orderBy: { criadoEm: 'desc' },
-        take: limite
+        skip: offset,
+        take: limite,
+        ...(selectCirurgia ? { select: selectCirurgia } : {})
       })
     ]);
-    res.json({ sucesso: true, exames, cirurgias });
+    const hasMore = exames.length === limite || cirurgias.length === limite;
+    res.json({ sucesso: true, exames, cirurgias, hasMore, limit: limite, offset });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar histórico: ' + err.message });
   }
@@ -3916,15 +4012,16 @@ if (require.main === module) {
         }
       }
 
+      let timerLimpeza = null;
       if (process.env.NODE_ENV !== 'test') {
         limparArquivosExpirados().catch(() => {});
-        const timerLimpeza = setInterval(() => {
+        timerLimpeza = setInterval(() => {
           limparArquivosExpirados().catch(() => {});
         }, 6 * 60 * 60 * 1000);
         if (typeof timerLimpeza.unref === 'function') timerLimpeza.unref();
       }
 
-      app.listen(PORT, () => {
+      const server = app.listen(PORT, () => {
         logger.info('Servidor inicializado', {
           porta: PORT,
           url: `http://localhost:${PORT}`,
@@ -3935,6 +4032,39 @@ if (require.main === module) {
         console.log(`🔗 Acesso local: http://localhost:${PORT}`);
         console.log('==================================================================');
       });
+
+      let encerrando = false;
+      async function encerrarComSeguranca(sinal) {
+        if (encerrando) return;
+        encerrando = true;
+        logger.info('Encerramento gracioso iniciado', { sinal });
+        if (timerLimpeza) {
+          clearInterval(timerLimpeza);
+          timerLimpeza = null;
+        }
+        const failsafe = setTimeout(() => {
+          logger.warn('Encerramento forçado após timeout de 10s', { sinal });
+          process.exit(1);
+        }, 10000);
+        if (typeof failsafe.unref === 'function') failsafe.unref();
+
+        try {
+          await new Promise((resolve) => server.close(() => resolve()));
+        } catch (_) {}
+        try {
+          await fecharBrowserCompartilhado();
+        } catch (_) {}
+        try {
+          if (typeof prisma.$disconnect === 'function') {
+            await prisma.$disconnect();
+          }
+        } catch (_) {}
+        clearTimeout(failsafe);
+        process.exit(0);
+      }
+
+      process.on('SIGTERM', () => encerrarComSeguranca('SIGTERM'));
+      process.on('SIGINT', () => encerrarComSeguranca('SIGINT'));
     } catch (err) {
       logger.error('[boot] falha na inicialização', { stack: err.stack, message: err.message });
       process.exit(1);

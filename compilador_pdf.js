@@ -150,7 +150,11 @@ async function compilarPDFInterno(caminhoHtml, caminhoPdf) {
       '--disable-gpu',
       '--no-first-run',
       '--no-zygote',
-      '--disable-extensions'
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--metrics-recording-only'
     ];
 
     const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined));
@@ -185,4 +189,21 @@ async function compilarPDF(caminhoHtml, caminhoPdf) {
   return await filaPdf.add(() => compilarPDFInterno(caminhoHtml, caminhoPdf));
 }
 
-module.exports = { compilarPDF, filaPdf };
+async function fecharBrowserCompartilhado() {
+  if (timerFecharBrowser) {
+    clearTimeout(timerFecharBrowser);
+    timerFecharBrowser = null;
+  }
+  if (browserLaunchPromise) {
+    try {
+      await browserLaunchPromise;
+    } catch (_) {}
+  }
+  const b = browserCompartilhado;
+  browserCompartilhado = null;
+  if (b) {
+    await b.close().catch(() => {});
+  }
+}
+
+module.exports = { compilarPDF, filaPdf, fecharBrowserCompartilhado };

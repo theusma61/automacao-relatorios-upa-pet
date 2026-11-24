@@ -5,6 +5,9 @@ services:
     image: postgres:16-alpine
     container_name: upa_postgres
     restart: always
+    mem_limit: 640m
+    memswap_limit: 640m
+    stop_grace_period: 15s
     environment:
       POSTGRES_DB: upa_pet_db
       POSTGRES_USER: upa_user
@@ -23,7 +26,7 @@ services:
                -c work_mem=4MB
                -c maintenance_work_mem=32MB
                -c max_connections=50
-               -c effective_cache_size=1GB
+               -c effective_cache_size=512MB
 
   app:
     build:
@@ -31,12 +34,15 @@ services:
       network: host
     container_name: upa_app
     restart: always
-    shm_size: '512mb'
+    mem_limit: 2300m
+    memswap_limit: 2560m
+    stop_grace_period: 15s
+    shm_size: '256mb'
     dns:
       - 8.8.8.8
       - 1.1.1.1
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://upa_user:${POSTGRES_PASSWORD:-upa_super_secure_pass_2026}@postgres:5432/upa_pet_db?schema=public
@@ -49,7 +55,7 @@ services:
       - VET_EMAILS=${VET_EMAILS}
       - UPLOAD_PERSISTENT_DIR=/app/uploads
       - OUTPUT_PERSISTENT_DIR=/app/output
-      - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=2048
+      - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=1280
     volumes:
       - ./:/app
       - /app/node_modules

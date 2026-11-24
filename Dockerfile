@@ -47,7 +47,7 @@ ENV CHROME_BIN=/usr/bin/chromium \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x" \
-    NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=2048" \
+    NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=1280" \
     PATH="/app/node_modules/.bin:$PATH" \
     PORT=3000
 

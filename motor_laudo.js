@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const os = require('os');
 const { compilarPDF } = require('./compilador_pdf');
 const { obterLayout } = require('./gerenciador_layout');
@@ -41,14 +42,17 @@ function resolverCaminhoArquivo(caminho) {
   return null;
 }
 
-function lerImagemDataUri(caminhoImg) {
-  const resolvido = resolverCaminhoArquivo(caminhoImg);
+function lerImagemFileUrl(caminhoImg) {
+  if (!caminhoImg) return '';
+  const str = String(caminhoImg).trim();
+  if (str.startsWith('data:') || str.startsWith('file://')) return str;
+  const resolvido = resolverCaminhoArquivo(str);
   if (!resolvido || !fs.existsSync(resolvido)) return '';
-  const ext = path.extname(resolvido).toLowerCase();
-  const mime = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : 'image/jpeg');
-  const b64 = fs.readFileSync(resolvido).toString('base64');
-  return `data:${mime};base64,${b64}`;
+  return pathToFileURL(resolvido).href;
 }
+
+// Mantém alias interno apontando para file:// (evita inflação ~33% em Base64 no HTML do Puppeteer)
+const lerImagemDataUri = lerImagemFileUrl;
 
 function formatarNomeOrgaoCase(orgaoRaw, caseMode = 'UPPERCASE') {
   const limpo = String(orgaoRaw || '').replace(/:+$/, '').trim();
@@ -1123,30 +1127,24 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
       resolverCaminhoArquivo(layout?.header_logo_url) ||
       null;
 
-    const logoBase64 = (caminhoLogoEfetivo && fs.existsSync(caminhoLogoEfetivo))
-      ? fs.readFileSync(caminhoLogoEfetivo).toString('base64')
-      : '';
-    const logoMime = caminhoLogoEfetivo && path.extname(caminhoLogoEfetivo).toLowerCase() === '.png'
-      ? 'image/png'
-      : 'image/jpeg';
+    const logoFileUrl = lerImagemFileUrl(caminhoLogoEfetivo);
 
     let assinaturaImgHtml = '';
-    if (usuario.assinaturaUrl && fs.existsSync(usuario.assinaturaUrl)) {
-      const assExt = path.extname(usuario.assinaturaUrl).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-      const assBase64 = fs.readFileSync(usuario.assinaturaUrl).toString('base64');
-      assinaturaImgHtml = `<img src="data:${assExt};base64,${assBase64}" style="max-height:42px; display:inline-block; margin-bottom:2px;" alt="Assinatura"><br>`;
+    const assFileUrl = lerImagemFileUrl(usuario.assinaturaUrl);
+    if (assFileUrl) {
+      assinaturaImgHtml = `<img src="${assFileUrl}" style="max-height:42px; display:inline-block; margin-bottom:2px;" alt="Assinatura"><br>`;
     }
 
     const paginasImagens = distribuirFotosEquilibradas(imagensPaths, 8);
 
     const cabecalho = `
       <div class="header">
-        ${logoBase64 ? `
+        ${logoFileUrl ? `
           <div class="logo-box">
-            <img src="data:${logoMime};base64,${logoBase64}" class="logo-img" alt="${clinicaNome}">
+            <img src="${logoFileUrl}" class="logo-img" alt="${clinicaNome}">
           </div>
         ` : ''}
-        <div class="patient-info" style="${logoBase64 ? 'margin-left: 15px;' : 'margin-left: 0;'}">
+        <div class="patient-info" style="${logoFileUrl ? 'margin-left: 15px;' : 'margin-left: 0;'}">
           <div class="col">
             <p><strong>Nome:</strong> <span contenteditable="true">${dadosPaciente.nome || ''}</span></p>
             <p><strong>Espécie:</strong> <span contenteditable="true">${dadosPaciente.especie || ''}</span></p>
@@ -1283,7 +1281,7 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
         <div class="image-grid">
           ${fotos.map(foto => `
             <div class="img-card">
-              <img src="${foto}" alt="Captura Ultrassom">
+              <img src="${lerImagemFileUrl(foto)}" alt="Captura Ultrassom">
             </div>
           `).join('')}
         </div>
@@ -1316,12 +1314,10 @@ async function gerarDocumentosExame(dadosPaciente, laudoArray, imagensPaths, pas
   const caminhoPdf = path.join(pastaSaida, `${nomeBaseArquivo}.pdf`);
   const caminhoDocx = path.join(pastaSaida, `${nomeBaseArquivo}.docx`);
 
-  fs.writeFileSync(caminhoHtmlTemp, html, 'utf8');
+  await fs.promises.writeFile(caminhoHtmlTemp, html, 'utf8');
   await compilarPDF(caminhoHtmlTemp, caminhoPdf);
 
-  try {
-    fs.unlinkSync(caminhoHtmlTemp);
-  } catch (e) {}
+  await fs.promises.unlink(caminhoHtmlTemp).catch(() => {});
 
   const caminhoHtmlAntigo = path.join(pastaSaida, `Laudo_${nomeSanitizado}.html`);
   if (fs.existsSync(caminhoHtmlAntigo)) {

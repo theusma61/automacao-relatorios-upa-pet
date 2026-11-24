@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const os = require('os');
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, ImageRun, BorderStyle, PageBreak } = require('docx');
 const { obterLayout, converterParaDocx, ptParaHalfPoints, LAYOUT_PADRAO } = require('./gerenciador_layout');
@@ -142,18 +143,21 @@ function resolverCaminhoArquivo(caminho, opcoes = {}) {
   return null;
 }
 
-function lerImagemDataUri(caminho) {
-  const resolvido = resolverCaminhoArquivo(caminho);
+function lerImagemFileUrl(caminho) {
+  if (!caminho) return '';
+  const str = String(caminho).trim();
+  if (str.startsWith('data:') || str.startsWith('file://')) return str;
+  const resolvido = resolverCaminhoArquivo(str);
   if (!resolvido || !fs.existsSync(resolvido)) return '';
   try {
-    const ext = path.extname(resolvido).toLowerCase();
-    const mime = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : (ext === '.svg' ? 'image/svg+xml' : 'image/jpeg'));
-    const buf = fs.readFileSync(resolvido);
-    return `data:${mime};base64,${buf.toString('base64')}`;
+    return pathToFileURL(resolvido).href;
   } catch (_) {
     return '';
   }
 }
+
+// Mantém alias interno apontando para file:// (evita inflação ~33% em Base64 no HTML do Puppeteer)
+const lerImagemDataUri = lerImagemFileUrl;
 
 const ORDEM_SECOES_CIRURGIA_PADRAO = ['diagnostico', 'descricao', 'evolucao'];
 
@@ -963,9 +967,7 @@ async function gerarPdfCirurgico(dadosPaciente, dadosCirurgia, caminhoSaidaPdf, 
   const imagensValidasPdf = (imagens || []).filter(img => fs.existsSync(img));
   if (imagensValidasPdf.length > 0) {
     const cardsHtml = imagensValidasPdf.map((imgCaminho, idx) => {
-      const mime = obterMimePorExtensao(imgCaminho);
-      const imgBase64 = fs.readFileSync(imgCaminho).toString('base64');
-      const imgSrc = `data:${mime};base64,${imgBase64}`;
+      const imgSrc = lerImagemFileUrl(imgCaminho);
       const ehUnica = imagensValidasPdf.length === 1;
       const legendaTexto = resolverLegendaFoto(idx, legendasFotos, ev.legendaPadraoFoto);
 
