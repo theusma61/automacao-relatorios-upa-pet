@@ -12,6 +12,7 @@ import Toast from './components/layout/Toast';
 import DashboardHome from './pages/DashboardHome';
 
 const ReportPreviewModal = lazy(() => import('./components/modals/ReportPreviewModal'));
+const ShareReportModal = lazy(() => import('./components/modals/ShareReportModal'));
 const AdminUsersModal = lazy(() => import('./components/modals/AdminUsersModal'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -80,6 +81,7 @@ export default function App() {
   const [activities, setActivities] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [shareReportTarget, setShareReportTarget] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
   const [layoutConfig, setLayoutConfig] = useState({
@@ -105,7 +107,13 @@ export default function App() {
         const jobId = ex.pdfArquivo ? ex.pdfArquivo.split('/')[2] : '';
         return {
           id: `ex-${ex.id}`,
+          dbId: ex.id,
           jobId,
+          publicToken: ex.publicToken || '',
+          linkAtivo: ex.linkAtivo !== false,
+          visualizacoes: ex.visualizacoes || 0,
+          ultimaVisualizacaoEm: ex.ultimaVisualizacaoEm || null,
+          compartilhadoEm: ex.compartilhadoEm || null,
           type: 'ultrassom',
           title: 'Laudo de Ultrassom',
           patient: `${ex.pacienteNome || 'Paciente'} (${ex.pacienteEspecie || 'Canina'})`,
@@ -139,7 +147,13 @@ export default function App() {
         const jobId = c.pdfArquivo ? c.pdfArquivo.split('/')[2] : '';
         return {
           id: `cir-${c.id}`,
+          dbId: c.id,
           jobId,
+          publicToken: c.publicToken || '',
+          linkAtivo: c.linkAtivo !== false,
+          visualizacoes: c.visualizacoes || 0,
+          ultimaVisualizacaoEm: c.ultimaVisualizacaoEm || null,
+          compartilhadoEm: c.compartilhadoEm || null,
           type: 'relatorio',
           title: `Relatório Cirúrgico — ${c.procedimento || 'Oficial'}`,
           patient: `${c.pacienteNome || 'Paciente'}${
@@ -352,6 +366,7 @@ export default function App() {
           onRefreshHistory={carregarHistoricoServidor}
           onNavigate={(dest) => setActiveNav(dest)}
           onSelectReport={(rep) => setSelectedReport(rep)}
+          onShareReport={(rep) => setShareReportTarget(rep)}
         />
       );
     }
@@ -608,6 +623,33 @@ export default function App() {
             newUiEnabled={newUiEnabled}
           />
         </div>
+      )}
+
+      {/* Modal Rápido de Compartilhamento (WhatsApp / Link Público) */}
+      {shareReportTarget && (
+        <Suspense fallback={null}>
+          <ShareReportModal
+            isOpen={Boolean(shareReportTarget)}
+            onClose={() => setShareReportTarget(null)}
+            tipo={shareReportTarget.type === 'relatorio' ? 'cirurgia' : 'ultrassom'}
+            documentoId={shareReportTarget.dbId || shareReportTarget.jobId || ''}
+            pacienteNome={shareReportTarget.paciente?.nome || shareReportTarget.patient || 'Paciente'}
+            pacienteEspecie={shareReportTarget.paciente?.especie || ''}
+            tutorNome={shareReportTarget.paciente?.tutor || shareReportTarget.tutor || ''}
+            procedimento={shareReportTarget.cirurgia?.procedimento || ''}
+            darkMode={darkMode}
+            onToast={showToast}
+            onStatusChanged={({ id, linkAtivo }) => {
+              setActivities((prev) =>
+                prev.map((item) =>
+                  item.dbId === id || item.id === shareReportTarget.id
+                    ? { ...item, linkAtivo }
+                    : item
+                )
+              );
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Modal de Detalhes de Relatório / Laudo (carregado sob demanda) */}

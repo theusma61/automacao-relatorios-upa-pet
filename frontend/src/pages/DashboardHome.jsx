@@ -3,7 +3,9 @@ import {
   FileText,
   ArrowRight,
   MoreHorizontal,
-  RefreshCw
+  RefreshCw,
+  Share2,
+  Eye
 } from 'lucide-react';
 import { UltrasoundIcon, CardWaveBackground } from '../components/icons/VetaroIcons';
 
@@ -15,7 +17,8 @@ export default function DashboardHome({
   loadingHistory = false,
   onRefreshHistory,
   onNavigate,
-  onSelectReport
+  onSelectReport,
+  onShareReport
 }) {
   return (
     <div className="space-y-7">
@@ -257,7 +260,20 @@ export default function DashboardHome({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                  {Number(item.visualizacoes || 0) > 0 && (
+                    <span
+                      title={`Visualizado ${item.visualizacoes}x via link público`}
+                      className={`hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        darkMode
+                          ? 'bg-sky-500/15 text-sky-300'
+                          : 'bg-sky-50 text-sky-700'
+                      }`}
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>{item.visualizacoes}x</span>
+                    </span>
+                  )}
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-bold ${
                       darkMode
@@ -267,6 +283,23 @@ export default function DashboardHome({
                   >
                     {item.status}
                   </span>
+                  {onShareReport && (
+                    <button
+                      type="button"
+                      title="Compartilhar via WhatsApp / Link Público"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShareReport(item);
+                      }}
+                      className={`p-1.5 rounded-lg border transition ${
+                        darkMode
+                          ? 'border-slate-700 bg-[#0A141D] text-[#00D296] hover:border-[#00D296]'
+                          : 'border-slate-200 bg-slate-50 text-[#0D5C56] hover:border-[#0D5C56]'
+                      }`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <MoreHorizontal className="w-4 h-4 text-slate-400" />
                 </div>
               </div>

@@ -24,10 +24,12 @@ import {
   ArrowLeft,
   User,
   Layers,
-  LayoutGrid
+  LayoutGrid,
+  Share2
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
+import ShareReportModal from './ShareReportModal';
 
 const FONTES_CIRURGIA = [
   'Calibri, sans-serif',
@@ -245,6 +247,9 @@ export default function ReportPreviewModal({
   });
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [mobileStyleSheetOpen, setMobileStyleSheetOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const shareDocId = report.dbId || initialJobId || (report.id ? String(report.id).replace(/^(ex|cir)-/, '') : '');
+  const shareTipo = isSurgery ? 'cirurgia' : 'ultrassom';
   const [isMobileViewport, setIsMobileViewport] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
@@ -1156,6 +1161,20 @@ export default function ReportPreviewModal({
                     <FileCheck className="w-3.5 h-3.5 text-[#00D296]" />
                     <span>Word</span>
                   </a>
+                )}
+                {shareDocId && (
+                  <button
+                    type="button"
+                    onClick={() => setShareModalOpen(true)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border inline-flex items-center gap-1.5 transition ${
+                      darkMode
+                        ? 'border-[#00D296]/40 bg-[#00D296]/10 text-[#00D296] hover:bg-[#00D296]/20'
+                        : 'border-teal-300 bg-teal-50 text-[#0D5C56] hover:bg-teal-100'
+                    }`}
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>WhatsApp</span>
+                  </button>
                 )}
                 {pdfUrlLive && (
                   <a
@@ -3133,6 +3152,22 @@ export default function ReportPreviewModal({
               </a>
             )}
 
+            {shareDocId && (
+              <button
+                type="button"
+                onClick={() => setShareModalOpen(true)}
+                aria-label="Compartilhar no WhatsApp"
+                className={`min-h-[44px] px-3 py-2.5 rounded-xl text-xs font-extrabold border flex items-center justify-center gap-1.5 transition active:scale-[0.98] ${
+                  darkMode
+                    ? 'border-[#00D296]/40 bg-[#00D296]/15 text-[#00D296]'
+                    : 'border-teal-300 bg-teal-50 text-[#0D5C56]'
+                }`}
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Enviar</span>
+              </button>
+            )}
+
             {pdfUrlLive && (
               <a
                 href={pdfUrlLive}
@@ -3216,6 +3251,21 @@ export default function ReportPreviewModal({
               </a>
             )}
 
+            {shareDocId && (
+              <button
+                type="button"
+                onClick={() => setShareModalOpen(true)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold border flex items-center gap-1.5 transition ${
+                  darkMode
+                    ? 'border-[#00D296]/40 bg-[#00D296]/10 text-[#00D296] hover:bg-[#00D296]/20'
+                    : 'border-teal-300 bg-teal-50 text-[#0D5C56] hover:bg-teal-100'
+                }`}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </button>
+            )}
+
             {pdfUrlLive && (
               <a
                 href={pdfUrlLive}
@@ -3232,6 +3282,19 @@ export default function ReportPreviewModal({
         </div>
         )}
       </div>
+
+      <ShareReportModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        tipo={shareTipo}
+        documentoId={shareDocId}
+        pacienteNome={pacienteForm?.nome || report.paciente?.nome || report.patient || 'Paciente'}
+        pacienteEspecie={pacienteForm?.especie || report.paciente?.especie || ''}
+        tutorNome={pacienteForm?.tutor || report.paciente?.tutor || report.tutor || ''}
+        procedimento={cirurgiaForm?.procedimento || report.cirurgia?.procedimento || ''}
+        darkMode={darkMode}
+        onToast={onToast}
+      />
     </div>
   );
 }

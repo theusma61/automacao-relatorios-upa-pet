@@ -231,5 +231,33 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal
+    }),
+
+  // Fase 1 — Entrega Inteligente (Link público, QR Code, Resumo ao Tutor e WhatsApp)
+  obterLinkCompartilhamento: (tipo, id) =>
+    requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/link`, {
+      method: 'POST'
+    }),
+  alterarStatusLink: (tipo, id, linkAtivo) =>
+    requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkAtivo: Boolean(linkAtivo) })
+    }),
+  gerarResumoTutor: (tipo, id, forcarRegeneracao = false) =>
+    requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/resumo-tutor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ forcarRegeneracao: Boolean(forcarRegeneracao) })
+    }),
+  salvarResumoTutor: (tipo, id, resumoTutor) =>
+    requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/resumo-tutor`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumoTutor })
+    }),
+  registrarEnvioCompartilhamento: (tipo, id) =>
+    requestJson(`/api/compartilhamento/${encodeURIComponent(tipo)}/${encodeURIComponent(id)}/registrar-envio`, {
+      method: 'POST'
     })
 };

@@ -101,16 +101,25 @@ function montarPromptResumoTutor({ tipo, paciente = {}, laudo = [], cirurgia = n
       cirurgia.evolucaoConsideracoes ? `Evolução e considerações: ${String(cirurgia.evolucaoConsideracoes).slice(0, 1200)}` : ''
     ].filter(Boolean).join('\n');
   } else {
-    const itens = Array.isArray(laudo) ? laudo : [];
+    let itens = [];
+    if (Array.isArray(laudo)) {
+      itens = laudo;
+    } else if (typeof laudo === 'string' && laudo.trim()) {
+      try {
+        const parsed = JSON.parse(laudo);
+        if (Array.isArray(parsed)) itens = parsed;
+      } catch (_) {}
+    }
     conteudoClinico = itens
       .map((item) => {
-        const org = item?.orgao || 'Órgão';
-        const txt = item?.texto || '';
+        const org = item?.orgao || item?.titulo || 'Órgão';
+        const txt = item?.texto || item?.achados || item?.descricao || '';
         const dd = item?.diagDif ? ` (Diag. dif.: ${item.diagDif})` : '';
-        return `- ${org}: ${txt}${dd}`;
+        return txt ? `- ${org}: ${txt}${dd}` : '';
       })
+      .filter(Boolean)
       .join('\n')
-      .slice(0, 3500);
+      .slice(0, 4500);
   }
 
   return `Você é um assistente de comunicação clínica veterinária escrevendo uma mensagem curta de WhatsApp para o tutor de um pet.
@@ -135,7 +144,7 @@ REGRAS OBRIGATÓRIAS:
 
 async function gerarResumoTutorIA({ tipo = 'ultrassom', paciente = {}, laudo = [], cirurgia = null, apiKey = '' }) {
   const chaveGratuita = (apiKey || process.env.GEMINI_API_KEY || '').trim();
-  const chavePaga = (process.env.GEMINI_API_KEY_PAGA || '').trim();
+  const chavePaga = (process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_PAID_API_KEY || process.env.GEMINI_API_KEY_PAGA || '').trim();
 
   const tentativas = [];
   if (chaveGratuita) {
@@ -157,25 +166,34 @@ async function gerarResumoTutorIA({ tipo = 'ultrassom', paciente = {}, laudo = [
   let ultimoErro = null;
 
   for (const tentativa of tentativas) {
-    try {
-      const genAI = new GoogleGenerativeAI(tentativa.chave);
-      const model = genAI.getGenerativeModel({
-        model: tentativa.modelo,
-        generationConfig: {
-          temperature: 0.35,
-          maxOutputTokens: 450
+    const isFlash25 = /^gemini-2\.5-flash$/i.test(tentativa.modelo);
+    const configs = isFlash25
+      ? [
+          { temperature: 0.35, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
+          { temperature: 0.35, maxOutputTokens: 2048 }
+        ]
+      : [{ temperature: 0.35, maxOutputTokens: 2048 }];
+
+    for (const generationConfig of configs) {
+      try {
+        const genAI = new GoogleGenerativeAI(tentativa.chave);
+        const model = genAI.getGenerativeModel({
+          model: tentativa.modelo,
+          generationConfig
+        });
+        const result = await model.generateContent(prompt);
+        const texto = result?.response?.text?.().trim() || '';
+        const finishReason = result?.response?.candidates?.[0]?.finishReason || 'UNKNOWN';
+        if (texto) {
+          console.log(`✨ [Resumo Tutor] Gerado com ${tentativa.modelo} (finishReason: ${finishReason}, chars: ${texto.length})`);
+          return {
+            resumo: texto.replace(/^["']|["']$/g, '').trim(),
+            modelo: tentativa.modelo
+          };
         }
-      });
-      const result = await model.generateContent(prompt);
-      const texto = result?.response?.text?.().trim() || '';
-      if (texto) {
-        return {
-          resumo: texto.replace(/^["']|["']$/g, '').trim(),
-          modelo: tentativa.modelo
-        };
+      } catch (err) {
+        ultimoErro = err;
       }
-    } catch (err) {
-      ultimoErro = err;
     }
   }
 
