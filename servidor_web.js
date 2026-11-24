@@ -169,14 +169,23 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }
 }));
-app.use(cors({
-  origin(origin, cb) {
-    if (!origin || ALLOWED_ORIGINS.has(origin.replace(/\/+$/, ''))) {
-      return cb(null, true);
+app.use(cors((req, cb) => {
+  const origin = (req.headers.origin || '').trim().replace(/\/+$/, '');
+  if (!origin || ALLOWED_ORIGINS.has(origin)) {
+    return cb(null, { origin: true, credentials: true });
+  }
+  // Permite requisições same-origin (ex.: assets <script crossorigin> rodando em localhost:3000 via Docker)
+  try {
+    const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+    const originHost = new URL(origin).host.toLowerCase();
+    if (reqHost && originHost === reqHost) {
+      return cb(null, { origin: true, credentials: true });
     }
-    return cb(new Error('Origem não permitida pela política CORS.'));
-  },
-  credentials: true
+  } catch (_) {}
+  return cb(null, { origin: false });
 }));
 app.use(cookieParser());
 
@@ -184,7 +193,7 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   if (req.method === 'HEAD' || req.path === '/api/stripe/webhook') return next();
   const acceptEncoding = String(req.headers['accept-encoding'] || '');
-  if (!/gzip/i.test(acceptEncoding)) return next();
+  if (!acceptEncoding.toLowerCase().includes('gzip')) return next();
 
   const origSend = res.send.bind(res);
   res.send = function compressedSend(body) {

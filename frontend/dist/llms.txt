@@ -1,0 +1,32 @@
+# Vetaro
+
+> Plataforma brasileira de inteligência artificial para médicos veterinários: geração automática de laudos de ultrassonografia e relatórios cirúrgicos no padrão visual e textual do profissional, com revisão no Vetaro Studio, entrega em 1 clique no WhatsApp e controle financeiro para imaginologistas volantes.
+
+- Site oficial: https://vetaro.com.br/
+- Contato: contato@vetaro.com.br
+- Idioma: Português do Brasil (pt-BR)
+- Público-alvo: Médicos veterinários ultrassonografistas (fixos e volantes), cirurgiões veterinários, clínicas e hospitais veterinários 24h no Brasil.
+
+## Principais Funcionalidades
+
+- **Laudos de Ultrassonografia com Visão Computacional (IA):** leitura automática de até 25 capturas de aparelhos de ultrassom (Mindray e multimarcas), identificação de órgãos, medidas (calipers), sanitização de dados paciente/tutor e redação estruturada em menos de 30 segundos com inspeção em duas fases anti-viés de normalidade.
+- **Vetaro Studio com Modo Análise de Imagens:** ambiente de revisão lado a lado com imagem principal ampliável (zoom até 3x, brilho e contraste), faixa horizontal de miniaturas e sincronização automática imagem ↔ órgão — ao avançar para a foto de um órgão, o texto correspondente entra em foco automaticamente.
+- **Clonagem Automática de Padrão por PDF:** a partir de 1 a 10 laudos antigos em PDF do veterinário, a plataforma extrai automaticamente a ordem dos órgãos, vocabulário preferido, frases de normalidade, estilo de conclusão, fontes, cores, cabeçalho e assinatura.
+- **Relatórios Cirúrgicos Ilimitados (Multimodal):** geração padronizada a partir de áudio gravado, texto livre, arquivos Word (`.docx`) ou Apple Pages (`.pages`), com biblioteca de 14 modelos cirúrgicos institucionais e modelos personalizados, garantindo página única + anexo fotográfico opcional.
+- **Entrega Inteligente no WhatsApp + Resumo ao Tutor (IA):** link digital privado (não indexado, conforme boas práticas LGPD), QR Code opcional no rodapé do PDF, confirmação de visualização e resumo empático em linguagem simples gerado a partir do laudo revisado (sempre editável pelo médico e sem substituir a conduta clínica).
+- **Modo Volante & Controle Financeiro:** cadastro de múltiplas clínicas parceiras (com valores padrão de ultrassom/cirurgia, percentual de repasse, WhatsApp da recepção e logo própria opcional no cabeçalho dos laudos), painel de recebíveis e repasses, baixa em lote, Extrato de Cobrança em PDF com chave Pix e exportação CSV para Excel.
+- **Saída Dupla (PDF + Word editável):** todos os exames e relatórios cirúrgicos são emitidos em PDF A4 pronto para envio e em arquivo Word (`.docx`) editável.
+
+## Planos e Preços (BRL)
+
+- **Degustação Gratuita:** R$ 0,00 — 5 laudos de ultrassom gratuitos + relatórios cirúrgicos ilimitados, sem cartão de crédito.
+- **Solo / Volante:** R$ 119/mês (ou R$ 99/mês no plano anual) — até 40 laudos de ultrassom/mês, Vetaro Studio (Modo Análise + Split-View), Entrega WhatsApp + Resumo ao Tutor, Modo Volante com até 3 clínicas parceiras e exportação CSV.
+- **Especialista Pro:** R$ 249/mês (ou R$ 209/mês no plano anual) — até 150 laudos de ultrassom/mês, relatórios cirúrgicos ilimitados, clonagem de padrão por PDF, clínicas parceiras ilimitadas com logo própria, Extrato de Cobrança em PDF com Pix e baixa em lote.
+- **Clínica & Hospital 24h:** R$ 497/mês (ou R$ 419/mês no plano anual) — até 350 laudos de ultrassom/mês, tudo do plano Pro, até 5 veterinários com CRMV e assinatura individuais e onboarding assistido.
+
+## Perguntas Frequentes
+
+- **Precisa de cartão de crédito para testar?** Não. O teste gratuito libera 5 laudos completos imediatamente sem cartão.
+- **O tutor precisa baixar aplicativo para abrir o laudo?** Não. O link público privado abre direto no navegador do celular para visualizar e baixar o PDF.
+- **Funciona para ultrassonografista volante que atende várias clínicas?** Sim. O Modo Volante permite cadastrar múltiplas clínicas parceiras, usar a logo de cada clínica nos laudos dela quando desejado e controlar exatamente quanto cada parceiro deve ou tem de repasse no mês.
+- **O resumo ao tutor feito por IA dá diagnóstico ou prescreve tratamento?** Não. Ele traduz o laudo já revisado pelo veterinário em linguagem acessível e sempre orienta que a interpretação e conduta pertencem ao médico veterinário responsável.
