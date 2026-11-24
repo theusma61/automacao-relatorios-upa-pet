@@ -1067,7 +1067,7 @@ export default function ReportPreviewModal({
           </div>
         ) : (
         <div
-          className={`px-4 sm:px-6 py-3.5 border-b flex flex-wrap items-center justify-between gap-3 shrink-0 ${
+          className={`px-4 sm:px-6 py-3.5 border-b flex flex-wrap items-center justify-between gap-3 xl:grid xl:grid-cols-[1fr_auto_1fr] shrink-0 ${
             darkMode ? 'bg-[#0F1C26] border-slate-800' : 'bg-white border-slate-200'
           }`}
         >
@@ -1115,8 +1115,8 @@ export default function ReportPreviewModal({
             </div>
           </div>
 
-          {/* Seletor de Modo / Abas */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Seletor de Modo / Abas (Centralizado no Desktop) */}
+          <div className="flex items-center justify-center">
             <div
               className={`p-1 rounded-xl border flex items-center gap-1 ${
                 darkMode ? 'bg-[#0A141D] border-slate-800' : 'bg-slate-100 border-slate-200'
@@ -1181,9 +1181,12 @@ export default function ReportPreviewModal({
                 </button>
               )}
             </div>
+          </div>
 
+          {/* Ações de Saída + Fechar (Alinhado à Direita) */}
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2">
             {isStudioMode && (
-              <div className="hidden xl:flex items-center gap-1.5 pl-1 border-l border-slate-700/50">
+              <div className="hidden xl:flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleSalvarERecompilar()}

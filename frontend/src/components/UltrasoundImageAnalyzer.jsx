@@ -370,7 +370,7 @@ export default function UltrasoundImageAnalyzer({
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             filter: `brightness(${brightness}%) contrast(${contrast}%)`
           }}
-          className="max-w-full max-h-full object-contain transition-transform duration-150"
+          className="w-full h-full object-contain p-3 sm:p-4 transition-transform duration-150"
         />
 
         {/* Dica sutil de atalho */}
