@@ -926,14 +926,20 @@ app.get('/api/ultrassom/:jobId/dados', exigirAutenticacao, async (req, res) => {
           estiloOverrideUs = metaUs.estiloOverride;
         }
         if (Array.isArray(metaUs.imagensPaths)) {
+          const metaMap = (metaUs.imagensMeta && typeof metaUs.imagensMeta === 'object') ? metaUs.imagensMeta : {};
           imagensExame = metaUs.imagensPaths
             .filter((p) => typeof p === 'string' && fs.existsSync(p))
             .map((p, idx) => {
               const nome = path.basename(p);
+              const cls = metaMap[nome] || {};
               return {
                 id: `${idx}-${nome}`,
                 nome,
-                url: `/api/exames/${encodeURIComponent(safeJobId)}/imagem/${encodeURIComponent(nome)}`
+                url: `/api/exames/${encodeURIComponent(safeJobId)}/imagem/${encodeURIComponent(nome)}`,
+                sigla: cls.sigla || '',
+                orgao: cls.orgao || '',
+                statusVisual: cls.statusVisual || 'NORMAL',
+                medidasLidas: Array.isArray(cls.medidasLidas) ? cls.medidasLidas : []
               };
             });
         }
@@ -2140,6 +2146,24 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     const pdfUrl = `/downloads/${jobId}/${encodeURIComponent(pdfNome)}`;
     const docxUrl = `/downloads/${jobId}/${encodeURIComponent(docxNome)}`;
 
+    // Mapeia classificacaoImagens (já gerada pela IA a custo zero) por nome de arquivo para o Modo Análise do Vetaro Studio
+    const imagensMetaMap = {};
+    if (Array.isArray(resultadoIA.classificacaoImagens)) {
+      resultadoIA.classificacaoImagens.forEach((cls) => {
+        const idx = Number(cls?.indice);
+        const caminhoOrig = Number.isInteger(idx) ? caminhosArquivos[idx] : null;
+        const nomeArq = caminhoOrig ? path.basename(caminhoOrig) : (cls?.nomeArquivo ? path.basename(cls.nomeArquivo) : '');
+        if (nomeArq) {
+          imagensMetaMap[nomeArq] = {
+            sigla: String(cls?.sigla || '').trim(),
+            orgao: String(cls?.orgao || '').trim(),
+            statusVisual: String(cls?.statusVisual || 'NORMAL').trim(),
+            medidasLidas: Array.isArray(cls?.medidasLidas) ? cls.medidasLidas.slice(0, 6) : []
+          };
+        }
+      });
+    }
+
     // Salva metadados estruturados para edição e recompilação rápida
     try {
       fs.writeFileSync(
@@ -2150,6 +2174,7 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
           laudo: resultadoIA.laudo,
           laudoOriginalIA: resultadoIA.laudo,
           imagensPaths: imagensOrdenadas,
+          imagensMeta: imagensMetaMap,
           clinicaParceiraId: clinicaParceiraSelecionada?.id || null,
           usuarioId: req.usuario?.id,
           criadoEm: new Date().toISOString()
@@ -2649,12 +2674,23 @@ app.post('/api/ultrassom/recompilar', limiterGeracaoPesada, exigirAutenticacao, 
     const pdfUrl = `/downloads/${safeJobId}/${encodeURIComponent(pdfNome)}?v=${cacheBuster}`;
     const docxUrl = `/downloads/${safeJobId}/${encodeURIComponent(docxNome)}?v=${cacheBuster}`;
 
-    // Atualiza o arquivo de metadados preservando laudoOriginalIA como baseline imutável
+    let imagensMetaExistente = null;
+    if (fs.existsSync(metaPath)) {
+      try {
+        const metaPrev = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (metaPrev && metaPrev.imagensMeta && typeof metaPrev.imagensMeta === 'object') {
+          imagensMetaExistente = metaPrev.imagensMeta;
+        }
+      } catch (_) {}
+    }
+
+    // Atualiza o arquivo de metadados preservando laudoOriginalIA e imagensMeta
     fs.writeFileSync(metaPath, JSON.stringify({
       jobId: safeJobId,
       paciente,
       laudo,
       ...(laudoOriginalIA ? { laudoOriginalIA } : {}),
+      ...(imagensMetaExistente ? { imagensMeta: imagensMetaExistente } : {}),
       estiloOverride: estiloOverrideLimpo,
       imagensPaths: imagensOrdenadas,
       usuarioId: req.usuario?.id,

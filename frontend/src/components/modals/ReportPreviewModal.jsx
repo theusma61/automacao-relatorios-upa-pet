@@ -25,11 +25,16 @@ import {
   User,
   Layers,
   LayoutGrid,
-  Share2
+  Share2,
+  ScanSearch
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { VetaroLogo } from '../icons/VetaroIcons';
 import ShareReportModal from './ShareReportModal';
+import UltrasoundImageAnalyzer, {
+  resolverIndiceOrgaoParaImagem,
+  resolverIndiceImagemParaOrgao
+} from '../UltrasoundImageAnalyzer';
 
 const FONTES_CIRURGIA = [
   'Calibri, sans-serif',
@@ -248,6 +253,9 @@ export default function ReportPreviewModal({
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [mobileStyleSheetOpen, setMobileStyleSheetOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [syncedOrgaoIdx, setSyncedOrgaoIdx] = useState(-1);
+  const orgaoCardRefs = useRef({});
   const shareDocId = report.dbId || initialJobId || (report.id ? String(report.id).replace(/^(ex|cir)-/, '') : '');
   const shareTipo = isSurgery ? 'cirurgia' : 'ultrassom';
   const [isMobileViewport, setIsMobileViewport] = useState(
@@ -861,10 +869,30 @@ export default function ReportPreviewModal({
 
   const isStudioMode = Boolean(newUiEnabled);
   const isStudioMobile = isStudioMode && isMobileViewport;
-  const mostrarCardPaciente = !isStudioMode || studioSection === 'todos' || studioSection === 'paciente';
-  const mostrarCardEstilo = !isStudioMode || studioSection === 'todos' || studioSection === 'estilo';
-  const mostrarCardConteudo = !isStudioMode || studioSection === 'todos' || studioSection === 'conteudo';
-  const mostrarCardFotos = !isSurgery && imagensUltrassom.length > 0 && (!isStudioMode || studioSection === 'todos' || studioSection === 'fotos');
+  const isAnaliseMode = activeTab === 'analise' && !isSurgery && imagensUltrassom.length > 0;
+
+  useEffect(() => {
+    if (!isAnaliseMode) {
+      setSyncedOrgaoIdx(-1);
+      return;
+    }
+    const imgAtual = imagensUltrassom[activeImageIdx];
+    const matchIdx = resolverIndiceOrgaoParaImagem(imgAtual, laudoForm);
+    setSyncedOrgaoIdx(matchIdx);
+    if (matchIdx !== -1 && orgaoCardRefs.current[matchIdx]) {
+      try {
+        orgaoCardRefs.current[matchIdx].scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      } catch (_) {}
+    }
+  }, [isAnaliseMode, activeImageIdx, imagensUltrassom, laudoForm.length]);
+
+  const mostrarCardPaciente = !isAnaliseMode && (!isStudioMode || studioSection === 'todos' || studioSection === 'paciente');
+  const mostrarCardEstilo = !isAnaliseMode && (!isStudioMode || studioSection === 'todos' || studioSection === 'estilo');
+  const mostrarCardConteudo = isAnaliseMode || !isStudioMode || studioSection === 'todos' || studioSection === 'conteudo';
+  const mostrarCardFotos = !isAnaliseMode && !isSurgery && imagensUltrassom.length > 0 && (!isStudioMode || studioSection === 'todos' || studioSection === 'fotos');
 
   const handleMoverFotoUs = (idx, direcao) => {
     const novoIdx = direcao === 'antes' ? idx - 1 : idx + 1;
@@ -1123,7 +1151,7 @@ export default function ReportPreviewModal({
               <button
                 type="button"
                 onClick={() => setActiveTab('split')}
-                title="Modo Lado a Lado"
+                title="Modo Lado a Lado (Texto + PDF)"
                 className={`hidden md:flex px-2.5 py-1.5 rounded-lg text-xs font-extrabold items-center gap-1 transition ${
                   activeTab === 'split'
                     ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
@@ -1133,6 +1161,25 @@ export default function ReportPreviewModal({
                 <Columns className="w-3.5 h-3.5" />
                 <span>Split</span>
               </button>
+
+              {!isSurgery && imagensUltrassom.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudioSection('conteudo');
+                    setActiveTab('analise');
+                  }}
+                  title="Analisar imagens lado a lado com os órgãos"
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition ${
+                    activeTab === 'analise'
+                      ? 'bg-[#00D296] text-[#062E2B] shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ScanSearch className="w-3.5 h-3.5" />
+                  <span>Análise</span>
+                </button>
+              )}
             </div>
 
             {isStudioMode && (
@@ -1258,8 +1305,24 @@ export default function ReportPreviewModal({
             </aside>
           )}
 
-          {/* MODO EDITOR DE TEXTO / ÓRGÃOS (ESQUERDA NO MODO SPLIT) */}
-          {(activeTab === 'edit' || activeTab === 'split') && (
+          {/* MODO ANÁLISE DE IMAGENS (ESQUERDA NO DESKTOP / TOPO NO MOBILE) */}
+          {isAnaliseMode && (
+            <div
+              className={`shrink-0 border-b md:border-b-0 md:border-r ${
+                isStudioMobile ? 'w-full h-[46%]' : 'w-full md:w-[55%] h-[44%] md:h-full'
+              } ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}
+            >
+              <UltrasoundImageAnalyzer
+                imagens={imagensUltrassom}
+                activeIndex={activeImageIdx}
+                onSelectIndex={setActiveImageIdx}
+                darkMode={darkMode}
+              />
+            </div>
+          )}
+
+          {/* MODO EDITOR DE TEXTO / ÓRGÃOS (ESQUERDA NO SPLIT | DIREITA NA ANÁLISE) */}
+          {(activeTab === 'edit' || activeTab === 'split' || isAnaliseMode) && (
             <div
               style={
                 isStudioMode && activeTab === 'split'
@@ -1267,7 +1330,9 @@ export default function ReportPreviewModal({
                   : undefined
               }
               className={`h-full overflow-y-auto p-4 sm:p-6 space-y-4 ${
-                activeTab === 'split'
+                isAnaliseMode
+                  ? 'flex-1 min-w-0'
+                  : activeTab === 'split'
                   ? isStudioMode
                     ? 'shrink-0'
                     : 'w-1/2 border-r border-slate-800/80'
@@ -2460,9 +2525,14 @@ export default function ReportPreviewModal({
                   {laudoForm.map((item, idx) => {
                     const isDragging = draggedOrgaoIdx === idx;
                     const isDragOver = dragOverOrgaoIdx === idx && draggedOrgaoIdx !== null && draggedOrgaoIdx !== idx;
+                    const isSyncedFocus = isAnaliseMode && syncedOrgaoIdx === idx;
+                    const matchedImgIdx = isAnaliseMode ? resolverIndiceImagemParaOrgao(item.orgao, imagensUltrassom) : -1;
                     return (
                     <div
                       key={idx}
+                      ref={(el) => {
+                        orgaoCardRefs.current[idx] = el;
+                      }}
                       draggable
                       onDragStart={(e) => {
                         if (!dragOrgaoPermitidoRef.current) {
@@ -2496,15 +2566,15 @@ export default function ReportPreviewModal({
                         setDragOverOrgaoIdx(null);
                         dragOrgaoPermitidoRef.current = false;
                       }}
-                      className={`p-4 rounded-2xl border transition-all duration-150 group ${
+                      className={`p-4 rounded-2xl border transition-all duration-200 group ${
                         isDragging
                           ? 'opacity-50 scale-[0.99] ring-1 ring-[#00D296]/40 border-[#00D296]/50'
-                          : isDragOver
-                          ? 'border-[#00D296] ring-2 ring-[#00D296]/30 shadow-lg shadow-[#00D296]/10'
+                          : isDragOver || isSyncedFocus
+                          ? 'border-[#00D296] ring-2 ring-[#00D296]/35 shadow-lg shadow-[#00D296]/15'
                           : darkMode
                           ? 'bg-[#0F1C26] border-slate-800/90 hover:border-slate-700'
                           : 'bg-white border-slate-200 hover:border-slate-300'
-                      } ${isDragging || isDragOver ? (darkMode ? 'bg-[#0F1C26]' : 'bg-white') : ''}`}
+                      } ${isDragging || isDragOver || isSyncedFocus ? (darkMode ? 'bg-[#0F1C26]' : 'bg-white') : ''}`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-2.5">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -2534,6 +2604,26 @@ export default function ReportPreviewModal({
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
+                          {isSyncedFocus && (
+                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00D296]/15 text-[#00D296]">
+                              Foto {activeImageIdx + 1}/{imagensUltrassom.length}
+                            </span>
+                          )}
+                          {isAnaliseMode && matchedImgIdx !== -1 && matchedImgIdx !== activeImageIdx && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveImageIdx(matchedImgIdx)}
+                              title={`Ir para a foto de ${item.orgao}`}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-extrabold border inline-flex items-center gap-1 transition ${
+                                darkMode
+                                  ? 'border-[#00D296]/40 bg-[#00D296]/10 text-[#00D296] hover:bg-[#00D296]/20'
+                                  : 'border-teal-300 bg-teal-50 text-[#0D5C56] hover:bg-teal-100'
+                              }`}
+                            >
+                              <Camera className="w-3 h-3" />
+                              <span>Ver foto</span>
+                            </button>
+                          )}
                           <div
                             className={`inline-flex items-center rounded-lg border overflow-hidden ${
                               darkMode

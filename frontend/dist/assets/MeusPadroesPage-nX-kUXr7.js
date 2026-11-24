@@ -1,4 +1,4 @@
-import{c as m,j as e,P as p,d as u,U as g,g as h}from"./index-C4LLsqHn.js";import{T as b,E as f,a as j}from"./EstiloCirurgiaTab-CdLxEFf6.js";import{S as N}from"./stethoscope-CxlTeZXl.js";import{B as v}from"./building-2-BXVEnZLe.js";import{L as w}from"./rotate-ccw-CCihiulx.js";import"./file-up-DGkAHq48.js";import"./upload-CCLBWQLz.js";import"./x-Caem_DoM.js";import"./trash-2-BGNxXMa8.js";import"./check-pbC0T9G2.js";/**
+import{c as m,j as e,P as p,d as u,U as g,g as h}from"./index-Bt-n4CCe.js";import{T as b,E as f,a as j}from"./EstiloCirurgiaTab-B3a7YjC9.js";import{S as N}from"./stethoscope-9w2_VWbS.js";import{B as v}from"./building-2-BjhoSkF8.js";import{L as w}from"./rotate-ccw-D8Ba1tfF.js";import"./file-up-KNEL5pe8.js";import"./upload-UMk_qpr5.js";import"./x-UhHtRsAO.js";import"./trash-2-B4oprnmS.js";import"./check-D8YVbeFC.js";/**
  * @license lucide-react v0.460.0 - ISC
  *
  * This source code is licensed under the ISC license.
