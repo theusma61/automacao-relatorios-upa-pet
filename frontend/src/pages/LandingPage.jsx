@@ -19,7 +19,12 @@ import {
   X,
   FileText,
   Sparkles,
-  Bell
+  Bell,
+  ScanSearch,
+  MessageCircle,
+  Wallet,
+  FileCheck,
+  Eye
 } from 'lucide-react';
 import { VetaroLogo, UltrasoundIcon } from '../components/icons/VetaroIcons';
 
@@ -62,6 +67,18 @@ export default function LandingPage({
     {
       q: 'Por quanto tempo os laudos gerados ficam salvos?',
       a: 'Seus arquivos, imagens e documentos em Word (.docx) e PDF ficam salvos com segurança em nuvem por no mínimo 30 dias (ou permanentemente no plano Especialista Pro), permitindo consultar, reenviar ou revisar sem precisar reanalisar do zero.'
+    },
+    {
+      q: 'Atendo em várias clínicas como volante. Posso usar logos diferentes e controlar quanto cada uma me deve?',
+      a: 'Sim! No Modo Volante você cadastra suas clínicas parceiras com valores padrão de ultrassom e cirurgia, percentual de repasse, WhatsApp da recepção e até a logo própria de cada clínica para sair no cabeçalho dos laudos dela. No fim do mês, gera o Extrato de Cobrança em PDF já com sua chave Pix.'
+    },
+    {
+      q: 'O tutor precisa baixar aplicativo ou criar conta para abrir o laudo pelo WhatsApp?',
+      a: 'Não! Cada laudo gera um link privado (não indexado em buscadores, seguindo boas práticas da LGPD) que abre direto no celular do tutor ou da clínica solicitante, com visualização e download do PDF — e você ainda recebe o aviso de quando o documento foi visualizado.'
+    },
+    {
+      q: 'O resumo para o tutor feito por IA dá diagnóstico ou receita?',
+      a: 'Nunca. O resumo é gerado a partir do laudo já revisado por você, em linguagem acolhedora e simples, sempre editável antes do envio e reforçando que a conduta pertence exclusivamente ao médico veterinário responsável.'
     },
     {
       q: 'Posso cancelar a assinatura a qualquer momento?',
@@ -170,10 +187,10 @@ export default function LandingPage({
 
               <div className="space-y-3 max-w-xl">
                 <p className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-200 leading-snug">
-                  Gere laudos de ultrassom e relatórios cirúrgicos de alta precisão em segundos usando IA.
+                  Da captura do ultrassom ao WhatsApp do tutor — com o seu padrão visual e o financeiro das clínicas parceiras já organizado.
                 </p>
                 <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                  A Vetaro aprende o seu padrão de escrita e entrega o documento pronto no seu estilo.
+                  Gere laudos de ultrassom e relatórios cirúrgicos em segundos, revise no Vetaro Studio com sincronização imagem-órgão e feche o mês sem planilhas.
                 </p>
               </div>
 
@@ -248,90 +265,105 @@ export default function LandingPage({
                   </div>
                 </div>
 
-                {/* Saudação ao Médico */}
-                <div className="mt-5 mb-6">
-                  <h3 className="text-lg font-extrabold tracking-tight">Olá, Dra. Mariana!</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Tudo pronto para otimizar seu trabalho hoje?
-                  </p>
+                {/* Barra de Modos Centralizada do Vetaro Studio */}
+                <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1 p-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0A141D] text-[10px] font-extrabold">
+                    <span className="px-2 py-1 rounded-lg text-slate-400">PDF</span>
+                    <span className="px-2 py-1 rounded-lg text-slate-400">Split</span>
+                    <span className="px-2.5 py-1 rounded-lg bg-[#00D296] text-[#052925] inline-flex items-center gap-1">
+                      <ScanSearch className="w-3 h-3" /> Análise
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-[#00D296]/15 text-[#00D296] inline-flex items-center gap-1">
+                    <MessageCircle className="w-3 h-3" /> WhatsApp 1 clique
+                  </span>
                 </div>
 
-                {/* Estrutura Interna: Mini Sidebar + 2 Cards de Ação */}
-                <div className="grid grid-cols-12 gap-3.5">
-                  {/* Mini Sidebar Lateral */}
-                  <div className="col-span-4 space-y-1 pr-1 border-r border-slate-100 dark:border-slate-800/80">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#00D296]/15 text-[#00D296] text-xs font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#00D296]" />
-                      <span>Início</span>
+                {/* Preview do Modo Análise de Imagens (Esquerda: Ultrassom + Filmstrip | Direita: Órgão em Foco) */}
+                <div className="grid grid-cols-12 gap-3">
+                  {/* Palco de Ultrassom + Miniaturas */}
+                  <div className="col-span-7 flex flex-col gap-2">
+                    <div className="relative rounded-2xl bg-[#050B11] border border-slate-800 p-3 h-40 flex flex-col justify-between overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-[#00D296] text-[#052925]">
+                          BEXIGA • Foto 4/12
+                        </span>
+                        <span className="text-[9px] font-mono text-slate-400">1.5x · 0,15 cm</span>
+                      </div>
+                      {/* Leque estilizado de ultrassom */}
+                      <div className="relative flex-1 flex items-center justify-center">
+                        <div className="w-28 h-20 rounded-b-full bg-gradient-to-b from-slate-600/35 via-slate-800/70 to-black border-t border-slate-500/40 flex items-center justify-center">
+                          <div className="w-16 h-11 rounded-full bg-black/90 border border-slate-500/50 shadow-inner relative">
+                            <span className="absolute inset-x-2 top-1/2 border-t border-dashed border-[#00D296]/80" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 text-xs font-medium">
-                      <UltrasoundIcon className="w-3.5 h-3.5" />
-                      <span className="truncate">Ultrassom</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 text-xs font-medium">
-                      <FileText className="w-3.5 h-3.5" />
-                      <span className="truncate">Relatório</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 text-xs font-medium">
-                      <span className="text-[11px]">⚙</span>
-                      <span className="truncate">Configurações</span>
+                    {/* Filmstrip */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {['1. FIG', '2. VB', '3. RE', '4. BEX'].map((tag, i) => (
+                        <div
+                          key={tag}
+                          className={`rounded-lg py-1.5 text-center text-[9px] font-extrabold border ${
+                            i === 3
+                              ? 'bg-[#050B11] border-[#00D296] text-[#00D296] ring-1 ring-[#00D296]/40'
+                              : 'bg-[#08111A] border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {tag}
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  {/* 2 Cards de Ação Rápidos (Ultrassom e Relatório) */}
-                  <div className="col-span-8 space-y-3">
-                    {/* Card Ultrassom */}
+                  {/* Painel Lateral de Órgãos Sincronizado */}
+                  <div className="col-span-5 space-y-2">
                     <div
-                      className={`p-3.5 rounded-2xl border transition ${
-                        darkMode
-                          ? 'bg-[#132530] border-teal-500/20'
-                          : 'bg-gradient-to-r from-[#E4F8F2] to-[#D5F4EC] border-[#C5EFE3]'
+                      className={`p-2.5 rounded-xl border ${
+                        darkMode ? 'bg-[#0C1720] border-slate-800' : 'bg-slate-50 border-slate-200'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="w-7 h-7 rounded-xl bg-[#00D296]/20 text-[#00D296] flex items-center justify-center">
-                          <UltrasoundIcon className="w-4 h-4" />
-                        </div>
-                        <h4 className="text-xs font-extrabold">Ultrassom</h4>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug line-clamp-2">
-                        Envie suas imagens e receba um laudo completo com IA.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={onStartFree}
-                        className="mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold bg-[#0D5C56] text-white dark:bg-[#00D296] dark:text-[#062E2B] inline-flex items-center gap-1 shadow-xs"
-                      >
-                        Começar agora →
-                      </button>
+                      <p className="text-[9px] font-extrabold text-slate-400 uppercase">1. Fígado</p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">Dimensões e ecogenicidade...</p>
                     </div>
 
-                    {/* Card Relatório Cirúrgico */}
                     <div
-                      className={`p-3.5 rounded-2xl border transition ${
-                        darkMode
-                          ? 'bg-[#13232F] border-teal-500/20'
-                          : 'bg-gradient-to-r from-[#EAF6F6] to-[#DDF1F0] border-[#D0EAE8]'
+                      className={`p-2.5 rounded-xl border-2 border-[#00D296] shadow-md shadow-[#00D296]/15 ${
+                        darkMode ? 'bg-[#0C1720]' : 'bg-white'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="w-7 h-7 rounded-xl bg-[#00D296]/20 text-[#00D296] flex items-center justify-center">
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <h4 className="text-xs font-extrabold">Relatório</h4>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <p className="text-[9px] font-extrabold text-[#00D296] uppercase">4. Bexiga</p>
+                        <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded-full bg-[#00D296]/15 text-[#00D296]">
+                          Em foco
+                        </span>
                       </div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug line-clamp-2">
-                        Envie seu documento e gere um relatório personalizado.
+                      <p className="text-[10px] leading-snug text-slate-600 dark:text-slate-200">
+                        Parede normoespessa (0,15 cm), conteúdo anecoico sem sedimentos.
                       </p>
-                      <button
-                        type="button"
-                        onClick={onStartFree}
-                        className="mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold bg-[#0D5C56] text-white dark:bg-[#00D296] dark:text-[#062E2B] inline-flex items-center gap-1 shadow-xs"
-                      >
-                        Começar agora →
-                      </button>
+                    </div>
+
+                    <div
+                      className={`p-2.5 rounded-xl border ${
+                        darkMode ? 'bg-[#0C1720] border-slate-800' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <p className="text-[9px] font-extrabold text-slate-400 uppercase">5. Rins</p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">Relação corticomedular...</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Rodapé de Prova de Valor do Mockup (Entrega + Modo Volante) */}
+                <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold">
+                  <span className="inline-flex items-center gap-1.5 text-[#00D296]">
+                    <Eye className="w-3.5 h-3.5" />
+                    Tutor visualizou o laudo às 15:42
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-slate-400">
+                    <Wallet className="w-3.5 h-3.5 text-[#00D296]" />
+                    Pet Vida · R$ 180,00 lançado
+                  </span>
                 </div>
               </div>
             </div>
@@ -356,63 +388,107 @@ export default function LandingPage({
             </h2>
           </div>
 
-          {/* Grid de 3 Cards de Diferenciais */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-            {/* Card 1: Adaptação de Padrão */}
-            <div
-              className={`rounded-3xl border p-7 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-lg ${
-                darkMode
-                  ? 'bg-[#0F1C26] border-slate-800 hover:border-teal-500/30'
-                  : 'bg-white border-slate-200/90 hover:border-[#00D296]/50'
-              }`}
-            >
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-[#D4F7EC] dark:bg-[#0E3A38] text-[#0D5C56] dark:text-[#00D296] flex items-center justify-center mb-6">
-                  <Edit3 className="w-6 h-6 stroke-[2]" />
+          {/* Grid de 6 Cards de Diferenciais */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              {
+                icon: ScanSearch,
+                tag: 'Novo',
+                title: 'Vetaro Studio & Modo Análise',
+                desc: 'Revise cada captura ampliada (zoom até 3x, brilho e contraste) com miniaturas embaixo e caixas de órgãos ao lado — ao passar para a foto de um órgão, o texto dele entra em foco automaticamente.'
+              },
+              {
+                icon: MessageCircle,
+                tag: 'Novo',
+                title: 'Entrega WhatsApp + Resumo ao Tutor',
+                desc: 'Envie o laudo digital em 1 clique com link privado (sem login), QR Code opcional no rodapé, aviso de visualização e resumo acolhedor em linguagem simples gerado pela IA.'
+              },
+              {
+                icon: Wallet,
+                tag: 'Novo',
+                title: 'Modo Volante & Financeiro',
+                desc: 'Cadastre clínicas parceiras (até com logo própria no cabeçalho), controle quem deve e repasses, dê baixa em lote e emita Extrato de Cobrança em PDF já com sua chave Pix.'
+              },
+              {
+                icon: Edit3,
+                title: 'Clonagem de Padrão por PDF',
+                desc: 'Suba de 1 a 10 laudos antigos e a Vetaro aprende automaticamente sua ordem de órgãos, vocabulário, fontes, cores, cabeçalho e estilo de conclusão.'
+              },
+              {
+                icon: InfinityIcon,
+                title: 'Relatórios Cirúrgicos Ilimitados',
+                desc: 'Crie relatórios cirúrgicos completos a partir de áudio, texto livre, Word ou Pages, com modelos institucionais prontos e personalizáveis sem limite mensal.'
+              },
+              {
+                icon: FileCheck,
+                title: 'PDF Oficial + Word Editável',
+                desc: 'Todos os documentos saem prontos em PDF A4 diagramado e em Word (.docx) editável, com histórico seguro em nuvem para revisar ou reenviar quando precisar.'
+              }
+            ].map((feat) => {
+              const Icon = feat.icon;
+              return (
+                <div
+                  key={feat.title}
+                  className={`rounded-3xl border p-7 flex flex-col justify-between transition-all duration-300 hover:shadow-lg ${
+                    darkMode
+                      ? 'bg-[#0F1C26] border-slate-800 hover:border-teal-500/40'
+                      : 'bg-white border-slate-200/90 hover:border-[#00D296]/60'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="w-12 h-12 rounded-2xl bg-[#D4F7EC] dark:bg-[#0E3A38] text-[#0D5C56] dark:text-[#00D296] flex items-center justify-center">
+                        <Icon className="w-6 h-6 stroke-[2]" />
+                      </div>
+                      {feat.tag && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#00D296]/15 text-[#00D296]">
+                          {feat.tag}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-lg font-extrabold mb-2.5">{feat.title}</h3>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                      {feat.desc}
+                    </p>
+                  </div>
                 </div>
-                <h3 className="text-lg font-extrabold mb-3">Adaptação de Padrão</h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  A Vetaro identifica automaticamente o estilo, os termos técnicos e a estrutura de laudo que você já usa, garantindo que o texto final pareça ter sido escrito por você mesmo.
-                </p>
-              </div>
-            </div>
+              );
+            })}
+          </div>
 
-            {/* Card 2: Relatórios Cirúrgicos Ilimitados */}
-            <div
-              className={`rounded-3xl border p-7 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-lg ${
-                darkMode
-                  ? 'bg-[#0F1C26] border-slate-800 hover:border-teal-500/30'
-                  : 'bg-white border-slate-200/90 hover:border-[#00D296]/50'
-              }`}
-            >
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-[#D4F7EC] dark:bg-[#0E3A38] text-[#0D5C56] dark:text-[#00D296] flex items-center justify-center mb-6">
-                  <InfinityIcon className="w-6 h-6 stroke-[2]" />
-                </div>
-                <h3 className="text-lg font-extrabold mb-3">Relatórios Cirúrgicos Ilimitados</h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Esqueça digitações repetitivas. Crie e personalize relatórios cirúrgicos sem limites de quantidade a cada mês, com áudio do WhatsApp ou ficha resumida.
-                </p>
-              </div>
+          {/* Faixa: Do exame ao recebimento em 4 passos */}
+          <div
+            className={`mt-14 rounded-3xl border p-6 sm:p-8 ${
+              darkMode
+                ? 'bg-[#0C1720] border-slate-800'
+                : 'bg-white border-slate-200/90'
+            }`}
+          >
+            <div className="text-center mb-7">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-[#00D296] mb-1">
+                Fluxo completo ponta a ponta
+              </p>
+              <h3 className="text-xl sm:text-2xl font-extrabold">
+                Do exame ao recebimento em 4 passos
+              </h3>
             </div>
-
-            {/* Card 3: Histórico Seguro por 30 Dias */}
-            <div
-              className={`rounded-3xl border p-7 sm:p-8 flex flex-col justify-between transition-all duration-300 hover:shadow-lg ${
-                darkMode
-                  ? 'bg-[#0F1C26] border-slate-800 hover:border-teal-500/30'
-                  : 'bg-white border-slate-200/90 hover:border-[#00D296]/50'
-              }`}
-            >
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-[#D4F7EC] dark:bg-[#0E3A38] text-[#0D5C56] dark:text-[#00D296] flex items-center justify-center mb-6">
-                  <Cloud className="w-6 h-6 stroke-[2]" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {[
+                { step: '01', title: 'Suba fotos ou áudio', desc: 'Envie as capturas do ultrassom ou o áudio da cirurgia e selecione a clínica parceira.' },
+                { step: '02', title: 'Revise no Vetaro Studio', desc: 'Confira as imagens lado a lado com o texto sincronizado por órgão e o PDF ao vivo.' },
+                { step: '03', title: 'Envie no WhatsApp', desc: 'Compartilhe o link seguro com resumo empático ao tutor e acompanhe a visualização.' },
+                { step: '04', title: 'Feche o financeiro', desc: 'Acompanhe recebíveis e repasses e mande o Extrato de Cobrança em PDF com Pix.' }
+              ].map((s) => (
+                <div key={s.step} className="space-y-1.5">
+                  <span className="inline-block text-xs font-extrabold text-[#00D296] font-mono">
+                    {s.step}
+                  </span>
+                  <h4 className="text-sm font-extrabold">{s.title}</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {s.desc}
+                  </p>
                 </div>
-                <h3 className="text-lg font-extrabold mb-3">Histórico Seguro por 30 Dias</h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Seus arquivos e laudos gerados ficam salvos e disponíveis por 30 dias na nuvem. Se precisar revisar ou reenviar para o tutor, não é preciso regerar do zero.
-                </p>
-              </div>
+              ))}
             </div>
           </div>
         </div>
@@ -500,18 +576,22 @@ export default function LandingPage({
                     )}
                   </div>
 
-                  <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300 font-medium">
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Até 40 laudos de ultrassom/mês</span>
+                      <span>Até 40 laudos de ultrassom/mês + PDF e Word</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Histórico salvo por 30 dias</span>
+                      <span>Vetaro Studio (Modo Análise + Split-View)</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Relatórios cirúrgicos ilimitados</span>
+                      <span>Entrega WhatsApp + Resumo ao Tutor (IA)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
+                      <span>Modo Volante (até 3 clínicas parceiras + CSV)</span>
                     </li>
                   </ul>
                 </div>
@@ -559,18 +639,22 @@ export default function LandingPage({
                     )}
                   </div>
 
-                  <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300 font-medium">
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Até 150 laudos de ultrassom/mês</span>
+                      <span>Até 150 laudos/mês + Cirúrgicos ilimitados</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Histórico em nuvem por 30 dias</span>
+                      <span>Clínicas parceiras ilimitadas com logo própria</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Relatórios cirúrgicos ilimitados e IA personalizada</span>
+                      <span>Extrato de Cobrança em PDF com Pix + baixa em lote</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
+                      <span>Clonagem de padrão por PDF + Entrega WhatsApp</span>
                     </li>
                   </ul>
                 </div>
@@ -613,18 +697,22 @@ export default function LandingPage({
                     )}
                   </div>
 
-                  <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300 font-medium">
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Até 350 laudos de ultrassom/mês</span>
+                      <span>Até 350 laudos/mês + Cirúrgicos ilimitados</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Até 5 veterinários (Multi-usuário)</span>
+                      <span>Tudo do Pro + até 5 veterinários (Multi-usuário)</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
-                      <span>Logomarca e assinatura individuais</span>
+                      <span>Logomarca, CRMV e assinatura individuais</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-[#00D296] shrink-0 mt-0.5 stroke-[2.5]" />
+                      <span>Onboarding assistido para a equipe</span>
                     </li>
                   </ul>
                 </div>
