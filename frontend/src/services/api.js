@@ -140,6 +140,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usarHydrogenPago: Boolean(usarHydrogenPago) })
     }),
+  // Modo Simulação Local (0 tokens — só ativo em localhost + ALLOW_LOCAL_AI_MOCK=true)
+  getDevIaMock: () => requestJson('/api/dev/ia-mock'),
+  setDevIaMock: (usarMockLocal) =>
+    requestJson('/api/dev/ia-mock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usarMockLocal: Boolean(usarMockLocal) })
+    }),
   updateAdminUserPlano: (email, plano) =>
     requestJson('/api/admin/usuarios/plano', {
       method: 'POST',

@@ -8,23 +8,76 @@ const IA_RUNTIME_CONFIG_PATH = path.join(
   'ia_runtime_config.json'
 );
 
+const LOCAL_HOSTS_PERMITIDOS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function extrairHostnameSeguro(valor) {
+  if (!valor) return '';
+  const bruto = String(valor).split(',')[0].trim().toLowerCase();
+  if (!bruto) return '';
+  try {
+    const comProto = /^https?:\/\//i.test(bruto) ? bruto : `http://${bruto}`;
+    return new URL(comProto).hostname.toLowerCase();
+  } catch (_) {
+    return bruto.replace(/:\d+$/, '').toLowerCase();
+  }
+}
+
+/**
+ * Trava dupla fail-closed: o modo simulação (0 tokens) SÓ pode ser ativado se:
+ * 1) ALLOW_LOCAL_AI_MOCK=true estiver explícito no ambiente local;
+ * 2) APP_BASE_URL (se definido) apontar exclusivamente para localhost/127.0.0.1;
+ * 3) O Host da requisição HTTP (quando fornecido) for estritamente localhost/127.0.0.1/::1.
+ */
+function isAmbienteLocalSeguro(req = null) {
+  if (String(process.env.ALLOW_LOCAL_AI_MOCK || '').trim().toLowerCase() !== 'true') {
+    return false;
+  }
+  const appBaseUrl = String(process.env.APP_BASE_URL || '').trim();
+  if (appBaseUrl) {
+    const baseHost = extrairHostnameSeguro(appBaseUrl);
+    if (!LOCAL_HOSTS_PERMITIDOS.has(baseHost)) {
+      return false;
+    }
+  }
+  if (req && req.headers) {
+    const reqHost = extrairHostnameSeguro(req.headers['x-forwarded-host'] || req.headers.host || '');
+    if (!LOCAL_HOSTS_PERMITIDOS.has(reqHost)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function obterConfigIaRuntime() {
   const defaultEnv = String(process.env.GEMINI_USE_HYDROGEN_PAID || 'true').trim().toLowerCase() !== 'false';
+  const localPermitido = isAmbienteLocalSeguro();
+  let usarHydrogenPago = defaultEnv;
+  let usarMockLocal = localPermitido;
   try {
     if (fs.existsSync(IA_RUNTIME_CONFIG_PATH)) {
       const parsed = JSON.parse(fs.readFileSync(IA_RUNTIME_CONFIG_PATH, 'utf8'));
       if (typeof parsed.usarHydrogenPago === 'boolean') {
-        return { usarHydrogenPago: parsed.usarHydrogenPago };
+        usarHydrogenPago = parsed.usarHydrogenPago;
+      }
+      if (localPermitido && typeof parsed.usarMockLocal === 'boolean') {
+        usarMockLocal = parsed.usarMockLocal;
       }
     }
   } catch (_) {}
-  return { usarHydrogenPago: defaultEnv };
+  return {
+    usarHydrogenPago,
+    usarMockLocal: localPermitido ? Boolean(usarMockLocal) : false
+  };
 }
 
 function salvarConfigIaRuntime(dados = {}) {
   const atual = obterConfigIaRuntime();
+  const localPermitido = isAmbienteLocalSeguro();
   const proximo = {
     usarHydrogenPago: typeof dados.usarHydrogenPago === 'boolean' ? dados.usarHydrogenPago : atual.usarHydrogenPago,
+    usarMockLocal: localPermitido
+      ? (typeof dados.usarMockLocal === 'boolean' ? dados.usarMockLocal : atual.usarMockLocal)
+      : false,
     atualizadoEm: new Date().toISOString()
   };
   try {
@@ -33,6 +86,99 @@ function salvarConfigIaRuntime(dados = {}) {
     fs.writeFileSync(IA_RUNTIME_CONFIG_PATH, JSON.stringify(proximo, null, 2), 'utf8');
   } catch (_) {}
   return proximo;
+}
+
+function deveUsarMockLocal(req = null) {
+  if (!isAmbienteLocalSeguro(req)) return false;
+  return Boolean(obterConfigIaRuntime().usarMockLocal);
+}
+
+function gerarAnaliseUltrassomMock(caminhoImagens = [], opcoes = {}) {
+  const hoje = new Date();
+  const dataBr = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+  const perfilLaudo = opcoes.perfilLaudo || null;
+  const usuario = opcoes.usuario || {};
+  const imagensQtd = Array.isArray(caminhoImagens) ? caminhoImagens.length : 0;
+
+  const paciente = sanitizarDadosPaciente({
+    nome: 'Thor (Teste Local)',
+    tutor: 'Tutor Simulado',
+    especie: 'Canina',
+    sexo: 'Macho',
+    idade: '6 anos',
+    data: dataBr
+  }, usuario.nomeClinica || '');
+
+  const laudoBase = [
+    {
+      orgao: 'BEXIGA URINÁRIA',
+      texto: 'Moderadamente repleta, parede fina e regular, conteúdo anecogênico homogêneo, sem evidência de cálculos ou sedimentos.',
+      diagDif: ''
+    },
+    {
+      orgao: 'RINS',
+      texto: 'Simétricos, contornos regulares, relação e definição corticomedular preservadas, sem sinais de dilatação piélica ou litíase.',
+      diagDif: ''
+    },
+    {
+      orgao: 'BAÇO',
+      texto: 'Dimensões discretamente aumentadas, contornos regulares e parênquima homogêneo, com ecogenicidade preservada.',
+      diagDif: 'Esplenomegalia discreta / hiperplasia reacional.'
+    },
+    {
+      orgao: 'FÍGADO',
+      texto: 'Dimensões preservadas, bordos regulares, parênquima homogêneo e ecogenicidade habitual.',
+      diagDif: ''
+    },
+    {
+      orgao: 'VESÍCULA BILIAR',
+      texto: 'Moderadamente repleta, parede fina e lisa, apresentando discreta quantidade de conteúdo ecogênico em porção gravidade-dependente (lama biliar).',
+      diagDif: 'Lama biliar / colestase discreta.'
+    },
+    {
+      orgao: 'ESTÔMAGO',
+      texto: 'Moderadamente repleto por conteúdo gasoso e alimentar, estratificação parietal preservada.',
+      diagDif: ''
+    },
+    {
+      orgao: 'ALÇAS INTESTINAIS',
+      texto: 'Estratificação parietal preservada, lúmen com conteúdo mucoso/gasoso habitual e peristaltismo evolutivo mantido.',
+      diagDif: ''
+    },
+    {
+      orgao: 'CAVIDADE ABDOMINAL',
+      texto: 'Ausência de líquido livre, sem alterações evidentes em linfonodos abdominais.',
+      diagDif: ''
+    },
+    {
+      orgao: 'CONSIDERAÇÕES',
+      texto: '[MODO SIMULAÇÃO LOCAL — 0 TOKENS] Laudo gerado localmente para testes de layout, PDF, DOCX e Vetaro Studio sem consumo da API Gemini.',
+      diagDif: ''
+    }
+  ];
+
+  const ordemPreferida = Array.isArray(perfilLaudo?.ordemOrgaos) && perfilLaudo.ordemOrgaos.length > 0
+    ? perfilLaudo.ordemOrgaos
+    : null;
+  const laudoFinal = ordemPreferida
+    ? reconciliarLaudoComOrdemOrgaos(laudoBase, ordemPreferida, perfilLaudo?.frasesNormalidade || {})
+    : laudoBase;
+
+  return {
+    paciente,
+    laudo: laudoFinal,
+    tokens: {
+      modelo: 'mock-local',
+      chave: 'local-0-tokens',
+      imagensQtd,
+      promptTokens: 0,
+      candidatesTokens: 0,
+      thoughtsTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      custoEstimadoUsd: 0
+    }
+  };
 }
 
 function calcularResumoTokens(usageMetadata, nomeModelo, rotuloChave, imagensQtd) {
@@ -409,6 +555,10 @@ ${obterGuiaSemiologiaUltrassom()}
 }
 
 async function analisarExameComIA(caminhoImagens, apiKey, opcoes = {}) {
+  if (opcoes?.usarMockLocal === true && isAmbienteLocalSeguro(opcoes.req || null)) {
+    console.log('🧪 [MODO LOCAL - 0 TOKENS] Gerando laudo de ultrassom simulado sem chamar API Gemini.');
+    return gerarAnaliseUltrassomMock(caminhoImagens, opcoes);
+  }
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosCandidatos = [
     'gemini-3.8-flash'
@@ -898,6 +1048,9 @@ module.exports = {
   analisarExameComIA,
   obterConfigIaRuntime,
   salvarConfigIaRuntime,
+  isAmbienteLocalSeguro,
+  deveUsarMockLocal,
+  gerarAnaliseUltrassomMock,
   construirPromptClonado,
   construirPromptPadraoVetaro,
   ordenarImagensCanonicamente,

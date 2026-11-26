@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { obterTextoModelosParaPrompt } = require('./gerenciador_modelos');
+const { obterTextoModelosParaPrompt, inferirModeloPorTexto } = require('./gerenciador_modelos');
+const { isAmbienteLocalSeguro } = require('./analisador_ia');
 const { extrairConteudoPages } = require('./leitor_pages');
 const { extrairTextoDocx } = require('./leitor_docx');
 
@@ -38,6 +39,41 @@ function obterMimeTypeImagem(caminhoArquivo) {
 }
 
 async function analisarCirurgiaComIA(arquivos, apiKey, opcoes = {}) {
+  if (opcoes?.usarMockLocal === true && isAmbienteLocalSeguro(opcoes.req || null)) {
+    console.log('🧪 [MODO LOCAL - 0 TOKENS] Gerando relatório cirúrgico simulado sem chamar API Gemini.');
+    const dataHojeMock = formatarDataHoje();
+    const textoBase = String(opcoes.textoDigitado || '').trim();
+    const modeloInferido = textoBase ? await inferirModeloPorTexto(textoBase, opcoes.usuario?.id || null).catch(() => null) : null;
+    return {
+      paciente: {
+        nome: 'Mel (Teste Local)',
+        especie: 'Canina',
+        raca: 'SRD',
+        sexo: 'Fêmea',
+        idade: '4 anos',
+        peso: '12 kg',
+        tutor: 'Tutor Simulado',
+        data: dataHojeMock
+      },
+      cirurgia: {
+        procedimento: modeloInferido?.procedimento || 'Ovariossalpingohisterectomia (OSH) Eletiva — Simulação Local',
+        diagnosticoPreCirurgico: modeloInferido?.diagnosticoPreCirurgico || 'Indicação cirúrgica eletiva (teste local sem gasto de tokens).',
+        descricaoProcedimento:
+          textoBase ||
+          modeloInferido?.descricaoProcedimento ||
+          'Paciente posicionada em decúbito dorsal após preparo anestésico e antissepsia cirúrgica rigorosa em três ciclos com clorexidina degermante e alcoólica. Realizada abordagem cirúrgica conforme técnica padrão, hemostasia revisada sem intercorrências e síntese anatômica por planos.',
+        evolucaoConsideracoes:
+          modeloInferido?.evolucaoConsideracoes ||
+          '[MODO SIMULAÇÃO LOCAL — 0 TOKENS] Recuperação anestésica estável, sem intercorrências transoperatórias.'
+      },
+      modeloUtilizado: modeloInferido?.nome || 'Simulação Local (0 tokens)',
+      tokens: {
+        modelo: 'mock-local',
+        totalTokens: 0,
+        custoEstimadoUsd: 0
+      }
+    };
+  }
   const genAI = new GoogleGenerativeAI(apiKey);
   const usuario = opcoes.usuario || null;
   const modelosBiblioteca = await obterTextoModelosParaPrompt(usuario?.id || null);

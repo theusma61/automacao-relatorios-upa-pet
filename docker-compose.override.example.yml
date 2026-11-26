@@ -1,0 +1,8 @@
+# Copie este arquivo para `docker-compose.override.yml` na sua máquina local.
+# O arquivo `docker-compose.override.yml` está no .gitignore e NUNCA vai para a VPS.
+# Quando presente localmente, ativa o toggle "IA Simulada (0 tokens) / IA Real" no topo do Vetaro.
+
+services:
+  app:
+    environment:
+      - ALLOW_LOCAL_AI_MOCK=true

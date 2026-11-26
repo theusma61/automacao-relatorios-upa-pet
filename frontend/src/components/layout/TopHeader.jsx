@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, ChevronDown } from 'lucide-react';
+import { Bell, ChevronDown, FlaskConical, Sparkles } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
 
 export default function TopHeader({
@@ -16,6 +16,8 @@ export default function TopHeader({
   onBellClick,
   newUiEnabled = false,
   onToggleNewUi,
+  localMockState = null,
+  onToggleLocalMock,
   compact = false
 }) {
   return (
@@ -34,6 +36,40 @@ export default function TopHeader({
       </div>
 
       <div className="flex items-center gap-3 sm:gap-4 relative">
+        {localMockState?.disponivel && onToggleLocalMock && (
+          <button
+            type="button"
+            disabled={localMockState.salvando}
+            onClick={onToggleLocalMock}
+            title={
+              localMockState.ativo
+                ? 'Modo Simulação Local ativo (0 tokens). Clique para ativar chamadas reais à IA Gemini.'
+                : 'IA Real Gemini ativa neste ambiente local (consome tokens). Clique para voltar à simulação de 0 tokens.'
+            }
+            className={`px-3 py-1.5 rounded-full border text-xs font-extrabold inline-flex items-center gap-1.5 transition shrink-0 ${
+              localMockState.ativo
+                ? darkMode
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                : darkMode
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
+                : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            {localMockState.ativo ? (
+              <>
+                <FlaskConical className="w-3.5 h-3.5" />
+                <span>Local · IA Simulada (0 tokens)</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Local · IA Real (Gemini)</span>
+              </>
+            )}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onBellClick}

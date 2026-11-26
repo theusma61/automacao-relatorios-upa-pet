@@ -142,7 +142,17 @@ REGRAS OBRIGATÓRIAS:
 7. Não inclua links, saudações genéricas como "Olá, [Nome]" (o aplicativo já monta a saudação) nem formatação Markdown com asteriscos excessivos. Retorne apenas o texto limpo.`;
 }
 
-async function gerarResumoTutorIA({ tipo = 'ultrassom', paciente = {}, laudo = [], cirurgia = null, apiKey = '' }) {
+async function gerarResumoTutorIA({ tipo = 'ultrassom', paciente = {}, laudo = [], cirurgia = null, apiKey = '', usarMockLocal = false, req = null }) {
+  if (usarMockLocal === true) {
+    const { isAmbienteLocalSeguro } = require('./analisador_ia');
+    if (isAmbienteLocalSeguro(req)) {
+      const nomePet = paciente?.nome || 'seu pet';
+      const resumoSimulado = tipo === 'cirurgia'
+        ? `[Simulação Local - 0 tokens] O procedimento cirúrgico de ${nomePet} foi concluído com sucesso e sem intercorrências. Siga corretamente as medicações prescritas, mantenha o colar elizabetano e retorne para revisão dos pontos conforme orientação do veterinário.`
+        : `[Simulação Local - 0 tokens] O exame de ultrassom de ${nomePet} foi concluído e o laudo completo já está disponível neste link. Converse com o médico-veterinário responsável para alinhar os próximos passos e eventuais retornos de acompanhamento.`;
+      return { resumo: resumoSimulado, modelo: 'mock-local' };
+    }
+  }
   const chaveGratuita = (apiKey || process.env.GEMINI_API_KEY || '').trim();
   const chavePaga = (process.env.GEMINI_API_KEY_PAID || process.env.GEMINI_PAID_API_KEY || process.env.GEMINI_API_KEY_PAGA || '').trim();
 

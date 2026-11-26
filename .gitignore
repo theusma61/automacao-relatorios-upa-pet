@@ -32,3 +32,6 @@ upa_pet.db
 *.db
 *.db-wal
 *.db-shm
+
+# Overrides locais de desenvolvimento (NUNCA subir para VPS)
+docker-compose.override.yml

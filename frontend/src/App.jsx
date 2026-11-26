@@ -87,6 +87,11 @@ export default function App() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [shareReportTarget, setShareReportTarget] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [localMockState, setLocalMockState] = useState({
+    disponivel: false,
+    ativo: false,
+    salvando: false
+  });
 
   const [layoutConfig, setLayoutConfig] = useState({
     headerStyle: 'Logotipo + CRMV Centralizado',
@@ -234,9 +239,42 @@ export default function App() {
     }
   }, [usuario, loadingMoreHistory, historyHasMore, historyOffset, mapearHistoricoServidor, showToast]);
 
+  const handleToggleLocalMock = useCallback(async () => {
+    if (!localMockState.disponivel || localMockState.salvando) return;
+    const proximo = !localMockState.ativo;
+    setLocalMockState((prev) => ({ ...prev, salvando: true }));
+    try {
+      const res = await api.setDevIaMock(proximo);
+      const ativo = Boolean(res?.usarMockLocal);
+      setLocalMockState({ disponivel: Boolean(res?.mockLocalDisponivel), ativo, salvando: false });
+      showToast(
+        ativo
+          ? '🧪 Modo Simulação Local ativado (0 tokens Gemini).'
+          : '⚡ IA Real Gemini ativada no ambiente local (consumindo tokens).'
+      );
+    } catch (err) {
+      setLocalMockState((prev) => ({ ...prev, salvando: false }));
+      showToast(err?.message || 'Não foi possível alternar o modo local de IA.');
+    }
+  }, [localMockState.disponivel, localMockState.salvando, localMockState.ativo, showToast]);
+
   useEffect(() => {
     if (usuario) {
       carregarHistoricoServidor();
+      api
+        .getDevIaMock()
+        .then((res) => {
+          if (res?.mockLocalDisponivel) {
+            setLocalMockState({
+              disponivel: true,
+              ativo: Boolean(res.usarMockLocal),
+              salvando: false
+            });
+          } else {
+            setLocalMockState({ disponivel: false, ativo: false, salvando: false });
+          }
+        })
+        .catch(() => {});
       try {
         const key = `vetaro_new_ui_v2_${usuario.id || usuario.email || 'default'}`;
         const savedUi = localStorage.getItem(key);
@@ -646,6 +684,8 @@ export default function App() {
               onBellClick={() => showToast('Nenhuma notificação pendente.')}
               newUiEnabled={newUiEnabled}
               onToggleNewUi={handleToggleNewUi}
+              localMockState={localMockState}
+              onToggleLocalMock={handleToggleLocalMock}
               compact={isTablet}
             />
           )}

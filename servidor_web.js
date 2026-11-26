@@ -22,7 +22,9 @@ const { fecharBrowserCompartilhado } = require('./compilador_pdf');
 const {
   analisarExameComIA,
   obterConfigIaRuntime,
-  salvarConfigIaRuntime
+  salvarConfigIaRuntime,
+  isAmbienteLocalSeguro,
+  deveUsarMockLocal
 } = require('./analisador_ia');
 const { gerarDocumentosExame } = require('./motor_laudo');
 const { analisarCirurgiaComIA } = require('./analisador_cirurgia');
@@ -2090,6 +2092,31 @@ app.post('/api/admin/ia-config', exigirAutenticacao, (req, res) => {
   res.json({ sucesso: true, ...salvo });
 });
 
+// Modo Simulação Local (0 tokens) — ESTRITAMENTE bloqueado fora de localhost + ALLOW_LOCAL_AI_MOCK=true
+app.get('/api/dev/ia-mock', exigirAutenticacao, (req, res) => {
+  const disponivel = isAmbienteLocalSeguro(req);
+  res.json({
+    sucesso: true,
+    mockLocalDisponivel: disponivel,
+    usarMockLocal: disponivel ? deveUsarMockLocal(req) : false
+  });
+});
+
+app.post('/api/dev/ia-mock', exigirAutenticacao, (req, res) => {
+  if (!isAmbienteLocalSeguro(req)) {
+    return res.status(403).json({
+      error: 'O modo simulação local só pode ser alterado em ambiente localhost com ALLOW_LOCAL_AI_MOCK=true.'
+    });
+  }
+  const { usarMockLocal } = req.body || {};
+  const salvo = salvarConfigIaRuntime({ usarMockLocal: Boolean(usarMockLocal) });
+  res.json({
+    sucesso: true,
+    mockLocalDisponivel: true,
+    usarMockLocal: Boolean(salvo.usarMockLocal)
+  });
+});
+
 // Ranking silencioso de órgãos mais editados pelos veterinários (somente Admin)
 app.get('/api/admin/telemetria-edicoes', exigirAutenticacao, async (req, res) => {
   if (req.usuario?.role !== 'admin') {
@@ -2268,7 +2295,9 @@ app.post('/api/ultrassom', limiterGeracaoPesada, exigirPermissao('gerar_ultrasso
     const resultadoIA = await analisarExameComIA(caminhosArquivos, apiKey, {
       usuario: usuarioEfetivo,
       layout: layoutUsuario,
-      perfilLaudo: perfilDoUsuario
+      perfilLaudo: perfilDoUsuario,
+      usarMockLocal: deveUsarMockLocal(req),
+      req
     });
 
     const imagensOrdenadas = resultadoIA.caminhosOrdenados || caminhosArquivos;
@@ -2443,7 +2472,9 @@ app.post('/api/cirurgia', limiterGeracaoPesada, exigirPermissao('gerar_cirurgia'
     const resultadoIA = await analisarCirurgiaComIA(todosArquivos, apiKey, {
       usuario: req.usuario,
       perfilCirurgico: perfilCirurgicoUsuario,
-      textoDigitado: textoDigitado || null
+      textoDigitado: textoDigitado || null,
+      usarMockLocal: deveUsarMockLocal(req),
+      req
     });
 
     const cir = resultadoIA.cirurgia;
@@ -3771,6 +3802,8 @@ app.post('/api/compartilhamento/:tipo/:id/resumo-tutor', limiterGeracaoPesada, e
 
     const resultado = await gerarResumoTutorIA({
       tipo,
+      usarMockLocal: deveUsarMockLocal(req),
+      req,
       paciente: {
         nome: registro.pacienteNome,
         especie: registro.pacienteEspecie,
